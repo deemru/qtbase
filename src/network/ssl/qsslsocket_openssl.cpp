@@ -141,6 +141,9 @@ QSslSocketBackendPrivate::QSslSocketBackendPrivate()
 {
     // Calls SSL_library_init().
     ensureInitialized();
+#ifdef MSSPISSL
+    msh = NULL;
+#endif
 }
 
 QSslSocketBackendPrivate::~QSslSocketBackendPrivate()
@@ -386,6 +389,14 @@ void QSslSocketBackendPrivate::destroySslContext()
         ssl = 0;
     }
     sslContextPointer.clear();
+
+#ifdef MSSPISSL
+    if( msh )
+    {
+        msspi_close( msh );
+        msh = NULL;
+    }
+#endif
 }
 
 /*!
@@ -576,8 +587,82 @@ QList<QSslCertificate> QSslSocketPrivate::systemCaCertificates()
 }
 #endif // Q_OS_DARWIN
 
+#ifdef MSSPISSL
+static int QSslSocketMSSPIRead( QSslSocketBackendPrivate * qssl, void * buf, int len )
+{
+    int ready_len = qssl->read_ready.length();
+
+    if( ready_len )
+    {
+        Q_ASSERT( ready_len < len );
+
+        memcpy( buf, qssl->read_ready.constData(), ready_len );
+        qssl->read_ready.clear();
+        return ready_len;
+    }
+
+    return -1;
+}
+
+static int QSslSocketMSSPIWrite( QSslSocketBackendPrivate * qssl, const void * buf, int len )
+{
+    qssl->write_ready.append( (const char *)buf, len );
+    return len;
+}
+#endif
+
 void QSslSocketBackendPrivate::startClientEncryption()
 {
+#ifdef MSSPISSL
+    Q_Q( QSslSocket );
+
+    if( q->property( "msspi" ) == true )
+    {
+        if( msh == NULL )
+            msh = msspi_open( this, (msspi_read_cb)QSslSocketMSSPIRead, (msspi_write_cb)QSslSocketMSSPIWrite );
+
+        Q_ASSERT( msh );
+
+        {
+            QString tlsHostName = verificationPeerName.isEmpty() ? q->peerName() : verificationPeerName;
+
+            if( tlsHostName.isEmpty() )
+                tlsHostName = hostName;
+
+            QByteArray ace = QUrl::toAce( tlsHostName );
+
+            // only send the SNI header if the URL is valid and not an IP
+            if( !ace.isEmpty() &&
+                !QHostAddress().setAddress( tlsHostName ) &&
+                !( configuration.sslOptions & QSsl::SslOptionDisableServerNameIndication ) )
+            {
+                // We don't send the trailing dot from the host header if present see
+                // https://tools.ietf.org/html/rfc6066#section-3
+                if( ace.endsWith( '.' ) )
+                    ace.chop( 1 );
+
+                if( !msspi_set_hostname( msh, ace.constData() ) )
+                    qCWarning( lcSsl, "could not 'msspi_set_hostname', Server Name Indication disabled" );
+            }
+        }
+
+        if( !q->localCertificate().isNull() )
+        {
+            QByteArray clientCert = q->localCertificate().toDer();
+            if( !msspi_set_clientcert( msh, clientCert.constData(), clientCert.length() ) )
+            {
+                setErrorAndEmit( QAbstractSocket::SslInternalError,
+                                 QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString( clientCert ) ) );
+                return;
+            }
+        }
+
+        msspi_connect( msh );
+        transmit();
+        return;
+    }
+#endif
+
     if (!initSslContext()) {
         setErrorAndEmit(QAbstractSocket::SslInternalError,
                         QSslSocket::tr("Unable to init SSL Context: %1").arg(getErrorsFromOpenSsl()));
@@ -614,7 +699,11 @@ void QSslSocketBackendPrivate::transmit()
     Q_Q(QSslSocket);
 
     // If we don't have any SSL context, don't bother transmitting.
-    if (!ssl)
+#ifdef MSSPISSL
+    if( !ssl && !msh )
+#else
+    if( !ssl )
+#endif
         return;
 
     bool transmitting;
@@ -627,9 +716,27 @@ void QSslSocketBackendPrivate::transmit()
             qint64 totalBytesWritten = 0;
             int nextDataBlockSize;
             while ((nextDataBlockSize = writeBuffer.nextDataBlockSize()) > 0) {
+#ifdef MSSPISSL
+                int writtenBytes;
+
+                if( msh )
+                    writtenBytes = msspi_write( msh, writeBuffer.readPointer(), nextDataBlockSize );
+                else
+                    writtenBytes = q_SSL_write( ssl, writeBuffer.readPointer(), nextDataBlockSize );
+#else
                 int writtenBytes = q_SSL_write(ssl, writeBuffer.readPointer(), nextDataBlockSize);
+#endif
                 if (writtenBytes <= 0) {
+#ifdef MSSPISSL
+                    int error;
+
+                    if( msh )
+                        error = writtenBytes == -1 ? SSL_ERROR_WANT_WRITE : SSL_ERROR_ZERO_RETURN;
+                    else
+                        error = q_SSL_get_error( ssl, writtenBytes );
+#else
                     int error = q_SSL_get_error(ssl, writtenBytes);
+#endif
                     //write can result in a want_write_error - not an error - continue transmitting
                     if (error == SSL_ERROR_WANT_WRITE) {
                         transmitting = true;
@@ -673,10 +780,27 @@ void QSslSocketBackendPrivate::transmit()
         // Check if we've got any data to be written to the socket.
         QVarLengthArray<char, 4096> data;
         int pendingBytes;
+#ifdef MSSPISSL
+        while( plainSocket->isValid() && ( pendingBytes = msh ? write_ready.length() : q_BIO_pending( writeBio ) ) > 0 ) {
+#else
         while (plainSocket->isValid() && (pendingBytes = q_BIO_pending(writeBio)) > 0) {
+#endif
             // Read encrypted data from the write BIO into a buffer.
             data.resize(pendingBytes);
+#ifdef MSSPISSL
+            int encryptedBytesRead;
+
+            if( msh )
+            {
+                memcpy( data.data(), write_ready.constData(), pendingBytes );
+                write_ready.clear();
+                encryptedBytesRead = pendingBytes;
+            }
+            else
+                encryptedBytesRead = q_BIO_read( writeBio, data.data(), pendingBytes );
+#else
             int encryptedBytesRead = q_BIO_read(writeBio, data.data(), pendingBytes);
+#endif
 
             // Write encrypted data from the buffer to the socket.
             qint64 actualWritten = plainSocket->write(data.constData(), encryptedBytesRead);
@@ -702,8 +826,21 @@ void QSslSocketBackendPrivate::transmit()
 #ifdef QSSLSOCKET_DEBUG
                 qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: read" << encryptedBytesRead << "encrypted bytes from the socket";
 #endif
+
+#ifdef MSSPISSL
+                int writtenToBio;
+
+                if( msh )
+                {
+                    read_ready.append( data.constData(), encryptedBytesRead );
+                    writtenToBio = encryptedBytesRead;
+                }
+                else
+                    writtenToBio = q_BIO_write( readBio, data.constData(), encryptedBytesRead );
+#else
                 // Write encrypted data from the buffer into the read BIO.
                 int writtenToBio = q_BIO_write(readBio, data.constData(), encryptedBytesRead);
+#endif
 
                 // Throw away the results.
                 if (writtenToBio > 0) {
@@ -725,7 +862,113 @@ void QSslSocketBackendPrivate::transmit()
 #ifdef QSSLSOCKET_DEBUG
             qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: testing encryption";
 #endif
+#ifdef MSSPISSL
+            if( msh && msspi_connect( msh ) == 1 )
+            {
+                storePeerCertificates();
+                
+                // from startHandshake()
+                bool doVerifyPeer = configuration.peerVerifyMode == QSslSocket::VerifyPeer
+                    || ( configuration.peerVerifyMode == QSslSocket::AutoVerifyPeer
+                        && mode == QSslSocket::SslClientMode );
+
+                if( !configuration.peerCertificate.isNull() )
+                {
+                    if( mode == QSslSocket::SslClientMode )
+                    {
+                        QString peerName = ( verificationPeerName.isEmpty() ? q->peerName() : verificationPeerName );
+
+                        if( !isMatchingHostname( configuration.peerCertificate, peerName ) )
+                        {
+                            QSslError error( QSslError::HostNameMismatch, configuration.peerCertificate );
+                            sslErrors << error;
+                            emit q->peerVerifyError( error );
+                            if( q->state() != QAbstractSocket::ConnectedState )
+                                break;
+                        }
+
+                        if( doVerifyPeer )
+                        {
+                            QSslError::SslError err;
+
+                            switch( msspi_verify( msh ) )
+                            {
+                            case MSSPI_VERIFY_OK:
+                                err = QSslError::NoError;
+                                break;
+                            default:
+                                err = QSslError::UnspecifiedError;
+                            case TRUST_E_CERT_SIGNATURE:
+                                err = QSslError::CertificateSignatureFailed;
+                                break;
+                            case CRYPT_E_REVOKED:
+                                err = QSslError::CertificateRevoked;
+                                break;
+                            case CERT_E_UNTRUSTEDROOT:
+                            case CERT_E_UNTRUSTEDTESTROOT:
+                                err = QSslError::CertificateUntrusted;
+                                break;
+                            case CERT_E_CHAINING:
+                            case CRYPT_E_NO_REVOCATION_CHECK:
+                            case CRYPT_E_REVOCATION_OFFLINE:
+                                err = QSslError::UnableToVerifyFirstCertificate;
+                                break;
+                            case CERT_E_WRONG_USAGE:
+                            case CERT_E_INVALID_POLICY:
+                                err = QSslError::InvalidPurpose;
+                                break;
+                            case CERT_E_EXPIRED:
+                                err = QSslError::CertificateExpired;
+                                break;
+                            case CERT_E_INVALID_NAME:
+                                err = QSslError::HostNameMismatch;
+                                break;
+                            case CERT_E_VALIDITYPERIODNESTING:
+                                err = QSslError::CertificateNotYetValid;
+                                break;
+                            }
+
+                            if( err != QSslError::NoError )
+                            {
+                                QSslError error = QSslError( err, configuration.peerCertificate );
+                                sslErrors << error;
+                                emit q->peerVerifyError( error );
+                                if( q->state() != QAbstractSocket::ConnectedState )
+                                    break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    if( doVerifyPeer )
+                    {
+                        QSslError error( QSslError::NoPeerCertificate );
+                        sslErrors << error;
+                        emit q->peerVerifyError( error );
+                        if( q->state() != QAbstractSocket::ConnectedState )
+                            break;
+                    }
+                }
+
+                connectionEncrypted = true;
+                emit q->encrypted();
+                if( autoStartHandshake && pendingClose )
+                {
+                    pendingClose = false;
+                    q->disconnectFromHost();
+                }
+
+#ifdef QSSLSOCKET_DEBUG
+                qCDebug( lcSsl ) << "QSslSocketBackendPrivate::transmit: encryption established";
+#endif
+                transmitting = true;
+            }
+            else
+            if( ssl && startHandshake() ) {
+#else
             if (startHandshake()) {
+#endif
 #ifdef QSSLSOCKET_DEBUG
                 qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: encryption established";
 #endif
@@ -749,7 +992,11 @@ void QSslSocketBackendPrivate::transmit()
         // If the request is small and the remote host closes the transmission
         // after sending, there's a chance that startHandshake() will already
         // have triggered a shutdown.
+#ifdef MSSPISSL
+        if( !ssl && !msh )
+#else
         if (!ssl)
+#endif
             continue;
 
         // We always read everything from the SSL decryption buffers, even if
@@ -758,9 +1005,18 @@ void QSslSocketBackendPrivate::transmit()
         int readBytes = 0;
         const int bytesToRead = 4096;
         do {
+#ifdef MSSPISSL
+            if( msh )
+                readBytes = msspi_read( msh, data.data(), data.size() );
+            else
+                readBytes = q_SSL_read( ssl, data.data(), data.size() );
+
+            if( readBytes > 0 ) {
+#else
             // Don't use SSL_pending(). It's very unreliable.
             readBytes = q_SSL_read(ssl, buffer.reserve(bytesToRead), bytesToRead);
             if (readBytes > 0) {
+#endif
 #ifdef QSSLSOCKET_DEBUG
                 qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: decrypted" << readBytes << "bytes";
 #endif
@@ -776,7 +1032,18 @@ void QSslSocketBackendPrivate::transmit()
             buffer.chop(bytesToRead);
 
             // Error.
+#ifdef MSSPISSL
+            int error;
+
+            if( msh )
+                error = readBytes == -1 ? SSL_ERROR_WANT_READ : SSL_ERROR_ZERO_RETURN;
+            else
+                error = q_SSL_get_error( ssl, readBytes );
+
+            switch( error ) {
+#else
             switch (q_SSL_get_error(ssl, readBytes)) {
+#endif
             case SSL_ERROR_WANT_READ:
             case SSL_ERROR_WANT_WRITE:
                 // Out of data.
@@ -807,8 +1074,13 @@ void QSslSocketBackendPrivate::transmit()
                                 QSslSocket::tr("Error while reading: %1").arg(getErrorsFromOpenSsl()));
                 break;
             }
+#ifdef MSSPISSL
+        } while( ( ssl || msh ) && readBytes > 0 );
+    } while( ( ssl || msh ) && transmitting );
+#else
         } while (ssl && readBytes > 0);
     } while (ssl && transmitting);
+#endif
 }
 
 static QSslError _q_OpenSSL_to_QSslError(int errorCode, const QSslCertificate &cert)
@@ -1019,6 +1291,39 @@ bool QSslSocketBackendPrivate::startHandshake()
 
 void QSslSocketBackendPrivate::storePeerCertificates()
 {
+#ifdef MSSPISSL
+    if( msh )
+    {
+        void * bufs[64];
+        int lens[64];
+        int count = 64;
+
+        if( msspi_get_peercerts( msh, bufs, lens, &count ) )
+        {
+            configuration.peerCertificateChain.clear();
+
+            for( int i = 0; i < count; i++ )
+            {
+                const unsigned char * buf = (const unsigned char *)bufs[i];
+                X509 * x509 = q_d2i_X509( NULL, &buf, lens[i] );
+
+                if( !x509 )
+                    break;
+
+                if( i == 0 )
+                    configuration.peerCertificate = QSslCertificatePrivate::QSslCertificate_from_X509( x509 );
+
+                configuration.peerCertificateChain.append( QSslCertificatePrivate::QSslCertificate_from_X509( x509 ) );
+
+                q_X509_free( x509 );
+            }
+
+            msspi_get_peercerts_free( msh, bufs, count );
+        }
+
+        return;
+    }
+#endif
     // Store the peer certificate and chain. For clients, the peer certificate
     // chain includes the peer certificate; for servers, it doesn't. Both the
     // peer certificate and the chain may be empty if the peer didn't present
@@ -1314,6 +1619,49 @@ void QSslSocketBackendPrivate::disconnected()
 
 QSslCipher QSslSocketBackendPrivate::sessionCipher() const
 {
+#ifdef MSSPISSL
+    if( msh )
+    {
+        QSslCipher ciph;
+        SecPkgContext_CipherInfo cipherInfo;
+
+        if( msspi_get_cipherinfo( msh, &cipherInfo ) )
+        {           
+            ciph.d->isNull = false;
+            ciph.d->name = QString::fromWCharArray( cipherInfo.szCipherSuite );
+            ciph.d->supportedBits = cipherInfo.dwCipherLen;
+            ciph.d->bits = cipherInfo.dwCipherLen;
+            ciph.d->keyExchangeMethod = QString::fromWCharArray( cipherInfo.szExchange );
+            ciph.d->authenticationMethod = QString::fromWCharArray( cipherInfo.szCertificate );
+            ciph.d->encryptionMethod = QString::fromWCharArray( cipherInfo.szCipher );
+            ciph.d->exportable = false;
+            switch( cipherInfo.dwProtocol )
+            {
+            case 0x00000080 /*SP_PROT_TLS1_CLIENT*/:
+                ciph.d->protocolString = "TLSv1";
+                ciph.d->protocol = QSsl::TlsV1_0;
+                break;
+
+            case 0x00000200 /*SP_PROT_TLS1_1_CLIENT*/:
+                ciph.d->protocolString = "TLSv1.1";
+                ciph.d->protocol = QSsl::TlsV1_1;
+                break;
+
+            case 0x00000800 /*SP_PROT_TLS1_2_CLIENT*/:
+                ciph.d->protocolString = "TLSv1.2";
+                ciph.d->protocol = QSsl::TlsV1_2;
+                break;
+
+            default:
+                ciph.d->protocolString = "UnknownProtocol";
+                ciph.d->protocol = QSsl::UnknownProtocol;
+                break;
+            }
+        }
+
+        return ciph;
+    }
+#endif
     if (!ssl)
         return QSslCipher();
 
@@ -1323,6 +1671,29 @@ QSslCipher QSslSocketBackendPrivate::sessionCipher() const
 
 QSsl::SslProtocol QSslSocketBackendPrivate::sessionProtocol() const
 {
+#ifdef MSSPISSL
+    if( msh )
+    {
+        SecPkgContext_CipherInfo cipherInfo;
+
+        if( msspi_get_cipherinfo( msh, &cipherInfo ) )
+        {
+            switch( cipherInfo.dwProtocol )
+            {
+            case 0x00000080 /*SP_PROT_TLS1_CLIENT*/:
+                return QSsl::TlsV1_0;
+
+            case 0x00000200 /*SP_PROT_TLS1_1_CLIENT*/:
+                return QSsl::TlsV1_1;
+
+            case 0x00000800 /*SP_PROT_TLS1_2_CLIENT*/:
+                return QSsl::TlsV1_2;
+            }
+        }
+
+        return QSsl::UnknownProtocol;
+    }
+#endif
     if (!ssl)
         return QSsl::UnknownProtocol;
     int ver = q_SSL_version(ssl);

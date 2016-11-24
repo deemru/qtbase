@@ -592,16 +592,23 @@ static int QSslSocketMSSPIRead( QSslSocketBackendPrivate * qssl, void * buf, int
 {
     int ready_len = qssl->read_ready.length();
 
-    if( ready_len )
-    {
-        Q_ASSERT( ready_len < len );
+    if( ready_len == 0 )
+        return -1;
 
-        memcpy( buf, qssl->read_ready.constData(), ready_len );
-        qssl->read_ready.clear();
-        return ready_len;
+    if( ready_len < len )
+        len = ready_len;
+
+    if( len )
+    {
+        memcpy( buf, qssl->read_ready.constData(), len );
+
+        if( ready_len == len )
+            qssl->read_ready.clear();
+        else
+            qssl->read_ready.remove( 0, len );
     }
 
-    return -1;
+    return len;
 }
 
 static int QSslSocketMSSPIWrite( QSslSocketBackendPrivate * qssl, const void * buf, int len )

@@ -598,7 +598,7 @@ int msspi_connect( MSSPI_HANDLE h )
 
             if( scRet == SEC_E_OK ||
                 scRet == SEC_I_CONTINUE_NEEDED ||
-                FAILED( scRet ) && ( dwSSPIOutFlags & ISC_RET_EXTENDED_ERROR ) )
+                ( FAILED( scRet ) && ( dwSSPIOutFlags & ISC_RET_EXTENDED_ERROR ) ) )
             {
                 if( OutBuffers[0].cbBuffer != 0 && OutBuffers[0].pvBuffer != NULL )
                 {

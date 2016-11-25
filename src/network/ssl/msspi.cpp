@@ -48,7 +48,7 @@ unsigned GetTickCount()
 #include <string>
 #include <vector>
 
-#define SSPI_CREDSCACHE_DEFAULT_TIMEOUT 600000 // 10 min
+#define SSPI_CREDSCACHE_DEFAULT_TIMEOUT 600000 // 10 minutes
 #define SSPI_BUFFER_SIZE 65536
 #ifdef WIN32
 #define SECURITY_DLL_NAME "Security.dll"
@@ -310,14 +310,15 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
         int decrypted = h->dec_len;
 
         if( decrypted > len )
+        {
+            memcpy( h->dec_buf, h->dec_buf + len, decrypted - len );
+            h->dec_len = decrypted - len;
             decrypted = len;
+        }
+        else
+            h->dec_len = 0;
 
         memcpy( buf, h->dec_buf, decrypted );
-        h->dec_len -= decrypted;
-
-        if( h->dec_len )
-            memmove( h->dec_buf, h->dec_buf + decrypted, h->dec_len );
-
         return decrypted;
     }
 
@@ -638,13 +639,13 @@ int msspi_connect( MSSPI_HANDLE h )
             return 1;
         }
 
-        if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, но сертификат RSA
+        if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, but RSA cert
         {
             h->is_error = 1;
             return 0;
         }
 
-        if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, но сертификат GOST
+        if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, but GOST cert
         {
             h->is_error = 1;
             return 0;

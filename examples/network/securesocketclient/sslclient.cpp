@@ -87,6 +87,9 @@ void SslClient::updateEnabledState()
 
 void SslClient::secureConnect()
 {
+    socket->setProperty( "msspi", 1 );
+    //socket->setProperty( "msspi_clientcert", "pdn-test-ca" );
+    //socket->setLocalCertificate( "O:\\C\\MinGW\\msys\\1.0\\home\\pdn\\nginx\\objs\\nginx_179\\cert\\pdn-test-ca.cer" );
     socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     updateEnabledState();
 }

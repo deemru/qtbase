@@ -655,11 +655,11 @@ void QSslSocketBackendPrivate::startClientEncryption()
 
         if( !q->localCertificate().isNull() )
         {
-            QByteArray clientCert = q->localCertificate().toDer();
+            const QByteArray clientCert = q->localCertificate().toDer();
             if( !msspi_set_clientcert( msh, clientCert.constData(), clientCert.length() ) )
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
-                                 QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString( clientCert ) ) );
+                                 QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );
                 return;
             }
         }
@@ -879,6 +879,9 @@ void QSslSocketBackendPrivate::transmit()
                     || ( configuration.peerVerifyMode == QSslSocket::AutoVerifyPeer
                         && mode == QSslSocket::SslClientMode );
 
+                // Start translating errors.
+                QList<QSslError> errors;
+
                 if( !configuration.peerCertificate.isNull() )
                 {
                     if( mode == QSslSocket::SslClientMode )
@@ -888,7 +891,7 @@ void QSslSocketBackendPrivate::transmit()
                         if( !isMatchingHostname( configuration.peerCertificate, peerName ) )
                         {
                             QSslError error( QSslError::HostNameMismatch, configuration.peerCertificate );
-                            sslErrors << error;
+                            errors << error;
                             emit q->peerVerifyError( error );
                             if( q->state() != QAbstractSocket::ConnectedState )
                                 break;
@@ -938,7 +941,7 @@ void QSslSocketBackendPrivate::transmit()
                             if( err != QSslError::NoError )
                             {
                                 QSslError error = QSslError( err, configuration.peerCertificate );
-                                sslErrors << error;
+                                errors << error;
                                 emit q->peerVerifyError( error );
                                 if( q->state() != QAbstractSocket::ConnectedState )
                                     break;
@@ -951,11 +954,24 @@ void QSslSocketBackendPrivate::transmit()
                     if( doVerifyPeer )
                     {
                         QSslError error( QSslError::NoPeerCertificate );
-                        sslErrors << error;
+                        errors << error;
                         emit q->peerVerifyError( error );
                         if( q->state() != QAbstractSocket::ConnectedState )
                             break;
                     }
+                }
+
+                if (!errors.isEmpty()) {
+                    sslErrors = errors;
+
+                    if (!checkSslErrors())
+                    {
+                        // Some errors wasn't ignored. Disconnecting.
+                        q->disconnectFromHost();
+                        return;
+                    }
+                } else {
+                    sslErrors.clear();
                 }
 
                 connectionEncrypted = true;
@@ -1635,32 +1651,32 @@ QSslCipher QSslSocketBackendPrivate::sessionCipher() const
         if( msspi_get_cipherinfo( msh, &cipherInfo ) )
         {           
             ciph.d->isNull = false;
-            ciph.d->name = QString::fromWCharArray( cipherInfo.szCipherSuite );
+            ciph.d->name = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCipherSuite );
             ciph.d->supportedBits = cipherInfo.dwCipherLen;
             ciph.d->bits = cipherInfo.dwCipherLen;
-            ciph.d->keyExchangeMethod = QString::fromWCharArray( cipherInfo.szExchange );
-            ciph.d->authenticationMethod = QString::fromWCharArray( cipherInfo.szCertificate );
-            ciph.d->encryptionMethod = QString::fromWCharArray( cipherInfo.szCipher );
+            ciph.d->keyExchangeMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szExchange );
+            ciph.d->authenticationMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCertificate );
+            ciph.d->encryptionMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCipher );
             ciph.d->exportable = false;
             switch( cipherInfo.dwProtocol )
             {
             case 0x00000080 /*SP_PROT_TLS1_CLIENT*/:
-                ciph.d->protocolString = "TLSv1";
+                ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1" );
                 ciph.d->protocol = QSsl::TlsV1_0;
                 break;
 
             case 0x00000200 /*SP_PROT_TLS1_1_CLIENT*/:
-                ciph.d->protocolString = "TLSv1.1";
+                ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1.1" );
                 ciph.d->protocol = QSsl::TlsV1_1;
                 break;
 
             case 0x00000800 /*SP_PROT_TLS1_2_CLIENT*/:
-                ciph.d->protocolString = "TLSv1.2";
+                ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1.2" );
                 ciph.d->protocol = QSsl::TlsV1_2;
                 break;
 
             default:
-                ciph.d->protocolString = "UnknownProtocol";
+                ciph.d->protocolString = QString::fromLocal8Bit( "UnknownProtocol" );
                 ciph.d->protocol = QSsl::UnknownProtocol;
                 break;
             }

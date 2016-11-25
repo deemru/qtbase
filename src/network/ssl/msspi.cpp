@@ -1,6 +1,8 @@
 // micro sspi
 
-#include <Windows.h>
+#ifdef WIN32
+#   include <Windows.h>
+#endif
 
 #if defined( __cplusplus )
 extern "C" {
@@ -46,7 +48,7 @@ unsigned GetTickCount()
 #include <string>
 #include <vector>
 
-#define SSPI_CREDSCACHE_DEFAULT_TIMEOUT 600000 // 10 ìèíóò
+#define SSPI_CREDSCACHE_DEFAULT_TIMEOUT 600000 // 10 min
 #define SSPI_BUFFER_SIZE 65536
 #ifdef WIN32
 #define SECURITY_DLL_NAME "Security.dll"
@@ -636,13 +638,13 @@ int msspi_connect( MSSPI_HANDLE h )
             return 1;
         }
 
-        if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, íî ñåðòèôèêàò RSA
+        if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, Ð½Ð¾ ÑÐµÑ€Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ‚ RSA
         {
             h->is_error = 1;
             return 0;
         }
 
-        if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, íî ñåðòèôèêàò GOST
+        if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, Ð½Ð¾ ÑÐµÑ€Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ‚ GOST
         {
             h->is_error = 1;
             return 0;
@@ -735,7 +737,7 @@ char msspi_set_clientcert( MSSPI_HANDLE h, const char * clientCert, int len )
 {
     HCERTSTORE hStore = 0;
     PCCERT_CONTEXT cert = NULL;
-    int i;
+    unsigned int i;
 
     if( len )
     {
@@ -856,7 +858,7 @@ char msspi_get_peercerts( MSSPI_HANDLE h, void ** bufs, int * lens, int * count 
 
         {
             lens[i] = RunnerCert->cbCertEncoded;
-            bufs[i] = new char [RunnerCert->cbCertEncoded];
+            bufs[i] = new char[RunnerCert->cbCertEncoded];
             memcpy( bufs[i], RunnerCert->pbCertEncoded, RunnerCert->cbCertEncoded );
         }
 
@@ -882,7 +884,7 @@ char msspi_get_peercerts( MSSPI_HANDLE h, void ** bufs, int * lens, int * count 
     if( !is_OK )
     {
         for( i = 0; i < max; i++ )
-            delete[] bufs[i];
+            delete[] (char *)bufs[i];
 
         return 0;
     }
@@ -899,7 +901,7 @@ void msspi_get_peercerts_free( MSSPI_HANDLE h, void ** bufs, int count )
         return;
 
     for( i = 0; i < count; i++ )
-        delete[] bufs[i];
+        delete[] (char *)bufs[i];
 }
 
 unsigned msspi_verify( MSSPI_HANDLE h )

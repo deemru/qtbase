@@ -308,15 +308,14 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
         int decrypted = h->dec_len;
 
         if( decrypted > len )
-        {
-            memcpy( h->dec_buf, h->dec_buf + len, decrypted - len );
-            h->dec_len = decrypted - len;
             decrypted = len;
-        }
-        else
-            h->dec_len = 0;
 
         memcpy( buf, h->dec_buf, decrypted );
+        h->dec_len -= decrypted;
+
+        if( h->dec_len )
+            memmove( h->dec_buf, h->dec_buf + decrypted, h->dec_len );
+
         return decrypted;
     }
 

@@ -243,7 +243,7 @@ static char credentials_api( MSSPI_HANDLE h, PCCERT_CONTEXT cert, bool is_free )
         ZeroMemory( &SchannelCred, sizeof( SchannelCred ) );
 
         SchannelCred.dwVersion = SCHANNEL_CRED_VERSION;
-        SchannelCred.grbitEnabledProtocols = SP_PROT_TLS1_0_CLIENT;
+        SchannelCred.grbitEnabledProtocols = 0;
         SchannelCred.dwFlags |= SCH_CRED_MANUAL_CRED_VALIDATION;
 
         if( cert )

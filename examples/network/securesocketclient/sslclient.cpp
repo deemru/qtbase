@@ -58,6 +58,7 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QMessageBox>
 #include <QtNetwork/QSslCipher>
+#include <QtNetwork/QSslConfiguration>
 
 SslClient::SslClient(QWidget *parent)
     : QWidget(parent), socket(0), padLock(0), executingDialog(false)
@@ -115,9 +116,9 @@ void SslClient::secureConnect()
                 this, SLOT(socketReadyRead()));
     }
 
-    socket->setProperty( "msspi", 1 );
-    //socket->setProperty( "msspi_clientcert", "pdn-test-ca" );
-    //socket->setLocalCertificate( "O:\\C\\MinGW\\msys\\1.0\\home\\pdn\\nginx\\objs\\nginx_179\\cert\\pdn-test-ca.cer" );
+    QSslConfiguration conf;
+    conf.setSslOption( QSsl::SslOptionEnableMSSPI, true );
+    socket->setSslConfiguration( conf );    socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     updateEnabledState();
 }

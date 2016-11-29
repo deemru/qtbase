@@ -118,7 +118,7 @@ void SslClient::secureConnect()
 
     QSslConfiguration conf;
     conf.setSslOption( QSsl::SslOptionEnableMSSPI, true );
-    socket->setSslConfiguration( conf );    socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
+    socket->setSslConfiguration( conf );
     socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     updateEnabledState();
 }

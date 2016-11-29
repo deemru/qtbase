@@ -623,7 +623,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
 #ifdef MSSPISSL
     Q_Q( QSslSocket );
 
-    if( q->property( "msspi" ) == true )
+    if( configuration.sslOptions & QSsl::SslOptionEnableMSSPI )
     {
         if( msh == NULL )
             msh = msspi_open( this, (msspi_read_cb)QSslSocketMSSPIRead, (msspi_write_cb)QSslSocketMSSPIWrite );

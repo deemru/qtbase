@@ -93,15 +93,6 @@ static char msspi_sspi_init( void )
     return 1;
 }
 
-typedef enum
-{
-    SSL_NOTHING,
-    SSL_READING,
-    SSL_WRITING,
-    SSL_X509_LOOKUP,
-}
-MSSPI_STATUS;
-
 struct MSSPI_CredCache
 {
     CredHandle hCred;
@@ -136,16 +127,20 @@ struct MSSPI
 {
     MSSPI( void * arg, msspi_read_cb read, msspi_write_cb write )
     {
+        is_client = 0;
         is_connected = 0;
-        is_error = 0;
-        state = SSL_NOTHING;
+        is_peerauth = 0;
+        state = MSSPI_NOTHING;
         hCtx.dwLower = 0;
         hCtx.dwUpper = 0;
         cred = NULL;
         cert = NULL;
         in_len = 0;
-        out_len = 0;
         dec_len = 0;
+        out_hdr_len = 0;
+        out_msg_max = 0;
+        out_trl_max = 0;
+        out_len = 0;
         cb_arg = arg;
         read_cb = read;
         write_cb = write;
@@ -163,9 +158,10 @@ struct MSSPI
             CertFreeCertificateContext( cert );
     }
 
+    char is_client;
     char is_connected;
-    char is_error;
-    int state;
+    char is_peerauth;
+    MSSPI_STATE state;
     std::string host;
 
     CtxtHandle hCtx;
@@ -173,11 +169,14 @@ struct MSSPI
     PCCERT_CONTEXT cert;
 
     int in_len;
-    int out_len;
     int dec_len;
+    int out_hdr_len;
+    int out_msg_max;
+    int out_trl_max;
+    int out_len;
     char in_buf[SSPI_BUFFER_SIZE];
-    char out_buf[SSPI_BUFFER_SIZE];
     char dec_buf[SSPI_BUFFER_SIZE];
+    char out_buf[SSPI_BUFFER_SIZE];
 
     void * cb_arg;
     msspi_read_cb read_cb;
@@ -239,13 +238,24 @@ static char credentials_api( MSSPI_HANDLE h, PCCERT_CONTEXT cert, bool is_free )
         SECURITY_STATUS Status;
         TimeStamp       tsExpiry;
         SCHANNEL_CRED   SchannelCred;
+        unsigned long   usage;
 
         ZeroMemory( &SchannelCred, sizeof( SchannelCred ) );
 
         SchannelCred.dwVersion = SCHANNEL_CRED_VERSION;
         SchannelCred.grbitEnabledProtocols = 0;
-        SchannelCred.dwFlags |= SCH_CRED_MANUAL_CRED_VALIDATION;
-
+        if( h->is_client )
+        {
+            usage = SECPKG_CRED_OUTBOUND;
+            SchannelCred.dwFlags |= SCH_CRED_NO_DEFAULT_CREDS;
+            SchannelCred.dwFlags |= SCH_CRED_MANUAL_CRED_VALIDATION;
+        }
+        else
+        {
+            usage = SECPKG_CRED_INBOUND;
+            SchannelCred.dwFlags |= SCH_CRED_NO_SYSTEM_MAPPER;
+        }
+        
         if( cert )
         {
             SchannelCred.cCreds = 1;
@@ -264,15 +274,15 @@ static char credentials_api( MSSPI_HANDLE h, PCCERT_CONTEXT cert, bool is_free )
         }
 
         Status = sspi->AcquireCredentialsHandleA(
-            NULL,                   // Name of principal
-            (char *)UNISP_NAME_A,   // Name of package
-            SECPKG_CRED_OUTBOUND,   // Flags indicating use
-            NULL,                   // Pointer to logon ID
-            &SchannelCred,          // Package specific data
-            NULL,                   // Pointer to GetKey() func
-            NULL,                   // Value to pass to GetKey()
-            &hCred,                 // (out) Cred Handle
-            &tsExpiry );            // (out) Lifetime (optional)
+            NULL,
+            (char *)UNISP_NAME_A,
+            usage,
+            NULL,
+            &SchannelCred,
+            NULL,
+            NULL,
+            &hCred,
+            &tsExpiry );
 
         if( hStore )
         {
@@ -299,7 +309,7 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
 {
     if( !h->is_connected )
     {
-        int i = msspi_connect( h );
+        int i = h->is_client ? msspi_connect( h ) : msspi_accept( h );
 
         if( i != 1 )
             return i;
@@ -321,8 +331,8 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
         return decrypted;
     }
 
-    if( h->state == SSL_NOTHING && h->in_len == 0 )
-        h->state = SSL_READING;
+    if( h->state == MSSPI_NOTHING && h->in_len == 0 )
+        h->state = MSSPI_READING;
 
     for( ;; )
     {
@@ -334,16 +344,19 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
         int decrypted = 0;
         int extra = 0;
 
-        if( h->state == SSL_READING )
+        if( h->state == MSSPI_READING )
         {
             int io = h->read_cb( h->cb_arg, h->in_buf + h->in_len, SSPI_BUFFER_SIZE - h->in_len );
 
-            if( io <= 0 )
+            if( io < 0 )
                 return io;
+
+            if( io == 0 )
+                return msspi_shutdown( h );
 
             h->in_len = h->in_len + io;
 
-            h->state = SSL_NOTHING;
+            h->state = MSSPI_NOTHING;
         }
 
         Buffers[0].pvBuffer = h->in_buf;
@@ -362,7 +375,7 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
 
         if( scRet == SEC_E_INCOMPLETE_MESSAGE )
         {
-            h->state = SSL_READING;
+            h->state = MSSPI_READING;
             continue;
         }
 
@@ -370,13 +383,13 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
             scRet != SEC_I_RENEGOTIATE &&
             scRet != SEC_I_CONTEXT_EXPIRED )
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             return 0;
         }
 
         if( scRet == SEC_I_CONTEXT_EXPIRED )
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             return 0;
         }
 
@@ -399,8 +412,8 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
 
             if( !extra && Buffers[i].BufferType == SECBUFFER_EXTRA )
             {
-                memmove( h->in_buf, h->in_buf + ( h->in_len - Buffers[i].cbBuffer ), Buffers[i].cbBuffer );
                 extra = Buffers[i].cbBuffer;
+                memmove( h->in_buf, Buffers[i].pvBuffer, extra );
             }
 
             if( decrypted && extra )
@@ -414,7 +427,7 @@ int msspi_read( MSSPI_HANDLE h, void * buf, int len )
 
         if( scRet == SEC_I_RENEGOTIATE )
         {
-            h->state = SSL_X509_LOOKUP;
+            h->state = MSSPI_X509_LOOKUP;
             h->is_connected = false;
 
             i = msspi_connect( h );
@@ -431,50 +444,53 @@ int msspi_write( MSSPI_HANDLE h, const void * buf, int len )
 {
     if( !h->is_connected )
     {
-        int i = msspi_connect( h );
+        int i = h->is_client ? msspi_connect( h ) : msspi_accept( h );
 
         if( i != 1 )
             return i;
     }
 
     {
-        SecPkgContext_StreamSizes Sizes;
         SECURITY_STATUS           scRet;
         SecBufferDesc             Message;
         SecBuffer                 Buffers[4];
 
-        scRet = sspi->QueryContextAttributesA( &h->hCtx, SECPKG_ATTR_STREAM_SIZES, &Sizes );
-
-        if( scRet != SEC_E_OK )
+        if( !h->out_msg_max )
         {
-            h->is_error = 1;
-            return 0;
-        }
+            SecPkgContext_StreamSizes Sizes;
 
-        h->out_len = Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
+            scRet = sspi->QueryContextAttributesA( &h->hCtx, SECPKG_ATTR_STREAM_SIZES, &Sizes );
 
-        if( h->out_len > SSPI_BUFFER_SIZE )
-        {
-            h->is_error = 1;
-            return 0;
-        }
+            if( scRet != SEC_E_OK )
+            {
+                h->state = MSSPI_ERROR;
+                return 0;
+            }
 
-        if( len > (int)Sizes.cbMaximumMessage )
-        {
-            h->is_error = 1;
-            return 0;
-        }
+            if( Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer > SSPI_BUFFER_SIZE )
+            {
+                h->state = MSSPI_ERROR;
+                return 0;
+            }
+
+            h->out_hdr_len = Sizes.cbHeader;
+            h->out_msg_max = Sizes.cbMaximumMessage;
+            h->out_trl_max = Sizes.cbTrailer;
+        }        
+
+        if( len > h->out_msg_max )
+            len = h->out_msg_max;
 
         Buffers[0].pvBuffer = h->out_buf;
-        Buffers[0].cbBuffer = Sizes.cbHeader;
+        Buffers[0].cbBuffer = h->out_hdr_len;
         Buffers[0].BufferType = SECBUFFER_STREAM_HEADER;
 
-        Buffers[1].pvBuffer = h->out_buf + Sizes.cbHeader;
+        Buffers[1].pvBuffer = h->out_buf + h->out_hdr_len;
         Buffers[1].cbBuffer = len;
         Buffers[1].BufferType = SECBUFFER_DATA;
 
-        Buffers[2].pvBuffer = h->out_buf + Sizes.cbHeader + len;
-        Buffers[2].cbBuffer = Sizes.cbTrailer;
+        Buffers[2].pvBuffer = h->out_buf + h->out_hdr_len + len;
+        Buffers[2].cbBuffer = h->out_trl_max;
         Buffers[2].BufferType = SECBUFFER_STREAM_TRAILER;
 
         Buffers[3].BufferType = SECBUFFER_EMPTY;
@@ -483,45 +499,247 @@ int msspi_write( MSSPI_HANDLE h, const void * buf, int len )
         Message.cBuffers = 4;
         Message.pBuffers = Buffers;
 
-        memset( h->out_buf, 0, SSPI_BUFFER_SIZE );
-        memcpy( h->out_buf + Sizes.cbHeader, buf, len );
+        memcpy( Buffers[1].pvBuffer, buf, len );
 
         scRet = sspi->EncryptMessage( &h->hCtx, 0, &Message, 0 );
 
         if( FAILED( scRet ) )
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             return 0;
         }
 
-        int out_bytes = Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer;
+        int out_bytes = h->out_hdr_len + len + Buffers[2].cbBuffer;
 
         int io = h->write_cb( h->cb_arg, h->out_buf, out_bytes );
 
         if( io == out_bytes )
             return len;
 
-        h->is_error = 1;
+        h->state = MSSPI_ERROR;
         return 0;
     }
 }
 
-int msspi_connect( MSSPI_HANDLE h )
+MSSPI_STATE msspi_state( MSSPI_HANDLE h )
+{
+    return h->state;
+}
+
+int msspi_pending( MSSPI_HANDLE h )
+{
+    return h->in_len;
+}
+
+int msspi_shutdown( MSSPI_HANDLE h )
+{
+    SecBufferDesc   OutBuffer;
+    SecBuffer       OutBuffers[1];
+    DWORD           dwType;
+
+    dwType = SCHANNEL_SHUTDOWN;
+
+    OutBuffers[0].pvBuffer = &dwType;
+    OutBuffers[0].BufferType = SECBUFFER_TOKEN;
+    OutBuffers[0].cbBuffer = sizeof( dwType );
+
+    OutBuffer.cBuffers = 1;
+    OutBuffer.pBuffers = OutBuffers;
+    OutBuffer.ulVersion = SECBUFFER_VERSION;
+
+    if( FAILED( sspi->ApplyControlToken( &h->hCtx, &OutBuffer ) ) )
+    {
+        h->state = MSSPI_ERROR;
+        return 0;
+    }
+
+    int ret = h->is_client ? msspi_connect( h ) : msspi_accept( h );
+    h->state = MSSPI_SHUTDOWN;
+    return ret;
+}
+
+int msspi_accept( MSSPI_HANDLE h )
 {
     for( ;; )
     {
         SECURITY_STATUS scRet;
 
-        if( h->state == SSL_READING )
+        if( h->state == MSSPI_READING )
         {
             int io = h->read_cb( h->cb_arg, h->in_buf + h->in_len, SSPI_BUFFER_SIZE - h->in_len );
 
-            if( io <= 0 )
+            if( io < 0 )
                 return io;
+
+            if( io == 0 )
+                return msspi_shutdown( h );
 
             h->in_len = h->in_len + io;
 
-            h->state = SSL_NOTHING;
+            h->state = MSSPI_NOTHING;
+        }
+
+        {
+            SecBufferDesc   InBuffer;
+            SecBuffer       InBuffers[2];
+            SecBufferDesc   OutBuffer;
+            SecBuffer       OutBuffers[1];
+            unsigned long   dwSSPIOutFlags;
+            TimeStamp       tsExpiry;
+
+            static DWORD dwSSPIFlags = ASC_REQ_SEQUENCE_DETECT |
+                ASC_REQ_REPLAY_DETECT |
+                ASC_REQ_CONFIDENTIALITY |
+                ASC_REQ_EXTENDED_ERROR |
+                ASC_REQ_ALLOCATE_MEMORY |
+                ASC_REQ_STREAM;
+
+            if( !h->cred )
+            {
+                if( !credentials_api( h, h->cert, false ) )
+                {
+                    h->state = MSSPI_ERROR;
+                    return 0;
+                }
+            }
+
+            OutBuffers[0].pvBuffer = NULL;
+            OutBuffers[0].BufferType = SECBUFFER_TOKEN;
+            OutBuffers[0].cbBuffer = 0;
+
+            OutBuffer.cBuffers = 1;
+            OutBuffer.pBuffers = OutBuffers;
+            OutBuffer.ulVersion = SECBUFFER_VERSION;
+
+            if( h->in_len )
+            {
+                InBuffers[0].pvBuffer = h->in_buf;
+                InBuffers[0].cbBuffer = h->in_len;
+                InBuffers[0].BufferType = SECBUFFER_TOKEN;
+
+                InBuffers[1].pvBuffer = NULL;
+                InBuffers[1].cbBuffer = 0;
+                InBuffers[1].BufferType = SECBUFFER_EMPTY;
+
+                InBuffer.cBuffers = 2;
+                InBuffer.pBuffers = InBuffers;
+                InBuffer.ulVersion = SECBUFFER_VERSION;
+            }
+
+            scRet = sspi->AcceptSecurityContext(
+                &h->cred->hCred,
+                ( h->hCtx.dwLower || h->hCtx.dwUpper ) ? &h->hCtx : NULL,
+                h->in_len ? &InBuffer : NULL,
+                dwSSPIFlags,
+                SECURITY_NATIVE_DREP,
+                ( h->hCtx.dwLower || h->hCtx.dwUpper ) ? NULL : &h->hCtx,
+                &OutBuffer,
+                &dwSSPIOutFlags,
+                &tsExpiry );
+
+            if( h->in_len )
+            {
+                if( InBuffers[1].BufferType == SECBUFFER_EXTRA )
+                {
+                    memmove( h->in_buf, h->in_buf + ( h->in_len - InBuffers[1].cbBuffer ), InBuffers[1].cbBuffer );
+                    h->in_len = InBuffers[1].cbBuffer;
+                }
+                else if( !FAILED( scRet ) )
+                    h->in_len = 0;
+            }
+
+            if( scRet == SEC_E_OK ||
+                scRet == SEC_I_CONTINUE_NEEDED ||
+                ( FAILED( scRet ) && ( dwSSPIOutFlags & ISC_RET_EXTENDED_ERROR ) ) )
+            {
+                if( OutBuffers[0].cbBuffer != 0 && OutBuffers[0].pvBuffer != NULL )
+                {
+                    memcpy( h->out_buf, OutBuffers[0].pvBuffer, OutBuffers[0].cbBuffer );
+                    h->out_len = OutBuffers[0].cbBuffer;
+
+                    h->state = MSSPI_WRITING;
+
+                    sspi->FreeContextBuffer( OutBuffers[0].pvBuffer );
+                }
+            }
+        }
+
+        if( h->state == MSSPI_WRITING )
+        {
+            if( h->write_cb( h->cb_arg, h->out_buf, h->out_len ) != h->out_len )
+            {
+                h->state = MSSPI_ERROR;
+                return 0;
+            }
+
+            h->out_len = 0;
+
+            h->state = MSSPI_NOTHING;
+        }
+
+        if( scRet == SEC_E_INCOMPLETE_MESSAGE )
+        {
+            h->state = MSSPI_READING;
+            continue;
+        }
+
+        // handshake OK
+        if( scRet == SEC_E_OK )
+        {
+            h->is_connected = 1;
+            return 1;
+        }
+
+        if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, but RSA cert
+        {
+            h->state = MSSPI_ERROR;
+            return 0;
+        }
+
+        if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, but GOST cert
+        {
+            h->state = MSSPI_ERROR;
+            return 0;
+        }
+
+        if( scRet == SEC_I_INCOMPLETE_CREDENTIALS )
+        {
+            h->state = MSSPI_X509_LOOKUP;
+            continue;
+        }
+
+        if( FAILED( scRet ) )
+        {
+            h->state = MSSPI_ERROR;
+            break;
+        }
+    }
+
+    h->state = MSSPI_ERROR;
+    return 0;
+}
+
+int msspi_connect( MSSPI_HANDLE h )
+{
+    h->is_client = 1;
+
+    for( ;; )
+    {
+        SECURITY_STATUS scRet;
+
+        if( h->state == MSSPI_READING )
+        {
+            int io = h->read_cb( h->cb_arg, h->in_buf + h->in_len, SSPI_BUFFER_SIZE - h->in_len );
+
+            if( io < 0 )
+                return io;
+
+            if( io == 0 )
+                return msspi_shutdown( h );
+
+            h->in_len = h->in_len + io;
+
+            h->state = MSSPI_NOTHING;
         }
 
         {
@@ -543,7 +761,7 @@ int msspi_connect( MSSPI_HANDLE h )
             {
                 if( !credentials_api( h, h->cert, false ) )
                 {
-                    h->is_error = 1;
+                    h->state = MSSPI_ERROR;
                     return 0;
                 }
             }
@@ -605,29 +823,29 @@ int msspi_connect( MSSPI_HANDLE h )
                     memcpy( h->out_buf, OutBuffers[0].pvBuffer, OutBuffers[0].cbBuffer );
                     h->out_len = OutBuffers[0].cbBuffer;
 
-                    h->state = SSL_WRITING;
+                    h->state = MSSPI_WRITING;
 
                     sspi->FreeContextBuffer( OutBuffers[0].pvBuffer );
                 }
             }
         }
 
-        if( h->state == SSL_WRITING )
+        if( h->state == MSSPI_WRITING )
         {
             if( h->write_cb( h->cb_arg, h->out_buf, h->out_len ) != h->out_len )
             {
-                h->is_error = 1;
+                h->state = MSSPI_ERROR;
                 return 0;
             }
 
             h->out_len = 0;
 
-            h->state = SSL_NOTHING;
+            h->state = MSSPI_NOTHING;
         }
 
         if( scRet == SEC_E_INCOMPLETE_MESSAGE )
         {
-            h->state = SSL_READING;
+            h->state = MSSPI_READING;
             continue;
         }
 
@@ -640,31 +858,30 @@ int msspi_connect( MSSPI_HANDLE h )
 
         if( scRet == SEC_E_UNKNOWN_CREDENTIALS ) // GOST, but RSA cert
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             return 0;
         }
 
         if( scRet == SEC_E_INTERNAL_ERROR ) // RSA, but GOST cert
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             return 0;
         }
 
         if( scRet == SEC_I_INCOMPLETE_CREDENTIALS )
         {
-            h->state = SSL_X509_LOOKUP;
-            h->is_error = 1;
+            h->state = MSSPI_X509_LOOKUP;
             continue;
         }
 
         if( FAILED( scRet ) )
         {
-            h->is_error = 1;
+            h->state = MSSPI_ERROR;
             break;
         }
     }
 
-    h->is_error = 1;
+    h->state = MSSPI_ERROR;
     return 0;
 }
 
@@ -725,6 +942,11 @@ static int str2bin( const char * str, BYTE * bin )
     return n;
 }
 
+void msspi_set_peerauth( MSSPI_HANDLE h, char is_peerauth )
+{
+    h->is_peerauth = is_peerauth;
+}
+
 #ifndef _UN
 #ifdef _WIN32
 #define _UN
@@ -733,7 +955,7 @@ static int str2bin( const char * str, BYTE * bin )
 #endif // _WIN32
 #endif // _UN
 
-char msspi_set_clientcert( MSSPI_HANDLE h, const char * clientCert, int len )
+char msspi_set_mycert( MSSPI_HANDLE h, const char * clientCert, int len )
 {
     HCERTSTORE hStore = 0;
     PCCERT_CONTEXT cert = NULL;
@@ -750,8 +972,6 @@ char msspi_set_clientcert( MSSPI_HANDLE h, const char * clientCert, int len )
 
         return cert ? 1 : 0;
     }
-
-    
 
     DWORD dwStoreFlags[2] = {
         CERT_STORE_OPEN_EXISTING_FLAG | CERT_STORE_READONLY_FLAG | CERT_SYSTEM_STORE_CURRENT_USER,

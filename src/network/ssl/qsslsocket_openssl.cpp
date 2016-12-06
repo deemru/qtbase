@@ -656,7 +656,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
         if( !q->localCertificate().isNull() )
         {
             const QByteArray clientCert = q->localCertificate().toDer();
-            if( !msspi_set_clientcert( msh, clientCert.constData(), clientCert.length() ) )
+            if( !msspi_set_mycert( msh, clientCert.constData(), clientCert.length() ) )
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
                                  QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );

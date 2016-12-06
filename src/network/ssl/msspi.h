@@ -43,11 +43,28 @@ typedef int ( * msspi_write_cb )( void * cb_arg, const void * buf, int len );
 MSSPI_HANDLE msspi_open( void * cb_arg, msspi_read_cb, msspi_write_cb );
 
 char msspi_set_hostname( MSSPI_HANDLE h, const char * hostName );
-char msspi_set_clientcert( MSSPI_HANDLE h, const char * clientCert, int len );
+char msspi_set_mycert( MSSPI_HANDLE h, const char * clientCert, int len );
+void msspi_set_peerauth( MSSPI_HANDLE h, char is_peerauth );
 
 int msspi_connect( MSSPI_HANDLE h );
+int msspi_accept( MSSPI_HANDLE h );
 int msspi_read( MSSPI_HANDLE h, void * buf, int len );
 int msspi_write( MSSPI_HANDLE h, const void * buf, int len );
+int msspi_shutdown( MSSPI_HANDLE h );
+
+typedef enum
+{
+    MSSPI_NOTHING,
+    MSSPI_READING,
+    MSSPI_WRITING,
+    MSSPI_X509_LOOKUP,
+    MSSPI_SHUTDOWN,
+    MSSPI_ERROR
+}
+MSSPI_STATE;
+
+MSSPI_STATE msspi_state( MSSPI_HANDLE h );
+int msspi_pending( MSSPI_HANDLE h );
 
 char msspi_get_cipherinfo( MSSPI_HANDLE h, PSecPkgContext_CipherInfo cipherInfo );
 char msspi_get_peercerts( MSSPI_HANDLE h, void ** bufs, int * lens, int * count );

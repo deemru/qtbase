@@ -63,8 +63,8 @@ contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
                ssl/qsslsocket_openssl.cpp \
                ssl/qsslsocket_openssl_symbols.cpp
 
-    HEADERS += ssl/msspi.h
-    SOURCES += ssl/msspi.cpp
+    HEADERS += ssl/msspi/src/msspi.h
+    SOURCES += ssl/msspi/src/msspi.cpp
 
     darwin:SOURCES += ssl/qsslsocket_mac_shared.cpp
 

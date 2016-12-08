@@ -114,7 +114,7 @@ Q_DECLARE_TYPEINFO(QSslErrorEntry, Q_PRIMITIVE_TYPE);
 #define MSSPISSL
 
 #ifdef MSSPISSL
-#include "msspi.h"
+#include "msspi/src/msspi.h"
 #endif
 
 class QSslSocketBackendPrivate : public QSslSocketPrivate

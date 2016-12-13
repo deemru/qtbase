@@ -1646,30 +1646,36 @@ QSslCipher QSslSocketBackendPrivate::sessionCipher() const
     if( msh )
     {
         QSslCipher ciph;
-        SecPkgContext_CipherInfo cipherInfo;
+        PSecPkgContext_CipherInfo cipherInfo = msspi_get_cipherinfo( msh );
 
-        if( msspi_get_cipherinfo( msh, &cipherInfo ) )
+        if( cipherInfo )
         {           
             ciph.d->isNull = false;
-            ciph.d->name = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCipherSuite );
-            ciph.d->supportedBits = cipherInfo.dwCipherLen;
-            ciph.d->bits = cipherInfo.dwCipherLen;
-            ciph.d->keyExchangeMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szExchange );
-            ciph.d->authenticationMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCertificate );
-            ciph.d->encryptionMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo.szCipher );
+            ciph.d->name = QString::fromWCharArray( (const wchar_t *) cipherInfo->szCipherSuite );
+            ciph.d->supportedBits = cipherInfo->dwCipherLen;
+            ciph.d->bits = cipherInfo->dwCipherLen;
+            ciph.d->keyExchangeMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo->szExchange );
+            ciph.d->authenticationMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo->szCertificate );
+            ciph.d->encryptionMethod = QString::fromWCharArray( (const wchar_t *) cipherInfo->szCipher );
             ciph.d->exportable = false;
-            switch( cipherInfo.dwProtocol )
+            switch( cipherInfo->dwProtocol )
             {
+            case 0x00000301:
+            case 0x00000040 /*SP_PROT_TLS1_SERVER*/:
             case 0x00000080 /*SP_PROT_TLS1_CLIENT*/:
                 ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1" );
                 ciph.d->protocol = QSsl::TlsV1_0;
                 break;
 
+            case 0x00000302:
+            case 0x00000100 /*SP_PROT_TLS1_1_SERVER*/:
             case 0x00000200 /*SP_PROT_TLS1_1_CLIENT*/:
                 ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1.1" );
                 ciph.d->protocol = QSsl::TlsV1_1;
                 break;
 
+            case 0x00000303:
+            case 0x00000400 /*SP_PROT_TLS1_2_SERVER*/:
             case 0x00000800 /*SP_PROT_TLS1_2_CLIENT*/:
                 ciph.d->protocolString = QString::fromLocal8Bit( "TLSv1.2" );
                 ciph.d->protocol = QSsl::TlsV1_2;
@@ -1697,18 +1703,22 @@ QSsl::SslProtocol QSslSocketBackendPrivate::sessionProtocol() const
 #ifdef MSSPISSL
     if( msh )
     {
-        SecPkgContext_CipherInfo cipherInfo;
+        PSecPkgContext_CipherInfo cipherInfo = msspi_get_cipherinfo( msh );
 
-        if( msspi_get_cipherinfo( msh, &cipherInfo ) )
+        if( cipherInfo )
         {
-            switch( cipherInfo.dwProtocol )
+            switch( cipherInfo->dwProtocol )
             {
+            case 0x00000301:
+            case 0x00000040 /*SP_PROT_TLS1_SERVER*/:
             case 0x00000080 /*SP_PROT_TLS1_CLIENT*/:
                 return QSsl::TlsV1_0;
-
+            case 0x00000302:
+            case 0x00000100 /*SP_PROT_TLS1_1_SERVER*/:
             case 0x00000200 /*SP_PROT_TLS1_1_CLIENT*/:
                 return QSsl::TlsV1_1;
-
+            case 0x00000303:
+            case 0x00000400 /*SP_PROT_TLS1_2_SERVER*/:
             case 0x00000800 /*SP_PROT_TLS1_2_CLIENT*/:
                 return QSsl::TlsV1_2;
             }

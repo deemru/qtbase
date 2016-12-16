@@ -394,6 +394,8 @@ void QSslSocketBackendPrivate::destroySslContext()
     if( msh )
     {
         msspi_close( msh );
+        q_BIO_free( readBio );
+        q_BIO_free( writeBio );
         msh = NULL;
     }
 #endif

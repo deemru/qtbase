@@ -166,8 +166,6 @@ public:
 #ifdef MSSPISSL
 public:
     MSSPI_HANDLE msh;
-    QVarLengthArray<char> read_ready;
-    QVarLengthArray<char> write_ready;
 #endif
 };
 

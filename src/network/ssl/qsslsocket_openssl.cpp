@@ -590,32 +590,40 @@ QList<QSslCertificate> QSslSocketPrivate::systemCaCertificates()
 #ifdef MSSPISSL
 static int QSslSocketMSSPIRead( QSslSocketBackendPrivate * qssl, void * buf, int len )
 {
-    int ready_len = qssl->read_ready.length();
-
-    if( ready_len == 0 )
-        return -1;
-
-    if( ready_len < len )
-        len = ready_len;
-
-    if( len )
-    {
-        memcpy( buf, qssl->read_ready.constData(), len );
-
-        if( ready_len == len )
-            qssl->read_ready.clear();
-        else
-            qssl->read_ready.remove( 0, len );
-    }
-
-    return len;
+    return q_BIO_read( qssl->readBio, buf, len );
 }
 
 static int QSslSocketMSSPIWrite( QSslSocketBackendPrivate * qssl, const void * buf, int len )
 {
-    qssl->write_ready.append( (const char *)buf, len );
-    return len;
+    return q_BIO_write( qssl->writeBio, buf, len );
 }
+
+static int q_SSL_read_prx( SSL * s, void * buf, int num ) { return q_SSL_read( s, buf, num ); }
+#undef q_SSL_read
+#define q_SSL_read( s, b, n ) ( msh ? msspi_read( msh, b, n ) : q_SSL_read_prx( s, b, n ) )
+
+static int q_SSL_write_prx( SSL * s, const void * buf, int num ) { return q_SSL_write( s, buf, num ); }
+#undef q_SSL_write
+#define q_SSL_write( s, b, n ) ( msh ? msspi_write( msh, b, n ) : q_SSL_write_prx( s, b, n ) )
+
+static int q_SSL_get_error_prx( SSL * s, int i ) { return q_SSL_get_error( s, i ); }
+static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
+{
+    switch( msspi_state( h ) )
+    {
+    case MSSPI_NOTHING:
+        return SSL_ERROR_NONE;
+    case MSSPI_READING:
+        return SSL_ERROR_WANT_READ;
+    case MSSPI_WRITING:
+        return SSL_ERROR_WANT_WRITE;
+    case MSSPI_SHUTDOWN:
+    default:
+        return SSL_ERROR_ZERO_RETURN;
+    }
+}
+#undef q_SSL_get_error
+#define q_SSL_get_error( s, i ) ( msh ? q_SSL_get_error_msspi( msh ) : q_SSL_get_error_prx( s, i ) )
 #endif
 
 void QSslSocketBackendPrivate::startClientEncryption()
@@ -626,7 +634,18 @@ void QSslSocketBackendPrivate::startClientEncryption()
     if( configuration.sslOptions & QSsl::SslOptionEnableMSSPI )
     {
         if( msh == NULL )
+        {
+            // Initialize memory BIOs for encryption and decryption.
+            readBio = q_BIO_new( q_BIO_s_mem() );
+            writeBio = q_BIO_new( q_BIO_s_mem() );
+            if( !readBio || !writeBio ) {
+                setErrorAndEmit( QAbstractSocket::SslInternalError,
+                    QSslSocket::tr( "Error creating SSL session: %1" ).arg( getErrorsFromOpenSsl() ) );
+                return;
+            }
+
             msh = msspi_open( this, (msspi_read_cb)QSslSocketMSSPIRead, (msspi_write_cb)QSslSocketMSSPIWrite );
+        }
 
         Q_ASSERT( msh );
 
@@ -723,27 +742,9 @@ void QSslSocketBackendPrivate::transmit()
             qint64 totalBytesWritten = 0;
             int nextDataBlockSize;
             while ((nextDataBlockSize = writeBuffer.nextDataBlockSize()) > 0) {
-#ifdef MSSPISSL
-                int writtenBytes;
-
-                if( msh )
-                    writtenBytes = msspi_write( msh, writeBuffer.readPointer(), nextDataBlockSize );
-                else
-                    writtenBytes = q_SSL_write( ssl, writeBuffer.readPointer(), nextDataBlockSize );
-#else
                 int writtenBytes = q_SSL_write(ssl, writeBuffer.readPointer(), nextDataBlockSize);
-#endif
                 if (writtenBytes <= 0) {
-#ifdef MSSPISSL
-                    int error;
-
-                    if( msh )
-                        error = writtenBytes == -1 ? SSL_ERROR_WANT_WRITE : SSL_ERROR_ZERO_RETURN;
-                    else
-                        error = q_SSL_get_error( ssl, writtenBytes );
-#else
                     int error = q_SSL_get_error(ssl, writtenBytes);
-#endif
                     //write can result in a want_write_error - not an error - continue transmitting
                     if (error == SSL_ERROR_WANT_WRITE) {
                         transmitting = true;
@@ -787,27 +788,10 @@ void QSslSocketBackendPrivate::transmit()
         // Check if we've got any data to be written to the socket.
         QVarLengthArray<char, 4096> data;
         int pendingBytes;
-#ifdef MSSPISSL
-        while( plainSocket->isValid() && ( pendingBytes = msh ? write_ready.length() : q_BIO_pending( writeBio ) ) > 0 ) {
-#else
         while (plainSocket->isValid() && (pendingBytes = q_BIO_pending(writeBio)) > 0) {
-#endif
             // Read encrypted data from the write BIO into a buffer.
             data.resize(pendingBytes);
-#ifdef MSSPISSL
-            int encryptedBytesRead;
-
-            if( msh )
-            {
-                memcpy( data.data(), write_ready.constData(), pendingBytes );
-                write_ready.clear();
-                encryptedBytesRead = pendingBytes;
-            }
-            else
-                encryptedBytesRead = q_BIO_read( writeBio, data.data(), pendingBytes );
-#else
             int encryptedBytesRead = q_BIO_read(writeBio, data.data(), pendingBytes);
-#endif
 
             // Write encrypted data from the buffer to the socket.
             qint64 actualWritten = plainSocket->write(data.constData(), encryptedBytesRead);
@@ -834,20 +818,8 @@ void QSslSocketBackendPrivate::transmit()
                 qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: read" << encryptedBytesRead << "encrypted bytes from the socket";
 #endif
 
-#ifdef MSSPISSL
-                int writtenToBio;
-
-                if( msh )
-                {
-                    read_ready.append( data.constData(), encryptedBytesRead );
-                    writtenToBio = encryptedBytesRead;
-                }
-                else
-                    writtenToBio = q_BIO_write( readBio, data.constData(), encryptedBytesRead );
-#else
                 // Write encrypted data from the buffer into the read BIO.
                 int writtenToBio = q_BIO_write(readBio, data.constData(), encryptedBytesRead);
-#endif
 
                 // Throw away the results.
                 if (writtenToBio > 0) {
@@ -1028,18 +1000,9 @@ void QSslSocketBackendPrivate::transmit()
         int readBytes = 0;
         const int bytesToRead = 4096;
         do {
-#ifdef MSSPISSL
-            if( msh )
-                readBytes = msspi_read( msh, data.data(), data.size() );
-            else
-                readBytes = q_SSL_read( ssl, data.data(), data.size() );
-
-            if( readBytes > 0 ) {
-#else
             // Don't use SSL_pending(). It's very unreliable.
             readBytes = q_SSL_read(ssl, buffer.reserve(bytesToRead), bytesToRead);
             if (readBytes > 0) {
-#endif
 #ifdef QSSLSOCKET_DEBUG
                 qCDebug(lcSsl) << "QSslSocketBackendPrivate::transmit: decrypted" << readBytes << "bytes";
 #endif
@@ -1055,18 +1018,7 @@ void QSslSocketBackendPrivate::transmit()
             buffer.chop(bytesToRead);
 
             // Error.
-#ifdef MSSPISSL
-            int error;
-
-            if( msh )
-                error = readBytes == -1 ? SSL_ERROR_WANT_READ : SSL_ERROR_ZERO_RETURN;
-            else
-                error = q_SSL_get_error( ssl, readBytes );
-
-            switch( error ) {
-#else
             switch (q_SSL_get_error(ssl, readBytes)) {
-#endif
             case SSL_ERROR_WANT_READ:
             case SSL_ERROR_WANT_WRITE:
                 // Out of data.
@@ -1615,6 +1567,18 @@ void QWindowsCaRootFetcher::start()
 
 void QSslSocketBackendPrivate::disconnectFromHost()
 {
+#ifdef MSSPISSL
+    if( msh )
+    {
+        if( !shutdown )
+        {
+            msspi_shutdown( msh );
+            shutdown = true;
+            transmit();
+        }
+    }
+    else
+#endif
     if (ssl) {
         if (!shutdown) {
             q_SSL_shutdown(ssl);

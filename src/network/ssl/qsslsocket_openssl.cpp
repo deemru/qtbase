@@ -860,17 +860,6 @@ void QSslSocketBackendPrivate::transmit()
                 {
                     if( mode == QSslSocket::SslClientMode )
                     {
-                        QString peerName = ( verificationPeerName.isEmpty() ? q->peerName() : verificationPeerName );
-
-                        if( !isMatchingHostname( configuration.peerCertificate, peerName ) )
-                        {
-                            QSslError error( QSslError::HostNameMismatch, configuration.peerCertificate );
-                            errors << error;
-                            emit q->peerVerifyError( error );
-                            if( q->state() != QAbstractSocket::ConnectedState )
-                                break;
-                        }
-
                         if( doVerifyPeer )
                         {
                             QSslError::SslError err;

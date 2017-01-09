@@ -1069,8 +1069,10 @@ void QSslSocketBackendPrivate::transmit()
                             case MSSPI_VERIFY_OK:
                                 err = QSslError::NoError;
                                 break;
+                            case MSSPI_VERIFY_ERROR:
                             default:
                                 err = QSslError::UnspecifiedError;
+                                break;
                             case TRUST_E_CERT_SIGNATURE:
                                 err = QSslError::CertificateSignatureFailed;
                                 break;
@@ -1094,6 +1096,7 @@ void QSslSocketBackendPrivate::transmit()
                                 err = QSslError::CertificateExpired;
                                 break;
                             case CERT_E_INVALID_NAME:
+                            case CERT_E_CN_NO_MATCH:
                                 err = QSslError::HostNameMismatch;
                                 break;
                             case CERT_E_VALIDITYPERIODNESTING:

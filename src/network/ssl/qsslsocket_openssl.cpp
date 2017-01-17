@@ -620,6 +620,9 @@ static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
     case MSSPI_WRITING:
         return SSL_ERROR_WANT_WRITE;
     case MSSPI_SHUTDOWN:
+        return SSL_ERROR_ZERO_RETURN;
+    case MSSPI_ERROR:
+        return SSL_ERROR_SSL;
     default:
         return SSL_ERROR_ZERO_RETURN;
     }
@@ -681,6 +684,14 @@ void QSslSocketBackendPrivate::startClientEncryption()
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
                                  QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );
+                return;
+            }
+
+            if( ( configuration.sslOptions & QSsl::SslOptionEnableSilent ) &&
+                !msspi_set_mycert_silent( msh ) )
+            {
+                setErrorAndEmit( QAbstractSocket::SslInternalError,
+                                 QSslSocket::tr( "Unable to set Silent Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );
                 return;
             }
         }

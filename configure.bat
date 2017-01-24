@@ -28,10 +28,26 @@
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 @echo off
+setlocal ENABLEEXTENSIONS
+set ARGS=%*
 set QTSRC=%~dp0
 set QTDIR=%CD%
 
-if not exist %QTSRC%.gitignore goto sconf
+:doargs
+    if "%~1" == "" goto doneargs
+
+    if "%~1" == "/?" goto help
+    if "%~1" == "-?" goto help
+    if /i "%~1" == "/h" goto help
+    if /i "%~1" == "-h" goto help
+    if /i "%~1" == "/help" goto help
+    if /i "%~1" == "-help" goto help
+    if /i "%~1" == "--help" goto help
+
+    shift
+    goto doargs
+:doneargs
+
 echo Please wait while bootstrapping configure ...
 
 for %%C in (clang-cl.exe cl.exe icl.exe g++.exe perl.exe jom.exe) do set %%C=%%~$PATH:C
@@ -77,19 +93,19 @@ echo QT_VERSION_MINOR = %QTVERMIN% >> Makefile
 echo QT_VERSION_PATCH = %QTVERPAT% >> Makefile
 if not "%icl.exe%" == "" (
     echo CXX = icl>>Makefile
-    echo EXTRA_CXXFLAGS = /Zc:forScope>>Makefile
-    rem This must have a trailing space.
-    echo QTSRC = %QTSRC% >> Makefile
-    set tmpl=win32
-) else if not "%clang-cl.exe%" == "" (
-    echo CXX = clang-cl>>Makefile
-    echo EXTRA_CXXFLAGS = -fms-compatibility-version=19.00.23506 -Wno-microsoft-enum-value>>Makefile
+    echo EXTRA_CXXFLAGS = /Qstd=c++11 /Zc:forScope>>Makefile
     rem This must have a trailing space.
     echo QTSRC = %QTSRC% >> Makefile
     set tmpl=win32
 ) else if not "%cl.exe%" == "" (
     echo CXX = cl>>Makefile
     echo EXTRA_CXXFLAGS =>>Makefile
+    rem This must have a trailing space.
+    echo QTSRC = %QTSRC% >> Makefile
+    set tmpl=win32
+) else if not "%clang-cl.exe%" == "" (
+    echo CXX = clang-cl>>Makefile
+    echo EXTRA_CXXFLAGS = -fms-compatibility-version=19.00.23506 -Wno-microsoft-enum-value>>Makefile
     rem This must have a trailing space.
     echo QTSRC = %QTSRC% >> Makefile
     set tmpl=win32
@@ -114,9 +130,10 @@ if errorlevel 1 (cd ..\.. & exit /b 1)
 cd ..\..
 
 :conf
-configure.exe -srcdir %QTSRC% %*
+configureapp.exe -srcdir %QTSRC% %ARGS%
 goto exit
 
-:sconf
-%QTSRC%configure.exe %*
+:help
+type %QTSRC%config_help.txt
+
 :exit

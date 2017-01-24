@@ -48,8 +48,6 @@
 #include "qplaintextedit.h"
 #include "../../../shared/platformclipboard.h"
 
-#include "../../../qtest-config.h"
-
 //Used in copyAvailable
 typedef QPair<Qt::Key, Qt::KeyboardModifier> keyPairType;
 typedef QList<keyPairType> pairListType;
@@ -64,7 +62,6 @@ public:
     tst_QPlainTextEdit();
 
 public slots:
-    void initTestCase();
     void init();
     void cleanup();
 private slots:
@@ -104,7 +101,7 @@ private slots:
     void shiftDownInLineLastShouldSelectToEnd();
     void undoRedoShouldRepositionTextEditCursor();
     void lineWrapModes();
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void mouseCursorShape();
 #endif
     void implicitClear();
@@ -208,16 +205,8 @@ void tst_QPlainTextEdit::getSetCheck()
     QCOMPARE(0, obj1.tabStopWidth());
     obj1.setTabStopWidth(INT_MIN);
     QCOMPARE(0, obj1.tabStopWidth()); // Makes no sense to set a negative tabstop value
-#if defined(Q_OS_WINCE)
-    // due to rounding error in qRound when qreal==float
-    // we cannot use INT_MAX for this check
-    obj1.setTabStopWidth(SHRT_MAX*2);
-    QCOMPARE(SHRT_MAX*2, obj1.tabStopWidth());
-#else
     obj1.setTabStopWidth(INT_MAX);
     QCOMPARE(INT_MAX, obj1.tabStopWidth());
-#endif
-
 }
 
 class QtTestDocumentLayout : public QAbstractTextDocumentLayout
@@ -250,13 +239,6 @@ public:
 
 tst_QPlainTextEdit::tst_QPlainTextEdit()
 {}
-
-void tst_QPlainTextEdit::initTestCase()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QPlainTextEdit::init()
 {
@@ -896,7 +878,7 @@ void tst_QPlainTextEdit::lineWrapModes()
     delete window;
 }
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QPlainTextEdit::mouseCursorShape()
 {
     // always show an IBeamCursor, see change 170146
@@ -1179,12 +1161,19 @@ void tst_QPlainTextEdit::selectWordsFromStringsContainingSeparators_data()
     QTest::addColumn<QString>("testString");
     QTest::addColumn<QString>("selectedWord");
 
-    QStringList wordSeparators;
-    wordSeparators << "." << "," << "?" << "!" << ":" << ";" << "-" << "<" << ">" << "["
-                   << "]" << "(" << ")" << "{" << "}" << "=" << "\t"<< QString(QChar::Nbsp);
+    const ushort wordSeparators[] =
+        {'.', ',', '?', '!', ':', ';', '-', '<', '>', '[', ']', '(', ')', '{', '}',
+         '=', '\t', ushort(QChar::Nbsp)};
 
-    foreach (QString s, wordSeparators)
-        QTest::newRow(QString("separator: " + s).toLocal8Bit()) << QString("foo") + s + QString("bar") << QString("foo");
+    for (size_t i = 0, count = sizeof(wordSeparators) / sizeof(wordSeparators[0]); i < count; ++i) {
+        const ushort u = wordSeparators[i];
+        QByteArray rowName = QByteArrayLiteral("separator: ");
+        if (u >= 32 && u < 128)
+            rowName += char(u);
+        else
+            rowName += QByteArrayLiteral("0x") + QByteArray::number(u, 16);
+        QTest::newRow(rowName.constData()) << QString("foo") + QChar(u) + QString("bar") << QString("foo");
+    }
 }
 
 void tst_QPlainTextEdit::selectWordsFromStringsContainingSeparators()

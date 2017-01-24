@@ -40,6 +40,7 @@
 #ifndef QDRAWINGPRIMITIVE_SSE2_P_H
 #define QDRAWINGPRIMITIVE_SSE2_P_H
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include <private/qsimd_p.h>
 #include "qdrawhelper_p.h"
 
@@ -170,23 +171,15 @@ QT_BEGIN_NAMESPACE
 \
     /* First, get dst aligned. */ \
     ALIGNMENT_PROLOGUE_16BYTES(dst, x, length) { \
-        uint s = src[x]; \
-        if (s >= 0xff000000) \
-            dst[x] = s; \
-        else if (s != 0) \
-            dst[x] = s + BYTE_MUL(dst[x], qAlpha(~s)); \
+        blend_pixel(dst[x], src[x]); \
     } \
 \
     for (; x < length-3; x += 4) { \
         const __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]); \
         BLEND_SOURCE_OVER_ARGB32_SSE2_helper(dst, srcVector, nullVector, half, one, colorMask, alphaMask) \
     } \
-    for (; x < length; ++x) { \
-        uint s = src[x]; \
-        if (s >= 0xff000000) \
-            dst[x] = s; \
-        else if (s != 0) \
-            dst[x] = s + BYTE_MUL(dst[x], qAlpha(~s)); \
+    SIMD_EPILOGUE(x, length, 3) { \
+        blend_pixel(dst[x], src[x]); \
     } \
 }
 
@@ -206,11 +199,7 @@ QT_BEGIN_NAMESPACE
     int x = 0; \
 \
     ALIGNMENT_PROLOGUE_16BYTES(dst, x, length) { \
-        quint32 s = src[x]; \
-        if (s != 0) { \
-            s = BYTE_MUL(s, const_alpha); \
-            dst[x] = s + BYTE_MUL(dst[x], qAlpha(~s)); \
-        } \
+        blend_pixel(dst[x], src[x], const_alpha); \
     } \
 \
     for (; x < length-3; x += 4) { \
@@ -230,12 +219,8 @@ QT_BEGIN_NAMESPACE
             _mm_store_si128((__m128i *)&dst[x], result); \
         } \
     } \
-    for (; x < length; ++x) { \
-        quint32 s = src[x]; \
-        if (s != 0) { \
-            s = BYTE_MUL(s, const_alpha); \
-            dst[x] = s + BYTE_MUL(dst[x], qAlpha(~s)); \
-        } \
+    SIMD_EPILOGUE(x, length, 3) { \
+        blend_pixel(dst[x], src[x], const_alpha); \
     } \
 }
 

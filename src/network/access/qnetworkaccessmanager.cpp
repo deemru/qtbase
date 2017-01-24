@@ -56,10 +56,6 @@
 #include "qnetworkreplydataimpl_p.h"
 #include "qnetworkreplyfileimpl_p.h"
 
-#if defined(Q_OS_IOS) && defined(QT_NO_SSL)
-#include "qnetworkreplynsurlconnectionimpl_p.h"
-#endif
-
 #include "QtCore/qbuffer.h"
 #include "QtCore/qurl.h"
 #include "QtCore/qvector.h"
@@ -1109,6 +1105,47 @@ QNetworkReply *QNetworkAccessManager::sendCustomRequest(const QNetworkRequest &r
 }
 
 /*!
+    \since 5.8
+
+    \overload
+
+    Sends the contents of the \a data byte array to the destination
+    specified by \a request.
+*/
+QNetworkReply *QNetworkAccessManager::sendCustomRequest(const QNetworkRequest &request, const QByteArray &verb, const QByteArray &data)
+{
+    QBuffer *buffer = new QBuffer;
+    buffer->setData(data);
+    buffer->open(QIODevice::ReadOnly);
+
+    QNetworkReply *reply = sendCustomRequest(request, verb, buffer);
+    buffer->setParent(reply);
+    return reply;
+}
+
+/*!
+    \since 5.8
+
+    \overload
+
+    Sends a custom request to the server identified by the URL of \a request.
+
+    Sends the contents of the \a multiPart message to the destination
+    specified by \a request.
+
+    This can be used for sending MIME multipart messages for custom verbs.
+
+    \sa QHttpMultiPart, QHttpPart, put()
+*/
+QNetworkReply *QNetworkAccessManager::sendCustomRequest(const QNetworkRequest &request, const QByteArray &verb, QHttpMultiPart *multiPart)
+{
+    QNetworkRequest newRequest = d_func()->prepareMultipart(request, multiPart);
+    QIODevice *device = multiPart->d_func()->device;
+    QNetworkReply *reply = sendCustomRequest(newRequest, verb, device);
+    return reply;
+}
+
+/*!
     Returns a new QNetworkReply object to handle the operation \a op
     and request \a req. The device \a outgoingData is always 0 for Get and
     Head requests, but is the value passed to post() and put() in
@@ -1206,12 +1243,6 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
                 request.setHeader(QNetworkRequest::CookieHeader, QVariant::fromValue(cookies));
         }
     }
-
-// Use NSURLConnection for https on iOS when OpenSSL is disabled.
-#if defined(Q_OS_IOS) && defined(QT_NO_SSL)
-    if (scheme == QLatin1String("https"))
-        return new QNetworkReplyNSURLConnectionImpl(this, request, op, outgoingData);
-#endif
 
 #ifndef QT_NO_HTTP
     // Since Qt 5 we use the new QNetworkReplyHttpImpl
@@ -1526,27 +1557,35 @@ void QNetworkAccessManagerPrivate::clearCache(QNetworkAccessManager *manager)
     manager->d_func()->objectCache.clear();
     manager->d_func()->authenticationManager->clearCache();
 
-    if (manager->d_func()->httpThread) {
-        manager->d_func()->httpThread->quit();
-        manager->d_func()->httpThread->wait(5000);
-        if (manager->d_func()->httpThread->isFinished())
-            delete manager->d_func()->httpThread;
-        else
-            QObject::connect(manager->d_func()->httpThread, SIGNAL(finished()), manager->d_func()->httpThread, SLOT(deleteLater()));
-        manager->d_func()->httpThread = 0;
-    }
+    manager->d_func()->destroyThread();
 }
 
 QNetworkAccessManagerPrivate::~QNetworkAccessManagerPrivate()
 {
-    if (httpThread) {
-        httpThread->quit();
-        httpThread->wait(5000);
-        if (httpThread->isFinished())
-            delete httpThread;
+    destroyThread();
+}
+
+QThread * QNetworkAccessManagerPrivate::createThread()
+{
+    if (!thread) {
+        thread = new QThread;
+        thread->setObjectName(QStringLiteral("QNetworkAccessManager thread"));
+        thread->start();
+    }
+    Q_ASSERT(thread);
+    return thread;
+}
+
+void QNetworkAccessManagerPrivate::destroyThread()
+{
+    if (thread) {
+        thread->quit();
+        thread->wait(5000);
+        if (thread->isFinished())
+            delete thread;
         else
-            QObject::connect(httpThread, SIGNAL(finished()), httpThread, SLOT(deleteLater()));
-        httpThread = 0;
+            QObject::connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
+        thread = 0;
     }
 }
 
@@ -1615,7 +1654,7 @@ void QNetworkAccessManagerPrivate::_q_networkSessionClosed()
         QObject::disconnect(networkSession.data(), SIGNAL(closed()), q, SLOT(_q_networkSessionClosed()));
         QObject::disconnect(networkSession.data(), SIGNAL(stateChanged(QNetworkSession::State)),
             q, SLOT(_q_networkSessionStateChanged(QNetworkSession::State)));
-        QObject::disconnect(networkSessionStrongRef.data(), SIGNAL(error(QNetworkSession::SessionError)),
+        QObject::disconnect(networkSession.data(), SIGNAL(error(QNetworkSession::SessionError)),
                             q, SLOT(_q_networkSessionFailed(QNetworkSession::SessionError)));
 
         networkSessionStrongRef.clear();

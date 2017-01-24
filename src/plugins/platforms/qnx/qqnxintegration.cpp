@@ -112,7 +112,7 @@ static inline QQnxIntegration::Options parseOptions(const QStringList &paramList
         options |= QQnxIntegration::FullScreenApplication;
     }
 
-    if (!paramList.contains(QLatin1String("flush-screen-context"))) {
+    if (paramList.contains(QLatin1String("flush-screen-context"))) {
         options |= QQnxIntegration::AlwaysFlushScreenContext;
     }
 
@@ -453,11 +453,11 @@ void QQnxIntegration::createDisplays()
         Q_SCREEN_CHECKERROR(result, "Failed to query display attachment");
 
         if (!isAttached) {
-            qIntegrationDebug() << "Skipping non-attached display" << i;
+            qIntegrationDebug("Skipping non-attached display %d", i);
             continue;
         }
 
-        qIntegrationDebug() << "Creating screen for display" << i;
+        qIntegrationDebug("Creating screen for display %d", i);
         createDisplay(displays[i], /*isPrimary=*/false);
     } // of displays iteration
 }

@@ -163,7 +163,7 @@
 
 @implementation QIOSTextInputResponder
 
-- (id)initWithInputContext:(QIOSInputContext *)inputContext
+- (id)initWithInputContext:(QT_PREPEND_NAMESPACE(QIOSInputContext) *)inputContext
 {
     if (!(self = [self init]))
         return self;
@@ -236,6 +236,20 @@
         self.inputView = [[[WrapperView alloc] initWithView:inputView] autorelease];
     if (UIView *accessoryView = static_cast<UIView *>(platformData.value(kImePlatformDataInputAccessoryView).value<void *>()))
         self.inputAccessoryView = [[[WrapperView alloc] initWithView:accessoryView] autorelease];
+
+#ifndef Q_OS_TVOS
+    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_9_0) {
+        if (platformData.value(kImePlatformDataHideShortcutsBar).toBool()) {
+            // According to the docs, leadingBarButtonGroups/trailingBarButtonGroups should be set to nil to hide the shortcuts bar.
+            // However, starting with iOS 10, the API has been surrounded with NS_ASSUME_NONNULL, which contradicts this and causes
+            // compiler warnings. And assigning just an empty array causes layout asserts. Hence, we assign empty button groups instead.
+            UIBarButtonItemGroup *leading = [[[UIBarButtonItemGroup alloc] initWithBarButtonItems:@[] representativeItem:nil] autorelease];
+            UIBarButtonItemGroup *trailing = [[[UIBarButtonItemGroup alloc] initWithBarButtonItems:@[] representativeItem:nil] autorelease];
+            self.inputAssistantItem.leadingBarButtonGroups = @[leading];
+            self.inputAssistantItem.trailingBarButtonGroups = @[trailing];
+        }
+    }
+#endif
 
     self.undoManager.groupsByEvent = NO;
     [self rebuildUndoStack];
@@ -359,6 +373,7 @@
 
 - (void)sendKeyPressRelease:(Qt::Key)key modifiers:(Qt::KeyboardModifiers)modifiers
 {
+    QScopedValueRollback<BOOL> rollback(m_inSendEventToFocusObject, true);
     QWindowSystemInterface::handleKeyEvent(qApp->focusWindow(), QEvent::KeyPress, key, modifiers);
     QWindowSystemInterface::handleKeyEvent(qApp->focusWindow(), QEvent::KeyRelease, key, modifiers);
     QWindowSystemInterface::flushWindowSystemEvents();
@@ -613,7 +628,7 @@
 
 - (id<UITextInputTokenizer>)tokenizer
 {
-    return [[[UITextInputStringTokenizer alloc] initWithTextInput:id<UITextInput>(self)] autorelease];
+    return [[[UITextInputStringTokenizer alloc] initWithTextInput:self] autorelease];
 }
 
 - (UITextPosition *)beginningOfDocument
@@ -679,11 +694,7 @@
     if (markedTextFormat.isEmpty()) {
         // There seems to be no way to query how the preedit text
         // should be drawn. So we need to hard-code the color.
-        QSysInfo::MacVersion iosVersion = QSysInfo::MacintoshVersion;
-        if (iosVersion < QSysInfo::MV_IOS_7_0)
-            markedTextFormat.setBackground(QColor(235, 239, 247));
-        else
-            markedTextFormat.setBackground(QColor(206, 221, 238));
+        markedTextFormat.setBackground(QColor(206, 221, 238));
     }
 
     QList<QInputMethodEvent::Attribute> attrs;
@@ -811,7 +822,7 @@
         [self sendEventToFocusObject:e];
     }
 
-    return toCGRect(startRect.united(endRect));
+    return startRect.united(endRect).toCGRect();
 }
 
 - (NSArray *)selectionRectsForRange:(UITextRange *)range
@@ -829,7 +840,7 @@
     // Assume for now that position is always the same as
     // cursor index until a better API is in place:
     QRectF cursorRect = qApp->inputMethod()->cursorRectangle();
-    return toCGRect(cursorRect);
+    return cursorRect.toCGRect();
 }
 
 - (void)replaceRange:(UITextRange *)range withText:(NSString *)text
@@ -896,6 +907,7 @@
     // text instead of just guessing...
 }
 
+#ifndef Q_OS_TVOS
 - (NSDictionary *)textStylingAtPosition:(UITextPosition *)position inDirection:(UITextStorageDirection)direction
 {
     Q_UNUSED(position);
@@ -913,8 +925,9 @@
     UIFont *uifont = [UIFont fontWithName:qfont.family().toNSString() size:qfont.pointSize()];
     if (!uifont)
         return [NSDictionary dictionary];
-    return [NSDictionary dictionaryWithObject:uifont forKey:UITextInputTextFontKey];
+    return [NSDictionary dictionaryWithObject:uifont forKey:NSFontAttributeName];
 }
+#endif
 
 - (NSDictionary *)markedTextStyle
 {

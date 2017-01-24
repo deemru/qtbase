@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qstring.h"
 #include "QtCore/qvarlengtharray.h"
 #include "QtCore/qnamespace.h"
@@ -649,7 +649,7 @@ private:
     void setBoundary(int strPos) const;
     void addRequiredBoundaries() const;
     void shapeText(int item) const;
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     int shapeTextWithHarfbuzzNG(const QScriptItem &si,
                                 const ushort *string,
                                 int itemLength,

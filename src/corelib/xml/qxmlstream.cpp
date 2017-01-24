@@ -886,7 +886,7 @@ inline void QXmlStreamReaderPrivate::reallocateStack()
     sym_stack = reinterpret_cast<Value*> (realloc(sym_stack, stack_size * sizeof(Value)));
     Q_CHECK_PTR(sym_stack);
     state_stack = reinterpret_cast<int*> (realloc(state_stack, stack_size * sizeof(int)));
-    Q_CHECK_PTR(sym_stack);
+    Q_CHECK_PTR(state_stack);
 }
 
 
@@ -976,11 +976,11 @@ bool QXmlStreamReaderPrivate::scanUntil(const char *str, short tokenToInject)
         case '\r':
             if ((c = filterCarriageReturn()) == 0)
                 break;
-            // fall through
+            Q_FALLTHROUGH();
         case '\n':
             ++lineNumber;
             lastLineStart = characterOffset + readBufferPos;
-            // fall through
+            Q_FALLTHROUGH();
         case '\t':
             textBuffer += QChar(c);
             continue;
@@ -1158,11 +1158,11 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
         case '\r':
             if (filterCarriageReturn() == 0)
                 return n;
-            // fall through
+            Q_FALLTHROUGH();
         case '\n':
             ++lineNumber;
             lastLineStart = characterOffset + readBufferPos;
-            // fall through
+            Q_FALLTHROUGH();
         case ' ':
         case '\t':
             if (normalizeLiterals)
@@ -1179,8 +1179,12 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
                 putChar(c);
                 return n;
             }
-            // fall through
+            Q_FALLTHROUGH();
         default:
+            if (c < 0x20) {
+                putChar(c);
+                return n;
+            }
             textBuffer += QChar(c);
             ++n;
         }
@@ -1197,11 +1201,11 @@ inline int QXmlStreamReaderPrivate::fastScanSpace()
         case '\r':
             if ((c = filterCarriageReturn()) == 0)
                 return n;
-            // fall through
+            Q_FALLTHROUGH();
         case '\n':
             ++lineNumber;
             lastLineStart = characterOffset + readBufferPos;
-            // fall through
+            Q_FALLTHROUGH();
         case ' ':
         case '\t':
             textBuffer += QChar(c);
@@ -1255,11 +1259,11 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
         case '\r':
             if ((c = filterCarriageReturn()) == 0)
                 return n;
-            // fall through
+            Q_FALLTHROUGH();
         case '\n':
             ++lineNumber;
             lastLineStart = characterOffset + readBufferPos;
-            // fall through
+            Q_FALLTHROUGH();
         case ' ':
         case '\t':
             textBuffer += QChar(ushort(c));
@@ -1271,7 +1275,7 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
                 putChar(c);
                 return n;
             }
-            // fall through
+            Q_FALLTHROUGH();
         default:
             if (c < 0x20) {
                 putChar(c);
@@ -1335,7 +1339,7 @@ inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
                 putChar(c);
                 return n;
             }
-            // fall through
+            Q_FALLTHROUGH();
         default:
             textBuffer += QChar(c);
             ++n;
@@ -2119,7 +2123,7 @@ QString QXmlStreamReader::readElementText(ReadElementTextBehaviour behaviour)
                     result += readElementText(behaviour);
                     break;
                 }
-                // Fall through (for ErrorOnUnexpectedElement)
+                Q_FALLTHROUGH();
             default:
                 if (d->error || behaviour == ErrorOnUnexpectedElement) {
                     if (!d->error)
@@ -3025,10 +3029,14 @@ void QXmlStreamWriterPrivate::checkIfASCIICompatibleCodec()
 {
 #ifndef QT_NO_TEXTCODEC
     Q_ASSERT(encoder);
-    // assumes ASCII-compatibility for all 8-bit encodings
-    QChar space = QLatin1Char(' ');
-    const QByteArray bytes = encoder->fromUnicode(&space, 1);
-    isCodecASCIICompatible = (bytes.count() == 1);
+    // test ASCII-compatibility using the letter 'a'
+    QChar letterA = QLatin1Char('a');
+    const QByteArray bytesA = encoder->fromUnicode(&letterA, 1);
+    const bool isCodecASCIICompatibleA = (bytesA.count() == 1) && (bytesA[0] == 0x61) ;
+    QChar letterLess = QLatin1Char('<');
+    const QByteArray bytesLess = encoder->fromUnicode(&letterLess, 1);
+    const bool isCodecASCIICompatibleLess = (bytesLess.count() == 1) && (bytesLess[0] == 0x3C) ;
+    isCodecASCIICompatible = isCodecASCIICompatibleA && isCodecASCIICompatibleLess ;
 #else
     isCodecASCIICompatible = true;
 #endif
@@ -3790,7 +3798,8 @@ void QXmlStreamWriter::writeStartDocument(const QString &version)
 #ifdef QT_NO_TEXTCODEC
         d->write("iso-8859-1");
 #else
-        d->write(d->codec->name().constData(), d->codec->name().length());
+        const QByteArray name = d->codec->name();
+        d->write(name.constData(), name.length());
 #endif
     }
     d->write("\"?>");
@@ -3813,7 +3822,8 @@ void QXmlStreamWriter::writeStartDocument(const QString &version, bool standalon
 #ifdef QT_NO_TEXTCODEC
         d->write("iso-8859-1");
 #else
-        d->write(d->codec->name().constData(), d->codec->name().length());
+        const QByteArray name = d->codec->name();
+        d->write(name.constData(), name.length());
 #endif
     }
     if (standalone)

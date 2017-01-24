@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include <qpa/qplatformpixmap.h>
 #include <private/qpaintengine_blitter_p.h>
 
@@ -59,7 +60,7 @@ QT_BEGIN_NAMESPACE
 
 class Q_GUI_EXPORT  QBlittablePlatformPixmap : public QPlatformPixmap
 {
-//     Q_DECLARE_PRIVATE(QBlittablePlatformPixmap);
+//     Q_DECLARE_PRIVATE(QBlittablePlatformPixmap)
 public:
     QBlittablePlatformPixmap();
     ~QBlittablePlatformPixmap();

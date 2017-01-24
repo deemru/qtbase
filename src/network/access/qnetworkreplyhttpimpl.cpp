@@ -244,7 +244,8 @@ QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manage
 
 QNetworkReplyHttpImpl::~QNetworkReplyHttpImpl()
 {
-    // Most work is done in private destructor
+    // This will do nothing if the request was already finished or aborted
+    emit abortHttpRequest();
 }
 
 void QNetworkReplyHttpImpl::close()
@@ -296,7 +297,7 @@ qint64 QNetworkReplyHttpImpl::bytesAvailable() const
 
     // if we load from cache device
     if (d->cacheLoadDevice) {
-        return QNetworkReply::bytesAvailable() + d->cacheLoadDevice->bytesAvailable() + d->downloadMultiBuffer.byteAmount();
+        return QNetworkReply::bytesAvailable() + d->cacheLoadDevice->bytesAvailable();
     }
 
     // zerocopy buffer
@@ -305,7 +306,7 @@ qint64 QNetworkReplyHttpImpl::bytesAvailable() const
     }
 
     // normal buffer
-    return QNetworkReply::bytesAvailable() + d->downloadMultiBuffer.byteAmount();
+    return QNetworkReply::bytesAvailable();
 }
 
 bool QNetworkReplyHttpImpl::isSequential () const
@@ -329,12 +330,6 @@ qint64 QNetworkReplyHttpImpl::readData(char* data, qint64 maxlen)
     if (d->cacheLoadDevice) {
         // FIXME bytesdownloaded, position etc?
 
-        // There is something already in the buffer we buffered before because the user did not read()
-        // anything, so we read there first:
-        if (!d->downloadMultiBuffer.isEmpty()) {
-            return d->downloadMultiBuffer.read(data, maxlen);
-        }
-
         qint64 ret = d->cacheLoadDevice->read(data, maxlen);
         return ret;
     }
@@ -351,25 +346,14 @@ qint64 QNetworkReplyHttpImpl::readData(char* data, qint64 maxlen)
     }
 
     // normal buffer
-    if (d->downloadMultiBuffer.isEmpty()) {
-        if (d->state == d->Finished || d->state == d->Aborted)
-            return -1;
-        return 0;
-    }
+    if (d->state == d->Finished || d->state == d->Aborted)
+        return -1;
 
-    if (maxlen == 1) {
-        // optimization for getChar()
-        *data = d->downloadMultiBuffer.getChar();
-        if (readBufferSize())
-            emit readBufferFreed(1);
-        return 1;
-    }
-
-    maxlen = qMin<qint64>(maxlen, d->downloadMultiBuffer.byteAmount());
-    qint64 bytesRead = d->downloadMultiBuffer.read(data, maxlen);
+    qint64 wasBuffered = d->bytesBuffered;
+    d->bytesBuffered = 0;
     if (readBufferSize())
-        emit readBufferFreed(bytesRead);
-    return bytesRead;
+        emit readBufferFreed(wasBuffered);
+    return 0;
 }
 
 void QNetworkReplyHttpImpl::setReadBufferSize(qint64 size)
@@ -387,12 +371,12 @@ bool QNetworkReplyHttpImpl::canReadLine () const
         return true;
 
     if (d->cacheLoadDevice)
-        return d->cacheLoadDevice->canReadLine() || d->downloadMultiBuffer.canReadLine();
+        return d->cacheLoadDevice->canReadLine();
 
     if (d->downloadZerocopyBuffer)
         return memchr(d->downloadZerocopyBuffer + d->downloadBufferReadPosition, '\n', d->downloadBufferCurrentSize - d->downloadBufferReadPosition);
 
-    return d->downloadMultiBuffer.canReadLine();
+    return false;
 }
 
 #ifndef QT_NO_SSL
@@ -444,6 +428,7 @@ QNetworkReplyHttpImplPrivate::QNetworkReplyHttpImplPrivate()
     , resumeOffset(0)
     , preMigrationDownloaded(-1)
     , bytesDownloaded(0)
+    , bytesBuffered(0)
     , downloadBufferReadPosition(0)
     , downloadBufferCurrentSize(0)
     , downloadZerocopyBuffer(0)
@@ -458,9 +443,6 @@ QNetworkReplyHttpImplPrivate::QNetworkReplyHttpImplPrivate()
 
 QNetworkReplyHttpImplPrivate::~QNetworkReplyHttpImplPrivate()
 {
-    Q_Q(QNetworkReplyHttpImpl);
-    // This will do nothing if the request was already finished or aborted
-    emit q->abortHttpRequest();
 }
 
 /*
@@ -538,36 +520,36 @@ bool QNetworkReplyHttpImplPrivate::loadFromCacheIfAllowed(QHttpNetworkRequest &h
          * now
          *      is the current (local) time
          */
-        int age_value = 0;
+        qint64 age_value = 0;
         it = cacheHeaders.findRawHeader("age");
         if (it != cacheHeaders.rawHeaders.constEnd())
-            age_value = it->second.toInt();
+            age_value = it->second.toLongLong();
 
         QDateTime dateHeader;
-        int date_value = 0;
+        qint64 date_value = 0;
         it = cacheHeaders.findRawHeader("date");
         if (it != cacheHeaders.rawHeaders.constEnd()) {
             dateHeader = QNetworkHeadersPrivate::fromHttpDate(it->second);
-            date_value = dateHeader.toTime_t();
+            date_value = dateHeader.toSecsSinceEpoch();
         }
 
-        int now = currentDateTime.toTime_t();
-        int request_time = now;
-        int response_time = now;
+        qint64 now = currentDateTime.toSecsSinceEpoch();
+        qint64 request_time = now;
+        qint64 response_time = now;
 
         // Algorithm from RFC 2616 section 13.2.3
-        int apparent_age = qMax(0, response_time - date_value);
-        int corrected_received_age = qMax(apparent_age, age_value);
-        int response_delay = response_time - request_time;
-        int corrected_initial_age = corrected_received_age + response_delay;
-        int resident_time = now - response_time;
-        int current_age   = corrected_initial_age + resident_time;
+        qint64 apparent_age = qMax<qint64>(0, response_time - date_value);
+        qint64 corrected_received_age = qMax(apparent_age, age_value);
+        qint64 response_delay = response_time - request_time;
+        qint64 corrected_initial_age = corrected_received_age + response_delay;
+        qint64 resident_time = now - response_time;
+        qint64 current_age   = corrected_initial_age + resident_time;
 
-        int freshness_lifetime = 0;
+        qint64 freshness_lifetime = 0;
 
         // RFC 2616 13.2.4 Expiration Calculations
         if (lastModified.isValid() && dateHeader.isValid()) {
-            int diff = lastModified.secsTo(dateHeader);
+            qint64 diff = lastModified.secsTo(dateHeader);
             freshness_lifetime = diff / 10;
             if (httpRequest.headerField("Warning").isEmpty()) {
                 QDateTime dt = currentDateTime.addSecs(current_age);
@@ -617,17 +599,10 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
         thread->setObjectName(QStringLiteral("Qt HTTP synchronous thread"));
         QObject::connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
         thread->start();
-    } else if (!managerPrivate->httpThread) {
+    } else {
         // We use the manager-global thread.
         // At some point we could switch to having multiple threads if it makes sense.
-        managerPrivate->httpThread = new QThread();
-        managerPrivate->httpThread->setObjectName(QStringLiteral("Qt HTTP thread"));
-        managerPrivate->httpThread->start();
-
-        thread = managerPrivate->httpThread;
-    } else {
-        // Asynchronous request, thread already exists
-        thread = managerPrivate->httpThread;
+        thread = managerPrivate->createThread();
     }
 
     QUrl url = newHttpRequest.url();
@@ -760,6 +735,9 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
 
     if (request.attribute(QNetworkRequest::SpdyAllowedAttribute).toBool())
         httpRequest.setSPDYAllowed(true);
+
+    if (request.attribute(QNetworkRequest::HTTP2AllowedAttribute).toBool())
+        httpRequest.setHTTP2Allowed(true);
 
     if (static_cast<QNetworkRequest::LoadControl>
         (newHttpRequest.attribute(QNetworkRequest::AuthenticationReuseAttribute,
@@ -1054,10 +1032,11 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
             cacheSaveDevice->write(item.constData(), item.size());
 
         if (!isHttpRedirectResponse())
-            downloadMultiBuffer.append(item);
+            buffer.append(item);
 
         bytesWritten += item.size();
     }
+    bytesBuffered += bytesWritten;
     pendingDownloadDataCopy.clear();
 
     QVariant totalSize = cookedHeaders.value(QNetworkRequest::ContentLengthHeader);
@@ -1138,8 +1117,8 @@ void QNetworkReplyHttpImplPrivate::onRedirected(const QUrl &redirectUrl, int htt
 
     cookedHeaders.clear();
 
-    if (managerPrivate->httpThread)
-        managerPrivate->httpThread->disconnect();
+    if (managerPrivate->thread)
+        managerPrivate->thread->disconnect();
 
     // Recurse
     QMetaObject::invokeMethod(q, "start", Qt::QueuedConnection,
@@ -1830,9 +1809,8 @@ void QNetworkReplyHttpImplPrivate::_q_cacheLoadReadyRead()
     // If there are still bytes available in the cacheLoadDevice then the user did not read
     // in response to the readyRead() signal. This means we have to load from the cacheLoadDevice
     // and buffer that stuff. This is needed to be able to properly emit finished() later.
-    while (cacheLoadDevice->bytesAvailable() && !isHttpRedirectResponse()) {
-        downloadMultiBuffer.append(cacheLoadDevice->readAll());
-    }
+    while (cacheLoadDevice->bytesAvailable() && !isHttpRedirectResponse())
+        buffer.append(cacheLoadDevice->readAll());
 
     if (cacheLoadDevice->isSequential()) {
         // check if end and we can read the EOF -1

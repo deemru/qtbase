@@ -365,6 +365,11 @@ static QString ProStringList_join(const ProStringList &this_, const QChar *sep, 
     return res;
 }
 
+QString ProStringList::join(const ProString &sep) const
+{
+    return ProStringList_join(*this, sep.constData(), sep.size());
+}
+
 QString ProStringList::join(const QString &sep) const
 {
     return ProStringList_join(*this, sep.constData(), sep.size());
@@ -449,6 +454,14 @@ bool ProStringList::contains(const ProString &str, Qt::CaseSensitivity cs) const
 {
     for (int i = 0; i < size(); i++)
         if (!at(i).compare(str, cs))
+            return true;
+    return false;
+}
+
+bool ProStringList::contains(const QStringRef &str, Qt::CaseSensitivity cs) const
+{
+    for (int i = 0; i < size(); i++)
+        if (!at(i).toQStringRef().compare(str, cs))
             return true;
     return false;
 }

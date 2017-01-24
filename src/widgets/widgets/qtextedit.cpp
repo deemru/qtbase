@@ -184,7 +184,7 @@ void QTextEditPrivate::init(const QString &html)
 #ifndef QT_NO_CURSOR
     viewport->setCursor(Qt::IBeamCursor);
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     setSingleFingerPanEnabled(true);
 #endif
 }
@@ -1514,7 +1514,7 @@ void QTextEditPrivate::paint(QPainter *p, QPaintEvent *e)
     if (layout)
         layout->setViewport(QRect());
 
-    if (!placeholderText.isEmpty() && doc->isEmpty()) {
+    if (!placeholderText.isEmpty() && doc->isEmpty() && !control->isPreediting()) {
         QColor col = control->palette().text().color();
         col.setAlpha(128);
         p->setPen(col);

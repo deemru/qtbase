@@ -41,6 +41,7 @@
 
 
 #include <QtNetwork/qsslsocket.h>
+#include <QtNetwork/qssldiffiehellmanparameters.h>
 #include <QtCore/qmutex.h>
 
 #include "private/qssl_p.h"
@@ -48,28 +49,13 @@
 #include "private/qsslsocket_p.h"
 #include "private/qsslsocket_openssl_p.h"
 #include "private/qsslsocket_openssl_symbols_p.h"
+#include "private/qssldiffiehellmanparameters_p.h"
 
 QT_BEGIN_NAMESPACE
 
 // defined in qsslsocket_openssl.cpp:
 extern int q_X509Callback(int ok, X509_STORE_CTX *ctx);
 extern QString getErrorsFromOpenSsl();
-
-static DH *get_dh1024()
-{
-    // Default DH params
-    // 1024-bit MODP Group
-    // From RFC 2409
-    QByteArray params = QByteArray::fromBase64(
-       QByteArrayLiteral("MIGHAoGBAP//////////yQ/aoiFowjTExmKLgNwc0SkCTgiKZ8x0Agu+pjsTmyJR" \
-                         "Sgh5jjQE3e+VGbPNOkMbMCsKbfJfFDdP4TVtbVHCReSFtXZiXn7G9ExC6aY37WsL" \
-                         "/1y29Aa37e44a/taiZ+lrp8kEXxLH+ZJKGZR7OZTgf//////////AgEC"));
-
-    const char *ptr = params.constData();
-    DH *dh = q_d2i_DHparams(NULL, reinterpret_cast<const unsigned char **>(&ptr), params.length());
-
-    return dh;
-}
 
 QSslContext::QSslContext()
     : ctx(0),
@@ -325,10 +311,23 @@ init_context:
         sslContext->setSessionASN1(configuration.sessionTicket());
 
     // Set temp DH params
-    DH *dh = 0;
-    dh = get_dh1024();
-    q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);
-    q_DH_free(dh);
+    QSslDiffieHellmanParameters dhparams = configuration.diffieHellmanParameters();
+
+    if (!dhparams.isValid()) {
+        sslContext->errorStr = QSslSocket::tr("Diffie-Hellman parameters are not valid");
+        sslContext->errorCode = QSslError::UnspecifiedError;
+        return;
+    }
+
+    if (!dhparams.isEmpty()) {
+        const QByteArray &params = dhparams.d->derData;
+        const char *ptr = params.constData();
+        DH *dh = q_d2i_DHparams(NULL, reinterpret_cast<const unsigned char **>(&ptr), params.length());
+        if (dh == NULL)
+            qFatal("q_d2i_DHparams failed to convert QSslDiffieHellmanParameters to DER form");
+        q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);
+        q_DH_free(dh);
+    }
 
 #ifndef OPENSSL_NO_EC
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
@@ -344,6 +343,11 @@ init_context:
         q_EC_KEY_free(ecdh);
     }
 #endif // OPENSSL_NO_EC
+
+#if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
+    if (!client)
+        q_SSL_CTX_use_psk_identity_hint(sslContext->ctx, sslContext->sslConfiguration.preSharedKeyIdentityHint().constData());
+#endif // OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
 
     const QVector<QSslEllipticCurve> qcurves = sslContext->sslConfiguration.ellipticCurves();
     if (!qcurves.isEmpty()) {
@@ -458,6 +462,23 @@ SSL* QSslContext::createSsl()
         m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
         m_npnContext.len = m_supportedNPNVersions.count();
         m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+        if (q_SSLeay() >= 0x10002000L) {
+            // Callback's type has a parameter 'const unsigned char ** out'
+            // since it was introduced in 1.0.2. Internally, OpenSSL's own code
+            // (tests/examples) cast it to unsigned char * (since it's 'out').
+            // We just re-use our NPN callback and cast here:
+            typedef int (*alpn_callback_t) (SSL *, const unsigned char **, unsigned char *,
+                                            const unsigned char *, unsigned int, void *);
+            // With ALPN callback is for a server side only, for a client m_npnContext.status
+            // will stay in NextProtocolNegotiationNone.
+            q_SSL_CTX_set_alpn_select_cb(ctx, alpn_callback_t(next_proto_cb), &m_npnContext);
+            // Client:
+            q_SSL_set_alpn_protos(ssl, m_npnContext.data, m_npnContext.len);
+        }
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L ...
+
+        // And in case our peer does not support ALPN, but supports NPN:
         q_SSL_CTX_set_next_proto_select_cb(ctx, next_proto_cb, &m_npnContext);
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...

@@ -41,6 +41,10 @@
 #include <QtCore/QSysInfo>
 #include <QtGui/QKeySequence>
 
+#include <QtCore>
+#include <QtGui>
+#include "tst_qmetatype.h"
+
 #include <cctype>
 #include <stdlib.h>
 #if defined(Q_OS_WIN) && defined(Q_CC_GNU)
@@ -52,6 +56,10 @@
 #include <QtCore/qt_windows.h>
 #else
 #include <unistd.h>
+#endif
+
+#if defined(Q_OS_DARWIN)
+#include <CoreFoundation/CoreFoundation.h>
 #endif
 
 Q_DECLARE_METATYPE(QSettings::Format)
@@ -72,7 +80,19 @@ static inline bool canWriteNativeSystemSettings()
     else
         qErrnoWarning(result, "RegOpenKeyEx failed");
     return result == ERROR_SUCCESS;
-#else // Q_OS_WIN && !Q_OS_WINRT
+#elif defined(Q_OS_DARWIN)
+    CFStringRef key = CFSTR("canWriteNativeSystemSettings");
+    #define ANY_APP_USER_AND_HOST kCFPreferencesAnyApplication, kCFPreferencesAnyUser, kCFPreferencesAnyHost
+    CFPreferencesSetValue(key, CFSTR("true"), ANY_APP_USER_AND_HOST);
+    if (CFPreferencesSynchronize(ANY_APP_USER_AND_HOST)) {
+        // Cleanup
+        CFPreferencesSetValue(key, 0, ANY_APP_USER_AND_HOST);
+        CFPreferencesSynchronize(ANY_APP_USER_AND_HOST);
+        return true;
+    } else {
+        return false;
+    }
+#else
     return true;
 #endif
 }
@@ -149,6 +169,8 @@ private slots:
     void testNormalizedKey();
     void testVariantTypes_data();
     void testVariantTypes();
+    void testMetaTypes_data();
+    void testMetaTypes();
 #endif
     void rainersSyncBugOnMac_data();
     void rainersSyncBugOnMac();
@@ -158,6 +180,8 @@ private slots:
     void testByteArray();
     void iniCodec();
     void bom();
+    void embeddedZeroByte_data();
+    void embeddedZeroByte();
 
 private:
     void cleanupTestFiles();
@@ -627,7 +651,6 @@ void tst_QSettings::testByteArray_data()
 #ifndef QT_NO_COMPRESS
     QTest::newRow("compressed") << qCompress(bytes);
 #endif
-    QTest::newRow("with \\0") << bytes + '\0' + bytes;
 }
 
 void tst_QSettings::testByteArray()
@@ -676,6 +699,53 @@ void tst_QSettings::bom()
     QCOMPARE(allkeys.size(), 2);
     QVERIFY(allkeys.contains("section1/foo1"));
     QVERIFY(allkeys.contains("section2/foo2"));
+}
+
+void tst_QSettings::embeddedZeroByte_data()
+{
+    QTest::addColumn<QVariant>("value");
+
+    QByteArray bytes("hello\0world", 11);
+
+    QTest::newRow("bytearray\\0") << QVariant(bytes);
+    QTest::newRow("string\\0") << QVariant(QString::fromLatin1(bytes.data(), bytes.size()));
+
+    bytes = QByteArray("@String(");
+
+    QTest::newRow("@bytearray") << QVariant(bytes);
+    QTest::newRow("@string") << QVariant(QString(bytes));
+
+    bytes = QByteArray("@String(\0test", 13);
+
+    QTest::newRow("@bytearray\\0") << QVariant(bytes);
+    QTest::newRow("@string\\0") << QVariant(QString::fromLatin1(bytes.data(), bytes.size()));
+}
+
+void tst_QSettings::embeddedZeroByte()
+{
+    QFETCH(QVariant, value);
+    {
+        QSettings settings("QtProject", "tst_qsettings");
+        settings.setValue(QTest::currentDataTag(), value);
+    }
+    {
+        QSettings settings("QtProject", "tst_qsettings");
+        QVariant outValue = settings.value(QTest::currentDataTag());
+
+        switch (value.type()) {
+        case QVariant::ByteArray:
+            QCOMPARE(outValue.toByteArray(), value.toByteArray());
+            break;
+        case QVariant::String:
+            QCOMPARE(outValue.toString(), value.toString());
+            break;
+        default:
+            Q_UNREACHABLE();
+        }
+
+        if (value.toByteArray().contains(QChar::Null))
+            QVERIFY(outValue.toByteArray().contains(QChar::Null));
+    }
 }
 
 void tst_QSettings::testErrorHandling_data()
@@ -1057,6 +1127,102 @@ void tst_QSettings::setValue()
 }
 
 #ifdef QT_BUILD_INTERNAL
+
+template<int MetaTypeId>
+static void testMetaTypesHelper(QSettings::Format format)
+{
+    typedef typename MetaEnumToType<MetaTypeId>::Type Type;
+    const char *key = QMetaType::typeName(MetaTypeId);
+    Type *value = TestValueFactory<MetaTypeId>::create();
+    QVariant inputVariant = QVariant::fromValue(*value);
+
+    static const QSettings::Scope scope = QSettings::UserScope;
+    static const QString organization("example.org");
+    static const QString applicationName("FooApp");
+
+    {
+        QSettings settings(format, scope, organization, applicationName);
+        settings.setValue(key, inputVariant);
+    }
+
+    QConfFile::clearCache();
+
+    {
+        QSettings settings(format, scope, organization, applicationName);
+        QVariant outputVariant = settings.value(key);
+        if (MetaTypeId != QMetaType::QVariant)
+            QVERIFY(outputVariant.canConvert(MetaTypeId));
+        if (outputVariant.type() != inputVariant.type())
+            qWarning() << "type mismatch between" << inputVariant << "and" << outputVariant;
+        QCOMPARE(qvariant_cast<Type >(outputVariant), *value);
+    }
+
+    delete value;
+}
+
+#define FOR_EACH_NONSUPPORTED_METATYPE(F)\
+    F(Void) \
+    F(Nullptr) \
+    F(QObjectStar) \
+    F(QModelIndex) \
+    F(QJsonObject) \
+    F(QJsonValue) \
+    F(QJsonArray) \
+    F(QJsonDocument) \
+    F(QPersistentModelIndex) \
+
+#define EXCLUDE_NON_SUPPORTED_METATYPES(MetaTypeName) \
+template<> void testMetaTypesHelper<QMetaType::MetaTypeName>(QSettings::Format) \
+{ \
+    QSKIP("This metatype is not supported by QSettings."); \
+}
+FOR_EACH_NONSUPPORTED_METATYPE(EXCLUDE_NON_SUPPORTED_METATYPES)
+#undef EXCLUDE_NON_SUPPORTED_METATYPES
+
+void tst_QSettings::testMetaTypes_data()
+{
+    QTest::addColumn<QSettings::Format>("format");
+    QTest::addColumn<int>("type");
+
+#define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
+    { \
+        const char *formatName = QMetaEnum::fromType<QSettings::Format>().valueToKey(formats[i]); \
+        const char *typeName = QMetaType::typeName(QMetaType::MetaTypeName); \
+        QTest::newRow(QString("%1:%2").arg(formatName).arg(typeName).toLatin1().constData()) \
+            << QSettings::Format(formats[i]) << int(QMetaType::MetaTypeName); \
+    }
+    int formats[] = { QSettings::NativeFormat, QSettings::IniFormat };
+    for (int i = 0; i < int(sizeof(formats) / sizeof(int)); ++i) {
+        FOR_EACH_CORE_METATYPE(ADD_METATYPE_TEST_ROW)
+    }
+#undef ADD_METATYPE_TEST_ROW
+}
+
+typedef void (*TypeTestFunction)(QSettings::Format);
+
+void tst_QSettings::testMetaTypes()
+{
+    struct TypeTestFunctionGetter
+    {
+        static TypeTestFunction get(int type)
+        {
+            switch (type) {
+#define RETURN_CREATE_FUNCTION(MetaTypeName, MetaTypeId, RealType) \
+            case QMetaType::MetaTypeName: \
+            return testMetaTypesHelper<QMetaType::MetaTypeName>;
+FOR_EACH_CORE_METATYPE(RETURN_CREATE_FUNCTION)
+#undef RETURN_CREATE_FUNCTION
+            }
+            return 0;
+        }
+    };
+
+    QFETCH(QSettings::Format, format);
+    QFETCH(int, type);
+
+    TypeTestFunctionGetter::get(type)(format);
+}
+
 void tst_QSettings::testVariantTypes_data()
 {
     populateWithFormats();
@@ -1521,7 +1687,7 @@ void tst_QSettings::sync()
 
     // Now "some other app" will change other.software.org.ini
     QString userConfDir = settingsPath("__user__") + QDir::separator();
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
     unlink((userConfDir + "other.software.org.ini").toLatin1());
     rename((userConfDir + "software.org.ini").toLatin1(),
            (userConfDir + "other.software.org.ini").toLatin1());
@@ -1730,10 +1896,10 @@ void tst_QSettings::testChildKeysAndGroups()
 
 void tst_QSettings::testUpdateRequestEvent()
 {
-#ifdef Q_OS_WINRT
     const QString oldCur = QDir::currentPath();
-    QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
-#endif
+    QString dataLocation = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QVERIFY(QDir::root().mkpath(dataLocation));
+    QDir::setCurrent(dataLocation);
 
     QFile::remove("foo");
     QVERIFY(!QFile::exists("foo"));
@@ -1761,9 +1927,7 @@ void tst_QSettings::testUpdateRequestEvent()
 
     QTRY_COMPARE(QFileInfo("foo").size(), qint64(0));
 
-#ifdef Q_OS_WINRT
     QDir::setCurrent(oldCur);
-#endif
 }
 
 const int NumIterations = 5;
@@ -2062,13 +2226,10 @@ void tst_QSettings::fromFile()
 {
     QFETCH(QSettings::Format, format);
 
-    // Sandboxed WinRT applications cannot write into the
-    // application directory. Hence reset the current
-    // directory
-#ifdef Q_OS_WINRT
     const QString oldCur = QDir::currentPath();
-    QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
-#endif
+    QString dataLocation = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QVERIFY(QDir::root().mkpath(dataLocation));
+    QDir::setCurrent(dataLocation);
 
     QFile::remove("foo");
     QVERIFY(!QFile::exists("foo"));
@@ -2117,9 +2278,8 @@ void tst_QSettings::fromFile()
         QCOMPARE(settings1.value("gamma/foo.bar").toInt(), 4);
         QCOMPARE(settings1.allKeys().size(), 3);
     }
-#ifdef Q_OS_WINRT
+
     QDir::setCurrent(oldCur);
-#endif
 }
 
 #ifdef QT_BUILD_INTERNAL
@@ -2854,29 +3014,21 @@ void tst_QSettings::isWritable()
         QSettings s2(format, QSettings::SystemScope, "software.org", "Something Different");
         QSettings s3(format, QSettings::SystemScope, "foo.org", "Something Different");
 
-        if (s1.contains("foo")) {
+        if (s1.status() == QSettings::NoError && s1.contains("foo")) {
 #if defined(Q_OS_MACX)
-            if (QSysInfo::macVersion() >= QSysInfo::MV_10_9) {
-                QVERIFY(s1.isWritable());
-                if (format == QSettings::NativeFormat) {
-                    QVERIFY(!s2.isWritable());
-                    QVERIFY(!s3.isWritable());
-                } else {
-                    QVERIFY(s2.isWritable());
-                    QVERIFY(s3.isWritable());
-                }
-            } else if (QSysInfo::macVersion() >= QSysInfo::MV_10_7 &&
-                       format == QSettings::NativeFormat) {
-                QVERIFY(!s1.isWritable());
+            QVERIFY(s1.isWritable());
+            if (format == QSettings::NativeFormat) {
                 QVERIFY(!s2.isWritable());
                 QVERIFY(!s3.isWritable());
-            } else
-#endif
-            {
-                QVERIFY(s1.isWritable());
+            } else {
                 QVERIFY(s2.isWritable());
                 QVERIFY(s3.isWritable());
             }
+#else
+            QVERIFY(s1.isWritable());
+            QVERIFY(s2.isWritable());
+            QVERIFY(s3.isWritable());
+#endif
         } else {
             QVERIFY(!s1.isWritable());
             QVERIFY(!s2.isWritable());
@@ -3311,9 +3463,9 @@ void tst_QSettings::rainersSyncBugOnMac()
 {
     QFETCH(QSettings::Format, format);
 
-#if defined(Q_OS_OSX) || defined(Q_OS_WINRT)
+#if defined(Q_OS_DARWIN) || defined(Q_OS_WINRT)
     if (format == QSettings::NativeFormat)
-        QSKIP("OSX does not support direct reads from and writes to .plist files, due to caching and background syncing. See QTBUG-34899.");
+        QSKIP("Apple OSes do not support direct reads from and writes to .plist files, due to caching and background syncing. See QTBUG-34899.");
 #endif
 
     QString fileName;

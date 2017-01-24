@@ -48,9 +48,7 @@
 
 #ifndef QT_NO_FSFILEENGINE
 
-#if !defined(Q_OS_WINCE)
 #include <errno.h>
-#endif
 #if defined(Q_OS_UNIX)
 #include "private/qcore_unix_p.h"
 #endif
@@ -125,10 +123,8 @@ void QFSFileEnginePrivate::init()
 {
     is_sequential = 0;
     tried_stat = 0;
-#if !defined(Q_OS_WINCE)
     need_lstat = 1;
     is_link = 0;
-#endif
     openMode = QIODevice::NotOpen;
     fd = -1;
     fh = 0;
@@ -139,9 +135,7 @@ void QFSFileEnginePrivate::init()
     fileAttrib = INVALID_FILE_ATTRIBUTES;
     fileHandle = INVALID_HANDLE_VALUE;
     mapHandle = NULL;
-#ifndef Q_OS_WINCE
     cachedFd = -1;
-#endif
 #endif
 }
 
@@ -551,7 +545,7 @@ bool QFSFileEnginePrivate::seekFdFh(qint64 pos)
     } else {
         // Unbuffered stdio mode.
         if (QT_LSEEK(fd, QT_OFF_T(pos), SEEK_SET) == -1) {
-            qWarning() << "QFile::at: Cannot set file position" << pos;
+            qWarning("QFile::at: Cannot set file position %lld", pos);
             q->setError(QFile::PositionError, qt_error_string(errno));
             return false;
         }
@@ -886,9 +880,8 @@ bool QFSFileEngine::supportsExtension(Extension extension) const
 
 /*! \fn QFileInfoList QFSFileEngine::drives()
   For Windows, returns the list of drives in the file system as a list
-  of QFileInfo objects. On Unix and Windows CE, only the
-  root path is returned.  On Windows, this function returns all drives
-  (A:\, C:\, D:\, etc.).
+  of QFileInfo objects. On Unix, only the root path is returned.
+  On Windows, this function returns all drives (A:\, C:\, D:\, and so on).
 
   For Unix, the list contains just the root path "/".
 */

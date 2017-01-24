@@ -348,10 +348,8 @@ void QScrollBar::initStyleOption(QStyleOptionSlider *option) const
     initial \l {QAbstractSlider::value} {value} of 0.
 */
 QScrollBar::QScrollBar(QWidget *parent)
-    : QAbstractSlider(*new QScrollBarPrivate, parent)
+    : QScrollBar(Qt::Vertical, parent)
 {
-    d_func()->orientation = Qt::Vertical;
-    d_func()->init();
 }
 
 /*!
@@ -397,12 +395,6 @@ void QScrollBarPrivate::init()
     q->setSizePolicy(sp);
     q->setAttribute(Qt::WA_WState_OwnSizePolicy, false);
     q->setAttribute(Qt::WA_OpaquePaintEvent);
-
-#if !defined(QT_NO_CONTEXTMENU) && defined(Q_OS_WINCE)
-    if (!q->style()->styleHint(QStyle::SH_ScrollBar_ContextMenu, 0, q)) {
-        q->setContextMenuPolicy(Qt::PreventContextMenu);
-    }
-#endif
 }
 
 #ifndef QT_NO_CONTEXTMENU

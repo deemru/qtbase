@@ -2,6 +2,7 @@
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -342,9 +343,28 @@ static JNINativeMethod methods[] = {
     {"updateCursorPosition", "()Z", (void *)updateCursorPosition}
 };
 
+static QRect inputItemRectangle()
+{
+    QRectF itemRect = qGuiApp->inputMethod()->inputItemRectangle();
+    QRect rect = qGuiApp->inputMethod()->inputItemTransform().mapRect(itemRect).toRect();
+    QWindow *window = qGuiApp->focusWindow();
+    if (window)
+        rect = QRect(window->mapToGlobal(rect.topLeft()), rect.size());
+    double pixelDensity = window
+        ? QHighDpiScaling::factor(window)
+        : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
+    if (pixelDensity != 1.0) {
+        rect.moveLeft(rect.x() * pixelDensity);
+        rect.moveTop(rect.y() * pixelDensity);
+        rect.setWidth(rect.width() * pixelDensity);
+        rect.setHeight(rect.height() * pixelDensity);
+    }
+    return rect;
+}
 
 QAndroidInputContext::QAndroidInputContext()
-    : QPlatformInputContext(), m_composingTextStart(-1), m_blockUpdateSelection(false),  m_batchEditNestingLevel(0), m_focusObject(0)
+    : QPlatformInputContext(), m_composingTextStart(-1), m_blockUpdateSelection(false),
+    m_cursorHandleShown(CursorHandleNotShown), m_batchEditNestingLevel(0), m_focusObject(0)
 {
     jclass clazz = QJNIEnvironmentPrivate::findClass(QtNativeInputConnectionClassName);
     if (Q_UNLIKELY(!clazz)) {
@@ -415,6 +435,9 @@ QAndroidInputContext::QAndroidInputContext()
     qRegisterMetaType<QInputMethodEvent *>("QInputMethodEvent*");
     qRegisterMetaType<QInputMethodQueryEvent *>("QInputMethodQueryEvent*");
     m_androidInputContext = this;
+
+    QObject::connect(QGuiApplication::inputMethod(), &QInputMethod::cursorRectangleChanged,
+                     this, &QAndroidInputContext::updateSelectionHandles);
 }
 
 QAndroidInputContext::~QAndroidInputContext()
@@ -452,6 +475,7 @@ void QAndroidInputContext::reset()
 {
     clear();
     m_batchEditNestingLevel = 0;
+    m_cursorHandleShown = QAndroidInputContext::CursorHandleNotShown;
     if (qGuiApp->focusObject()) {
         QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQueryThreadSafe(Qt::ImEnabled);
         if (!query.isNull() && query->value(Qt::ImEnabled).toBool()) {
@@ -500,6 +524,124 @@ void QAndroidInputContext::updateCursorPosition()
     }
 }
 
+void QAndroidInputContext::updateSelectionHandles()
+{
+    auto im = qGuiApp->inputMethod();
+    if (!m_focusObject || (m_cursorHandleShown == CursorHandleNotShown)) {
+        // Hide the handles
+        QtAndroidInput::updateHandles(0);
+        return;
+    }
+    QWindow *window = qGuiApp->focusWindow();
+    double pixelDensity = window
+        ? QHighDpiScaling::factor(window)
+        : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
+
+    QInputMethodQueryEvent query(Qt::ImCursorPosition | Qt::ImAnchorPosition | Qt::ImEnabled);
+    QCoreApplication::sendEvent(m_focusObject, &query);
+    int cpos = query.value(Qt::ImCursorPosition).toInt();
+    int anchor = query.value(Qt::ImAnchorPosition).toInt();
+
+    if (cpos == anchor || im->anchorRectangle().isNull()) {
+        if (!query.value(Qt::ImEnabled).toBool()) {
+            QtAndroidInput::updateHandles(0);
+            return;
+        }
+
+        auto curRect = im->cursorRectangle();
+        QPoint cursorPoint(curRect.center().x(), curRect.bottom());
+        QPoint editMenuPoint(curRect.center().x(), curRect.top());
+        QtAndroidInput::updateHandles(m_cursorHandleShown, cursorPoint * pixelDensity,
+                                      editMenuPoint * pixelDensity);
+        return;
+    }
+
+    auto leftRect = im->cursorRectangle();
+    auto rightRect = im->anchorRectangle();
+    if (cpos > anchor)
+        std::swap(leftRect, rightRect);
+
+    QPoint leftPoint(leftRect.bottomLeft().toPoint() * pixelDensity);
+    QPoint righPoint(rightRect.bottomRight().toPoint() * pixelDensity);
+    QtAndroidInput::updateHandles(CursorHandleShowSelection, leftPoint, righPoint);
+
+    if (m_cursorHandleShown == CursorHandleShowPopup) {
+        // make sure the popup does not reappear when the selection menu closes
+        m_cursorHandleShown = QAndroidInputContext::CursorHandleNotShown;
+    }
+}
+
+/*
+   Called from Java when a cursor/selection handle was dragged to a new position
+
+   handleId of 1 means the cursor handle,  2 means the left handle, 3 means the right handle
+ */
+void QAndroidInputContext::handleLocationChanged(int handleId, int x, int y)
+{
+    if (m_batchEditNestingLevel.load() || m_blockUpdateSelection)
+        return;
+
+    finishComposingText();
+
+    auto im = qGuiApp->inputMethod();
+    auto leftRect = im->cursorRectangle();
+    // The handle is down of the cursor, but we want the position in the middle.
+    QWindow *window = qGuiApp->focusWindow();
+    double pixelDensity = window
+        ? QHighDpiScaling::factor(window)
+        : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
+    QPoint point(x / pixelDensity, y / pixelDensity);
+    y -= leftRect.width() / 2;
+    if (handleId == 1) {
+        setSelectionOnFocusObject(point, point);
+        return;
+    }
+
+    QInputMethodQueryEvent query(Qt::ImCursorPosition | Qt::ImAnchorPosition);
+    QCoreApplication::sendEvent(m_focusObject, &query);
+    int cpos = query.value(Qt::ImCursorPosition).toInt();
+    int anchor = query.value(Qt::ImAnchorPosition).toInt();
+
+    auto rightRect = im->anchorRectangle();
+    if (cpos > anchor)
+        std::swap(leftRect, rightRect);
+
+    if (handleId == 2) {
+        QPoint rightPoint(rightRect.center().toPoint());
+        setSelectionOnFocusObject(point, rightPoint);
+    } else if (handleId == 3) {
+        QPoint leftPoint(leftRect.center().toPoint());
+        setSelectionOnFocusObject(leftPoint, point);
+    }
+}
+
+void QAndroidInputContext::touchDown(int x, int y)
+{
+    if (m_focusObject && inputItemRectangle().contains(x, y) && !m_cursorHandleShown) {
+        // If the user touch the input rectangle, we can show the cursor handle
+        m_cursorHandleShown = QAndroidInputContext::CursorHandleShowNormal;
+        updateSelectionHandles();
+    }
+}
+
+void QAndroidInputContext::longPress(int x, int y)
+{
+    if (m_focusObject && inputItemRectangle().contains(x, y)) {
+        // Show the paste menu if there is something to paste.
+        m_cursorHandleShown = QAndroidInputContext::CursorHandleShowPopup;
+        updateSelectionHandles();
+    }
+}
+
+void QAndroidInputContext::keyDown()
+{
+    if (m_cursorHandleShown) {
+        // When the user enter text on the keyboard, we hide the cursor handle
+        m_cursorHandleShown = QAndroidInputContext::CursorHandleNotShown;
+        updateSelectionHandles();
+    }
+}
+
 void QAndroidInputContext::update(Qt::InputMethodQueries queries)
 {
     QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQueryThreadSafe(queries);
@@ -543,22 +685,11 @@ void QAndroidInputContext::showInputPanel()
         m_updateCursorPosConnection = connect(qGuiApp->focusObject(), SIGNAL(cursorPositionChanged(int,int)), this, SLOT(updateCursorPosition()));
     else
         m_updateCursorPosConnection = connect(qGuiApp->focusObject(), SIGNAL(cursorPositionChanged()), this, SLOT(updateCursorPosition()));
-    QRectF itemRect = qGuiApp->inputMethod()->inputItemRectangle();
-    QRect rect = qGuiApp->inputMethod()->inputItemTransform().mapRect(itemRect).toRect();
-    QWindow *window = qGuiApp->focusWindow();
-    if (window)
-        rect = QRect(window->mapToGlobal(rect.topLeft()), rect.size());
 
-    double pixelDensity = window ? QHighDpiScaling::factor(window)
-                                 : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
-
-    QtAndroidInput::showSoftwareKeyboard(rect.left() * pixelDensity,
-                                         rect.top() * pixelDensity,
-                                         rect.width() * pixelDensity,
-                                         rect.height() * pixelDensity,
+    QRect rect = inputItemRectangle();
+    QtAndroidInput::showSoftwareKeyboard(rect.left(), rect.top(), rect.width(), rect.height(),
                                          query->value(Qt::ImHints).toUInt(),
-                                         query->value(Qt::ImEnterKeyType).toUInt()
-                                        );
+                                         query->value(Qt::ImEnterKeyType).toUInt());
 }
 
 void QAndroidInputContext::showInputPanelLater(Qt::ApplicationState state)
@@ -601,6 +732,7 @@ void QAndroidInputContext::setFocusObject(QObject *object)
         reset();
     }
     QPlatformInputContext::setFocusObject(object);
+    updateSelectionHandles();
 }
 
 jboolean QAndroidInputContext::beginBatchEdit()
@@ -645,7 +777,7 @@ jboolean QAndroidInputContext::commitText(const QString &text, jint newCursorPos
                                     : localPos - text.length() + newCursorPosition;
             //move the cursor
             attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Selection,
-                                                           newLocalPos, 0, QVariant()));
+                                                           newLocalPos, 0));
         }
     }
     m_blockUpdateSelection = updateSelectionWasBlocked;
@@ -691,7 +823,7 @@ jboolean QAndroidInputContext::finishComposingText()
 
     // Moving Qt's cursor to where the preedit cursor used to be
     QList<QInputMethodEvent::Attribute> attributes;
-    attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Selection, localCursorPos, 0, QVariant()));
+    attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Selection, localCursorPos, 0));
 
     QInputMethodEvent event(QString(), attributes);
     event.setCommitString(m_composingText);
@@ -739,7 +871,7 @@ const QAndroidInputContext::ExtractedText &QAndroidInputContext::getExtractedTex
     if (composeLength > 0) {
         //Qt doesn't give us the preedit text, so we have to insert it at the correct position
         int localComposePos = m_composingTextStart - blockPos;
-        blockText = blockText.left(localComposePos) + m_composingText + blockText.mid(localComposePos);
+        blockText = blockText.leftRef(localComposePos) + m_composingText + blockText.midRef(localComposePos);
     }
 
     int cpos = localPos + composeLength; //actual cursor pos relative to the current block
@@ -803,9 +935,8 @@ QString QAndroidInputContext::getTextAfterCursor(jint length, jint /*flags*/)
 QString QAndroidInputContext::getTextBeforeCursor(jint length, jint /*flags*/)
 {
     QVariant textBefore = queryFocusObjectThreadSafe(Qt::ImTextBeforeCursor, QVariant(length));
-    if (textBefore.isValid()) {
-        return textBefore.toString().right(length) + m_composingText;
-    }
+    if (textBefore.isValid())
+        return textBefore.toString().rightRef(length) + m_composingText;
 
     //compatibility code for old controls that do not implement the new API
     QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQueryThreadSafe();
@@ -819,9 +950,9 @@ QString QAndroidInputContext::getTextBeforeCursor(jint length, jint /*flags*/)
 
     //### the preedit text does not need to be immediately before the cursor
     if (cursorPos <= length)
-        return text.left(cursorPos) + m_composingText;
+        return text.leftRef(cursorPos) + m_composingText;
     else
-        return text.mid(cursorPos - length, length) + m_composingText;
+        return text.midRef(cursorPos - length, length) + m_composingText;
 }
 
 /*
@@ -848,8 +979,7 @@ jboolean QAndroidInputContext::setComposingText(const QString &text, jint newCur
     QList<QInputMethodEvent::Attribute> attributes;
     attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor,
                                                    newCursorPosition,
-                                                   1,
-                                                   QVariant()));
+                                                   1));
     // Show compose text underlined
     QTextCharFormat underlined;
     underlined.setFontUnderline(true);
@@ -858,6 +988,8 @@ jboolean QAndroidInputContext::setComposingText(const QString &text, jint newCur
 
     QInputMethodEvent event(m_composingText, attributes);
     sendInputMethodEventThreadSafe(&event);
+
+    QMetaObject::invokeMethod(this, "keyDown");
 
     updateCursorPosition();
 
@@ -921,7 +1053,7 @@ jboolean QAndroidInputContext::setComposingRegion(jint start, jint end)
                                                    QVariant(underlined)));
 
     // Keep the cursor position unchanged (don't move to end of preedit)
-    attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, currentCursor - start, 1, QVariant()));
+    attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, currentCursor - start, 1));
 
     QInputMethodEvent event(m_composingText, attributes);
     event.setCommitString(QString(), relativeStart, length);
@@ -955,7 +1087,7 @@ jboolean QAndroidInputContext::setSelection(jint start, jint end)
         // preedit cursor
         int localOldPos = query->value(Qt::ImCursorPosition).toInt();
         int pos = localCursorPos - localOldPos;
-        attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, pos, 1, QVariant()));
+        attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, pos, 1));
 
         //but we have to tell Qt about the compose text all over again
 
@@ -970,8 +1102,7 @@ jboolean QAndroidInputContext::setSelection(jint start, jint end)
         // actually changing the selection
         attributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Selection,
                                                        localCursorPos,
-                                                       end - start,
-                                                       QVariant()));
+                                                       end - start));
     }
     QInputMethodEvent event(m_composingText, attributes);
     sendInputMethodEventThreadSafe(&event);
@@ -981,20 +1112,21 @@ jboolean QAndroidInputContext::setSelection(jint start, jint end)
 
 jboolean QAndroidInputContext::selectAll()
 {
-#warning TODO
-    return JNI_FALSE;
+    sendShortcut(QKeySequence::SelectAll);
+    return JNI_TRUE;
 }
 
 jboolean QAndroidInputContext::cut()
 {
-#warning TODO
-    return JNI_FALSE;
+    m_cursorHandleShown = CursorHandleNotShown;
+    sendShortcut(QKeySequence::Cut);
+    return JNI_TRUE;
 }
 
 jboolean QAndroidInputContext::copy()
 {
-#warning TODO
-    return JNI_FALSE;
+    sendShortcut(QKeySequence::Copy);
+    return JNI_TRUE;
 }
 
 jboolean QAndroidInputContext::copyURL()
@@ -1005,10 +1137,21 @@ jboolean QAndroidInputContext::copyURL()
 
 jboolean QAndroidInputContext::paste()
 {
-#warning TODO
-    return JNI_FALSE;
+    m_cursorHandleShown = CursorHandleNotShown;
+    sendShortcut(QKeySequence::Paste);
+    return JNI_TRUE;
 }
 
+void QAndroidInputContext::sendShortcut(const QKeySequence &sequence)
+{
+    for (int i = 0; i < sequence.count(); ++i) {
+        const int keys = sequence[i];
+        Qt::Key key = Qt::Key(keys & ~Qt::KeyboardModifierMask);
+        Qt::KeyboardModifiers mod = Qt::KeyboardModifiers(keys & Qt::KeyboardModifierMask);
+        QGuiApplication::postEvent(m_focusObject, new QKeyEvent(QEvent::KeyPress, key, mod));
+        QGuiApplication::postEvent(m_focusObject, new QKeyEvent(QEvent::KeyRelease, key, mod));
+    }
+}
 
 Q_INVOKABLE QVariant QAndroidInputContext::queryFocusObjectUnsafe(Qt::InputMethodQuery query, QVariant argument)
 {

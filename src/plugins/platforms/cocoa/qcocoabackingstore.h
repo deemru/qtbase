@@ -40,36 +40,20 @@
 #ifndef QBACKINGSTORE_COCOA_H
 #define QBACKINGSTORE_COCOA_H
 
-#include <AppKit/AppKit.h>
-
-#include "qcocoawindow.h"
-#include "qnsview.h"
-
-#include <qpa/qplatformbackingstore.h>
+#include <QtGraphicsSupport/private/qrasterbackingstore_p.h>
 
 QT_BEGIN_NAMESPACE
 
-class QCocoaBackingStore : public QPlatformBackingStore
+class QCocoaBackingStore : public QRasterBackingStore
 {
 public:
     QCocoaBackingStore(QWindow *window);
     ~QCocoaBackingStore();
 
-    QPaintDevice *paintDevice() Q_DECL_OVERRIDE;
-    void flush(QWindow *widget, const QRegion &region, const QPoint &offset) Q_DECL_OVERRIDE;
-#ifndef QT_NO_OPENGL
-    QImage toImage() const Q_DECL_OVERRIDE;
-#else
-    QImage toImage() const; // No QPlatformBackingStore::toImage() for NO_OPENGL builds.
-#endif
-    void resize (const QSize &size, const QRegion &) Q_DECL_OVERRIDE;
-    bool scroll(const QRegion &area, int dx, int dy) Q_DECL_OVERRIDE;
-    void beginPaint(const QRegion &region) Q_DECL_OVERRIDE;
-    qreal getBackingStoreDevicePixelRatio();
+    void flush(QWindow *, const QRegion &, const QPoint &) Q_DECL_OVERRIDE;
 
 private:
-    QImage m_qImage;
-    QSize m_requestedSize;
+    QImage::Format format() const Q_DECL_OVERRIDE;
 };
 
 QT_END_NAMESPACE

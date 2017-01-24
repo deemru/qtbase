@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qframe_p.h"
 #include "qabstractscrollarea.h"
 
@@ -84,7 +85,7 @@ public:
     QWidget *viewport;
     QWidget *cornerWidget;
     QRect cornerPaintingRect;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     QRect reverseCornerPaintingRect;
 #endif
     int left, top, right, bottom; // viewport margin
@@ -111,7 +112,7 @@ public:
     { return q_func()->viewportEvent(event); }
     QScopedPointer<QObject> viewportFilter;
 
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     bool singleFingerPanEnabled;
     void setSingleFingerPanEnabled(bool on = true);
 #endif

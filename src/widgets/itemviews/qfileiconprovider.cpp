@@ -60,106 +60,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static bool isCacheable(const QFileInfo &fi);
-
-class QFileIconEngine : public QPixmapIconEngine
-{
-public:
-    QFileIconEngine(const QFileInfo &info, QFileIconProvider::Options opts)
-        : QPixmapIconEngine(), m_fileInfo(info), m_fipOpts(opts)
-    { }
-
-    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(mode);
-        Q_UNUSED(state);
-        QPixmap pixmap;
-
-        if (!size.isValid())
-            return pixmap;
-
-        const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
-        if (!theme)
-            return pixmap;
-
-        const QString &keyBase = QLatin1String("qt_.") + m_fileInfo.suffix().toUpper();
-
-        bool cacheable = isCacheable(m_fileInfo);
-        if (cacheable) {
-            QPixmapCache::find(keyBase + QString::number(size.width()), pixmap);
-            if (!pixmap.isNull())
-                return pixmap;
-        }
-
-        QPlatformTheme::IconOptions iconOptions;
-        if (m_fipOpts & QFileIconProvider::DontUseCustomDirectoryIcons)
-            iconOptions |= QPlatformTheme::DontUseCustomDirectoryIcons;
-
-        pixmap = theme->fileIconPixmap(m_fileInfo, size, iconOptions);
-        if (!pixmap.isNull()) {
-            if (cacheable)
-                QPixmapCache::insert(keyBase + QString::number(size.width()), pixmap);
-        }
-
-        return pixmap;
-    }
-
-    QList<QSize> availableSizes(QIcon::Mode mode = QIcon::Normal, QIcon::State state = QIcon::Off) const Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(mode);
-        Q_UNUSED(state);
-        static QList<QSize> sizes;
-        static QPlatformTheme *theme = 0;
-        if (!theme) {
-            theme = QGuiApplicationPrivate::platformTheme();
-            if (!theme)
-                return sizes;
-
-            QList<int> themeSizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<int> >();
-            if (themeSizes.isEmpty())
-                return sizes;
-
-            sizes.reserve(themeSizes.count());
-            foreach (int size, themeSizes)
-                sizes << QSize(size, size);
-        }
-        return sizes;
-    }
-
-    QSize actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state) Q_DECL_OVERRIDE
-    {
-        const QList<QSize> &sizes = availableSizes(mode, state);
-        const int numberSizes = sizes.length();
-        if (numberSizes == 0)
-            return QSize();
-
-        // Find the smallest available size whose area is still larger than the input
-        // size. Otherwise, use the largest area available size. (We don't assume the
-        // platform theme sizes are sorted, hence the extra logic.)
-        const int sizeArea = size.width() * size.height();
-        QSize actualSize = sizes.first();
-        int actualArea = actualSize.width() * actualSize.height();
-        for (int i = 1; i < numberSizes; ++i) {
-            const QSize &s = sizes.at(i);
-            const int a = s.width() * s.height();
-            if ((sizeArea <= a && a < actualArea) || (actualArea < sizeArea && actualArea < a)) {
-                actualSize = s;
-                actualArea = a;
-            }
-        }
-
-        if (!actualSize.isNull() && (actualSize.width() > size.width() || actualSize.height() > size.height()))
-            actualSize.scale(size, Qt::KeepAspectRatio);
-
-        return actualSize;
-    }
-
-private:
-    QFileInfo m_fileInfo;
-    QFileIconProvider::Options m_fipOpts;
-};
-
-
 /*!
   \class QFileIconProvider
 
@@ -322,34 +222,17 @@ QIcon QFileIconProvider::icon(IconType type) const
     return QIcon();
 }
 
-static bool isCacheable(const QFileInfo &fi)
+static inline QPlatformTheme::IconOptions toThemeIconOptions(QFileIconProvider::Options options)
 {
-    if (!fi.isFile())
-        return false;
-
-#ifdef Q_OS_WIN
-    // On windows it's faster to just look at the file extensions. QTBUG-13182
-    const QString fileExtension = fi.suffix();
-    // Will return false for .exe, .lnk and .ico extensions
-    return fileExtension.compare(QLatin1String("exe"), Qt::CaseInsensitive) &&
-           fileExtension.compare(QLatin1String("lnk"), Qt::CaseInsensitive) &&
-           fileExtension.compare(QLatin1String("ico"), Qt::CaseInsensitive);
-#else
-    return !fi.isExecutable() && !fi.isSymLink();
-#endif
+    QPlatformTheme::IconOptions result;
+    if (options & QFileIconProvider::DontUseCustomDirectoryIcons)
+        result |= QPlatformTheme::DontUseCustomDirectoryIcons;
+    return result;
 }
 
 QIcon QFileIconProviderPrivate::getIcon(const QFileInfo &fi) const
 {
-    const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
-    if (!theme)
-        return QIcon();
-
-    QList<int> sizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<int> >();
-    if (sizes.isEmpty())
-        return QIcon();
-
-    return QIcon(new QFileIconEngine(fi, options));
+    return QGuiApplicationPrivate::platformTheme()->fileIcon(fi, toThemeIconOptions(options));
 }
 
 /*!
@@ -365,7 +248,7 @@ QIcon QFileIconProvider::icon(const QFileInfo &info) const
         return retIcon;
 
     if (info.isRoot())
-#if defined (Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined (Q_OS_WIN) && !defined(Q_OS_WINRT)
     {
         UINT type = GetDriveType((wchar_t *)info.absoluteFilePath().utf16());
 

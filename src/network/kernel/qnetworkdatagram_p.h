@@ -45,6 +45,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <QtNetwork/qhostaddress.h>
 
 QT_BEGIN_NAMESPACE
@@ -53,7 +54,8 @@ class QIpPacketHeader
 {
 public:
     QIpPacketHeader(const QHostAddress &dstAddr = QHostAddress(), quint16 port = 0)
-        : destinationAddress(dstAddr), ifindex(0), hopLimit(-1), destinationPort(port)
+        : destinationAddress(dstAddr), ifindex(0), hopLimit(-1), streamNumber(-1),
+          destinationPort(port), endOfRecord(false)
     {}
 
     void clear()
@@ -62,6 +64,8 @@ public:
         destinationAddress.clear();
         ifindex = 0;
         hopLimit = -1;
+        streamNumber = -1;
+        endOfRecord = false;
     }
 
     QHostAddress senderAddress;
@@ -69,8 +73,25 @@ public:
 
     uint ifindex;
     int hopLimit;
+    int streamNumber;
     quint16 senderPort;
     quint16 destinationPort;
+    bool endOfRecord;
+};
+
+class QNetworkDatagramPrivate
+{
+public:
+    QNetworkDatagramPrivate(const QByteArray &data = QByteArray(),
+                            const QHostAddress &dstAddr = QHostAddress(), quint16 port = 0)
+        : data(data), header(dstAddr, port)
+    {}
+    QNetworkDatagramPrivate(const QByteArray &data, const QIpPacketHeader &header)
+        : data(data), header(header)
+    {}
+
+    QByteArray data;
+    QIpPacketHeader header;
 };
 
 QT_END_NAMESPACE

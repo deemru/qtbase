@@ -138,15 +138,16 @@ void QFbScreen::lower(QFbWindow *window)
 
 QWindow *QFbScreen::topWindow() const
 {
-    foreach (QFbWindow *fbw, mWindowStack)
+    for (QFbWindow *fbw : mWindowStack) {
         if (fbw->window()->type() == Qt::Window || fbw->window()->type() == Qt::Dialog)
             return fbw->window();
+    }
     return 0;
 }
 
 QWindow *QFbScreen::topLevelAt(const QPoint & p) const
 {
-    foreach (QFbWindow *fbw, mWindowStack) {
+    for (QFbWindow *fbw : mWindowStack) {
         if (fbw->geometry().contains(p, false) && fbw->window()->isVisible())
             return fbw->window();
     }
@@ -206,15 +207,13 @@ void QFbScreen::generateRects()
             remainingScreen -= localGeometry;
             QRegion windowRegion(localGeometry);
             windowRegion -= remainingScreen;
-            foreach (const QRect &rect, windowRegion.rects()) {
+            for (const QRect &rect : windowRegion)
                 mCachedRects += QPair<QRect, int>(rect, i);
-            }
         }
 #endif
     }
-    const QVector<QRect> remainingScreenRects = remainingScreen.rects();
-    mCachedRects.reserve(mCachedRects.count() + remainingScreenRects.count());
-    foreach (const QRect &rect, remainingScreenRects)
+    mCachedRects.reserve(mCachedRects.count() + remainingScreen.rectCount());
+    for (const QRect &rect : remainingScreen)
         mCachedRects += QPair<QRect, int>(rect, -1);
     mIsUpToDate = true;
 }
@@ -254,7 +253,7 @@ QRegion QFbScreen::doRedraw()
             rectRegion -= intersect;
 
             // we only expect one rectangle, but defensive coding...
-            foreach (const QRect &rect, intersect.rects()) {
+            for (const QRect &rect : intersect) {
                 bool firstLayer = true;
                 if (layer == -1) {
                     mCompositePainter->setCompositionMode(QPainter::CompositionMode_Source);

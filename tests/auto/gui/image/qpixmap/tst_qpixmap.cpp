@@ -162,6 +162,7 @@ private:
     const QString m_prefix;
     const QString m_convertFromImage;
     const QString m_loadFromData;
+    const QTemporaryDir m_tempDir;
 };
 
 static bool lenientCompare(const QPixmap &actual, const QPixmap &expected)
@@ -209,11 +210,11 @@ void tst_QPixmap::initTestCase()
     QVERIFY(!m_prefix.isEmpty());
     QVERIFY(!m_convertFromImage.isEmpty());
     QVERIFY(!m_loadFromData.isEmpty());
+    QVERIFY2(m_tempDir.isValid(), qPrintable(m_tempDir.errorString()));
 }
 
 void tst_QPixmap::cleanupTestCase()
 {
-    QFile::remove(QLatin1String("temp_image.png"));
 }
 
 void tst_QPixmap::swap()
@@ -262,7 +263,7 @@ void tst_QPixmap::fromImage()
     image.fill(0x7f7f7f7f);
 
     const QPixmap pixmap = QPixmap::fromImage(image);
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     if (pixmap.handle()->classId() == QPlatformPixmap::X11Class && !pixmap.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -442,22 +443,16 @@ void tst_QPixmap::fill_data()
         QTest::newRow(("syscolor_" + QByteArray::number(color)).constData())
             << uint(color) << true << false;
 
-#if defined (Q_OS_WINCE)
-    QPixmap pixmap(1,1);
-    if (QApplication::desktop()->grab().depth() >= 24) {
-#else
-    QPixmap pixmap(1, 1); {
-#endif
-        QTest::newRow("alpha_7f_red")   << 0x7fff0000u << false << false;
-        QTest::newRow("alpha_3f_blue")  << 0x3f0000ffu << false << false;
-        QTest::newRow("alpha_b7_green") << 0xbf00ff00u << false << false;
-        QTest::newRow("alpha_7f_white") << 0x7fffffffu << false << false;
-        QTest::newRow("alpha_3f_white") << 0x3fffffffu << false << false;
-        QTest::newRow("alpha_b7_white") << 0xb7ffffffu << false << false;
-        QTest::newRow("alpha_7f_black") << 0x7f000000u << false << false;
-        QTest::newRow("alpha_3f_black") << 0x3f000000u << false << false;
-        QTest::newRow("alpha_b7_black") << 0xbf000000u << false << false;
-    }
+    QPixmap pixmap(1, 1);
+    QTest::newRow("alpha_7f_red")   << 0x7fff0000u << false << false;
+    QTest::newRow("alpha_3f_blue")  << 0x3f0000ffu << false << false;
+    QTest::newRow("alpha_b7_green") << 0xbf00ff00u << false << false;
+    QTest::newRow("alpha_7f_white") << 0x7fffffffu << false << false;
+    QTest::newRow("alpha_3f_white") << 0x3fffffffu << false << false;
+    QTest::newRow("alpha_b7_white") << 0xb7ffffffu << false << false;
+    QTest::newRow("alpha_7f_black") << 0x7f000000u << false << false;
+    QTest::newRow("alpha_3f_black") << 0x3f000000u << false << false;
+    QTest::newRow("alpha_b7_black") << 0xbf000000u << false << false;
 
     QTest::newRow("bitmap_color0") << uint(Qt::color0) << true << true;
     QTest::newRow("bitmap_color1") << uint(Qt::color1) << true << true;
@@ -492,7 +487,7 @@ void tst_QPixmap::fill()
     else
         pm = QPixmap(400, 400);
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     if (!bitmap && pm.handle()->classId() == QPlatformPixmap::X11Class && !pm.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -522,7 +517,7 @@ void tst_QPixmap::fill()
 void tst_QPixmap::fill_transparent()
 {
     QPixmap pixmap(10, 10);
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     if (pixmap.handle()->classId() == QPlatformPixmap::X11Class && !pixmap.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -891,9 +886,6 @@ void tst_QPixmap::fromWinHBITMAP()
     HGDIOBJ old_brush = SelectObject(bitmap_dc, CreateSolidBrush(RGB(red, green, blue)));
     Rectangle(bitmap_dc, 0, 0, 100, 100);
 
-#ifdef Q_OS_WINCE //the device context has to be deleted before QPixmap::fromWinHBITMAP()
-    DeleteDC(bitmap_dc);
-#endif
     QPixmap pixmap = qt_pixmapFromWinHBITMAP(bitmap);
     QCOMPARE(pixmap.width(), 100);
     QCOMPARE(pixmap.height(), 100);
@@ -906,9 +898,7 @@ void tst_QPixmap::fromWinHBITMAP()
 
     DeleteObject(SelectObject(bitmap_dc, old_brush));
     DeleteObject(SelectObject(bitmap_dc, bitmap));
-#ifndef Q_OS_WINCE
     DeleteDC(bitmap_dc);
-#endif
     ReleaseDC(0, display_dc);
 }
 
@@ -1010,7 +1000,6 @@ void tst_QPixmap::fromWinHICON_data()
 
 void tst_QPixmap::fromWinHICON()
 {
-#ifndef Q_OS_WINCE
     QFETCH(int, width);
     QFETCH(int, height);
     QFETCH(QString, image);
@@ -1028,7 +1017,6 @@ void tst_QPixmap::fromWinHICON()
     // between QImage::Format_ARGB32 and QImage::Format_ARGB32_Premultiplied, or elsewhere
 
     QVERIFY(compareImages(imageFromHICON, imageFromFile));
-#endif // Q_OS_WINCE
 }
 
 #endif // Q_OS_WIN && !Q_OS_WINRT
@@ -1455,18 +1443,18 @@ void tst_QPixmap::preserveDepth()
 void tst_QPixmap::loadAsBitmapOrPixmap()
 {
     QImage tmp(10, 10, QImage::Format_RGB32);
-    tmp.save("temp_image.png");
+    tmp.save(m_tempDir.path() + "/temp_image.png");
 
     bool ok;
 
     // Check that we can load the pixmap as a pixmap and that it then turns into a pixmap
-    QPixmap pixmap("temp_image.png");
+    QPixmap pixmap(m_tempDir.path() + "/temp_image.png");
     QVERIFY(!pixmap.isNull());
     QVERIFY(pixmap.depth() > 1);
     QVERIFY(!pixmap.isQBitmap());
 
     pixmap = QPixmap();
-    ok = pixmap.load("temp_image.png");
+    ok = pixmap.load(m_tempDir.path() + "/temp_image.png");
     QVERIFY(ok);
     QVERIFY(!pixmap.isNull());
     QVERIFY(pixmap.depth() > 1);
@@ -1474,23 +1462,50 @@ void tst_QPixmap::loadAsBitmapOrPixmap()
 
     //now we can try to load it without an extension
     pixmap = QPixmap();
-    ok = pixmap.load("temp_image");
+    ok = pixmap.load(m_tempDir.path() + "/temp_image");
     QVERIFY(ok);
     QVERIFY(!pixmap.isNull());
     QVERIFY(pixmap.depth() > 1);
     QVERIFY(!pixmap.isQBitmap());
 
     // The do the same check for bitmaps..
-    QBitmap bitmap("temp_image.png");
+    QBitmap bitmap(m_tempDir.path() + "/temp_image.png");
     QVERIFY(!bitmap.isNull());
     QCOMPARE(bitmap.depth(), 1);
     QVERIFY(bitmap.isQBitmap());
 
     bitmap = QBitmap();
-    ok = bitmap.load("temp_image.png");
+    ok = bitmap.load(m_tempDir.path() + "/temp_image.png");
     QVERIFY(ok);
     QVERIFY(!bitmap.isNull());
     QCOMPARE(bitmap.depth(), 1);
+    QVERIFY(bitmap.isQBitmap());
+
+    // check that a QBitmap stays a QBitmap even when loading fails:
+    ok = bitmap.load(QString());
+    QVERIFY(!ok);
+    QVERIFY(bitmap.isNull());
+    QVERIFY(bitmap.isQBitmap());
+
+    ok = bitmap.load("does not exist");
+    QVERIFY(!ok);
+    QVERIFY(bitmap.isNull());
+    QVERIFY(bitmap.isQBitmap());
+
+    ok = bitmap.load("does not exist.png");
+    QVERIFY(!ok);
+    QVERIFY(bitmap.isNull());
+    QVERIFY(bitmap.isQBitmap());
+
+    QTemporaryFile garbage;
+    QVERIFY(garbage.open());
+    const QString garbagePath = garbage.fileName();
+    garbage.write(reinterpret_cast<const char *>(&garbage), sizeof garbage);
+    garbage.close();
+
+    ok = bitmap.load(garbagePath);
+    QVERIFY(!ok);
+    QVERIFY(bitmap.isNull());
     QVERIFY(bitmap.isQBitmap());
 }
 

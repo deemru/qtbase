@@ -42,12 +42,12 @@
 #include "qeglfskmsgbmscreen.h"
 #include "qeglfskmsgbmdevice.h"
 #include "qeglfskmsgbmcursor.h"
-#include "qeglfsintegration.h"
+#include "qeglfsintegration_p.h"
 
 #include <QtCore/QLoggingCategory>
 
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtPlatformSupport/private/qfbvthandler_p.h>
+#include <QtFbSupport/private/qfbvthandler_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -93,10 +93,9 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
 }
 
 QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QEglFSKmsIntegration *integration,
-                                 QEglFSKmsDevice *device,
-                                 QEglFSKmsOutput output,
-                                 QPoint position)
-    : QEglFSKmsScreen(integration, device, output, position)
+                                       QEglFSKmsDevice *device,
+                                       QEglFSKmsOutput output)
+    : QEglFSKmsScreen(integration, device, output)
     , m_gbm_surface(Q_NULLPTR)
     , m_gbm_bo_current(Q_NULLPTR)
     , m_gbm_bo_next(Q_NULLPTR)
@@ -130,8 +129,8 @@ gbm_surface *QEglFSKmsGbmScreen::createSurface()
     if (!m_gbm_surface) {
         qCDebug(qLcEglfsKmsDebug) << "Creating window for screen" << name();
         m_gbm_surface = gbm_surface_create(static_cast<QEglFSKmsGbmDevice *>(device())->gbmDevice(),
-                                           geometry().width(),
-                                           geometry().height(),
+                                           rawGeometry().width(),
+                                           rawGeometry().height(),
                                            GBM_FORMAT_XRGB8888,
                                            GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
     }

@@ -484,8 +484,7 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
         }
 
         // is this a valid reply?
-        if (fragment.length() >= 5 && !fragment.startsWith("HTTP/"))
-        {
+        if (fragment.length() == 5 && !fragment.startsWith("HTTP/")) {
             fragment.clear();
             return -1;
         }
@@ -739,6 +738,8 @@ qint64 QHttpNetworkReplyPrivate::readBody(QAbstractSocket *socket, QByteDataBuff
 #ifndef QT_NO_COMPRESS
 int QHttpNetworkReplyPrivate::initializeInflateStream()
 {
+    Q_ASSERT(inflateStrm);
+
     inflateStrm->zalloc = Z_NULL;
     inflateStrm->zfree = Z_NULL;
     inflateStrm->opaque = Z_NULL;

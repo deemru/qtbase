@@ -51,6 +51,8 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
+
 #ifndef QT_NO_OPENGL
 
 #include "qopengl.h"
@@ -67,6 +69,7 @@ QT_BEGIN_NAMESPACE
 
 class QOpenGLFunctions;
 class QOpenGLContext;
+class QOpenGLFramebufferObject;
 class QOpenGLMultiGroupSharedResource;
 
 class Q_GUI_EXPORT QOpenGLSharedResource
@@ -210,6 +213,7 @@ public:
         , workaround_missingPrecisionQualifiers(false)
         , active_engine(0)
         , qgl_current_fbo_invalid(false)
+        , qgl_current_fbo(Q_NULLPTR)
         , defaultFboRedirect(0)
     {
         requestedFormat = QSurfaceFormat::defaultFormat();
@@ -248,6 +252,11 @@ public:
 
     bool qgl_current_fbo_invalid;
 
+    // Set and unset in QOpenGLFramebufferObject::bind()/unbind().
+    // (Only meaningful for QOGLFBO since an FBO might be bound by other means)
+    // Saves us from querying the driver for the current FBO in most paths.
+    QOpenGLFramebufferObject *qgl_current_fbo;
+
     QVariant nativeHandle;
     GLuint defaultFboRedirect;
 
@@ -257,7 +266,7 @@ public:
 
     static QOpenGLContextPrivate *get(QOpenGLContext *context)
     {
-        return context->d_func();
+        return context ? context->d_func() : Q_NULLPTR;
     }
 
 #if !defined(QT_NO_DEBUG)

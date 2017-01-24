@@ -74,6 +74,8 @@ static PtrXcursorLibraryGetDefaultSize ptrXcursorLibraryGetDefaultSize = 0;
 static xcb_font_t cursorFont = 0;
 static int cursorCount = 0;
 
+#ifndef QT_NO_CURSOR
+
 static uint8_t cur_blank_bits[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -276,8 +278,6 @@ static const char * const cursorNames[] = {
     "link"
 };
 
-#ifndef QT_NO_CURSOR
-
 QXcbCursorCacheKey::QXcbCursorCacheKey(const QCursor &c)
     : shape(c.shape()), bitmapCacheKey(0), maskCacheKey(0)
 {
@@ -359,17 +359,27 @@ void QXcbCursor::changeCursor(QCursor *cursor, QWindow *widget)
         return;
 
     xcb_cursor_t c = XCB_CURSOR_NONE;
+    bool isBitmapCursor = false;
+
     if (cursor) {
-        const QXcbCursorCacheKey key(*cursor);
-        CursorHash::iterator it = m_cursorHash.find(key);
-        if (it == m_cursorHash.end()) {
-            const Qt::CursorShape shape = cursor->shape();
-            it = m_cursorHash.insert(key, shape == Qt::BitmapCursor ? createBitmapCursor(cursor) : createFontCursor(shape));
+        const Qt::CursorShape shape = cursor->shape();
+        isBitmapCursor = shape == Qt::BitmapCursor;
+
+        if (!isBitmapCursor) {
+            const QXcbCursorCacheKey key(*cursor);
+            CursorHash::iterator it = m_cursorHash.find(key);
+            if (it == m_cursorHash.end()) {
+                it = m_cursorHash.insert(key, createFontCursor(shape));
+            }
+            c = it.value();
+        } else {
+            // Do not cache bitmap cursors, as otherwise they have unclear
+            // lifetime (we effectively leak xcb_cursor_t).
+            c = createBitmapCursor(cursor);
         }
-        c = it.value();
     }
 
-    w->setCursor(c);
+    w->setCursor(c, isBitmapCursor);
 }
 
 static int cursorIdForShape(int cshape)

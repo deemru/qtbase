@@ -848,14 +848,15 @@ QAbstractOpenGLFunctions *QOpenGLContext::versionFunctions(const QOpenGLVersionP
 
     // Create object if suitable one not cached
     QAbstractOpenGLFunctions* funcs = 0;
-    if (!d->versionFunctions.contains(vp)) {
+    auto it = d->versionFunctions.constFind(vp);
+    if (it == d->versionFunctions.constEnd()) {
         funcs = QOpenGLVersionFunctionsFactory::create(vp);
         if (funcs) {
             funcs->setOwningContext(this);
             d->versionFunctions.insert(vp, funcs);
         }
     } else {
-        funcs = d->versionFunctions.value(vp);
+        funcs = it.value();
     }
 
     if (funcs && QOpenGLContext::currentContext() == this)
@@ -940,13 +941,20 @@ GLuint QOpenGLContext::defaultFramebufferObject() const
 
     If \a surface is 0 this is equivalent to calling doneCurrent().
 
-    Do not call this function from a different thread than the one the
+    Avoid calling this function from a different thread than the one the
     QOpenGLContext instance lives in. If you wish to use QOpenGLContext from a
     different thread you should first call make sure it's not current in the
     current thread, by calling doneCurrent() if necessary. Then call
     moveToThread(otherThread) before using it in the other thread.
 
-    \sa functions(), doneCurrent()
+    By default Qt employs a check that enforces the above condition on the
+    thread affinity. It is still possible to disable this check by setting the
+    \c{Qt::AA_DontCheckOpenGLContextThreadAffinity} application attribute. Be
+    sure to understand the consequences of using QObjects from outside
+    the thread they live in, as explained in the
+    \l{QObject#Thread Affinity}{QObject thread affinity} documentation.
+
+    \sa functions(), doneCurrent(), Qt::AA_DontCheckOpenGLContextThreadAffinity
 */
 bool QOpenGLContext::makeCurrent(QSurface *surface)
 {
@@ -954,8 +962,10 @@ bool QOpenGLContext::makeCurrent(QSurface *surface)
     if (!isValid())
         return false;
 
-    if (Q_UNLIKELY(thread() != QThread::currentThread()))
+    if (Q_UNLIKELY(!qApp->testAttribute(Qt::AA_DontCheckOpenGLContextThreadAffinity)
+                   && thread() != QThread::currentThread())) {
         qFatal("Cannot make QOpenGLContext current in a different thread");
+    }
 
     if (!surface) {
         doneCurrent();
@@ -1409,7 +1419,7 @@ void QOpenGLContextGroupPrivate::removeContext(QOpenGLContext *ctx)
         m_shares.removeOne(ctx);
 
         if (ctx == m_context && !m_shares.isEmpty())
-            m_context = m_shares.first();
+            m_context = m_shares.constFirst();
 
         if (!m_refs.deref()) {
             cleanup();
@@ -1573,7 +1583,7 @@ QOpenGLMultiGroupSharedResource::~QOpenGLMultiGroupSharedResource()
 #endif
     for (int i = 0; i < m_groups.size(); ++i) {
         if (!m_groups.at(i)->shares().isEmpty()) {
-            QOpenGLContext *context = m_groups.at(i)->shares().first();
+            QOpenGLContext *context = m_groups.at(i)->shares().constFirst();
             QOpenGLSharedResource *resource = value(context);
             if (resource)
                 resource->free();

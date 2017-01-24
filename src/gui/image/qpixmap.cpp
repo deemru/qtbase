@@ -125,12 +125,8 @@ QPixmap::QPixmap()
 */
 
 QPixmap::QPixmap(int w, int h)
-    : QPaintDevice()
+    : QPixmap(QSize(w, h))
 {
-    if (!qt_pixmap_thread_test())
-        doInit(0, 0, QPlatformPixmap::PixmapType);
-    else
-        doInit(w, h, QPlatformPixmap::PixmapType);
 }
 
 /*!
@@ -144,12 +140,8 @@ QPixmap::QPixmap(int w, int h)
 */
 
 QPixmap::QPixmap(const QSize &size)
-    : QPaintDevice()
+    : QPixmap(size, QPlatformPixmap::PixmapType)
 {
-    if (!qt_pixmap_thread_test())
-        doInit(0, 0, QPlatformPixmap::PixmapType);
-    else
-        doInit(size.width(), size.height(), QPlatformPixmap::PixmapType);
 }
 
 /*!
@@ -768,39 +760,37 @@ QBitmap QPixmap::createMaskFromColor(const QColor &maskColor, Qt::MaskMode mode)
 
 bool QPixmap::load(const QString &fileName, const char *format, Qt::ImageConversionFlags flags)
 {
-    if (fileName.isEmpty()) {
-        data.reset();
-        return false;
+    if (!fileName.isEmpty()) {
+
+        QFileInfo info(fileName);
+        // Note: If no extension is provided, we try to match the
+        // file against known plugin extensions
+        if (info.completeSuffix().isEmpty() || info.exists()) {
+
+            QString key = QLatin1String("qt_pixmap")
+                    % info.absoluteFilePath()
+                    % HexString<uint>(info.lastModified().toSecsSinceEpoch())
+                    % HexString<quint64>(info.size())
+                    % HexString<uint>(data ? data->pixelType() : QPlatformPixmap::PixmapType);
+
+            if (QPixmapCache::find(key, this))
+                return true;
+
+            data = QPlatformPixmap::create(0, 0, data ? data->pixelType() : QPlatformPixmap::PixmapType);
+
+            if (data->fromFile(fileName, format, flags)) {
+                QPixmapCache::insert(key, *this);
+                return true;
+            }
+        }
     }
 
-    detach();
-
-    QFileInfo info(fileName);
-    QString key = QLatin1String("qt_pixmap")
-                  % info.absoluteFilePath()
-                  % HexString<uint>(info.lastModified().toTime_t())
-                  % HexString<quint64>(info.size())
-                  % HexString<uint>(data ? data->pixelType() : QPlatformPixmap::PixmapType);
-
-    // Note: If no extension is provided, we try to match the
-    // file against known plugin extensions
-    if (!info.completeSuffix().isEmpty() && !info.exists()) {
-        data.reset();
-        return false;
+    if (!isNull()) {
+        if (isQBitmap())
+            *this = QBitmap();
+        else
+            data.reset();
     }
-
-    if (QPixmapCache::find(key, this))
-        return true;
-
-    if (!data)
-        data = QPlatformPixmap::create(0, 0, QPlatformPixmap::PixmapType);
-
-    if (data->fromFile(fileName, format, flags)) {
-        QPixmapCache::insert(key, *this);
-        return true;
-    }
-
-    data.reset();
     return false;
 }
 
@@ -1418,10 +1408,8 @@ QPixmap QPixmap::transformed(const QMatrix &matrix, Qt::TransformationMode mode)
     QPixmap using the fromImage(). If this is too expensive an
     operation, you can use QBitmap::fromImage() instead.
 
-    The QPixmap class also supports conversion to and from HICON:
-    the toWinHICON() function creates a HICON equivalent to the
-    QPixmap, and returns the HICON handle. The fromWinHICON()
-    function returns a QPixmap that is equivalent to the given icon.
+    To convert a QPixmap to and from HICON you can use the QtWinExtras
+    functions QtWin::toHICON() and QtWin::fromHICON() respectively.
 
     \section1 Pixmap Transformations
 

@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -162,7 +163,7 @@ Type Moc::parseType()
             case SIGNED:
             case UNSIGNED:
                 hasSignedOrUnsigned = true;
-                // fall through
+                Q_FALLTHROUGH();
             case CONST:
             case VOLATILE:
                 type.name += lexem();
@@ -178,6 +179,8 @@ Type Moc::parseType()
             case Q_SIGNAL_TOKEN:
             case Q_SLOT_TOKEN:
                 type.name += lexem();
+                return type;
+            case NOTOKEN:
                 return type;
             default:
                 prev();
@@ -213,6 +216,8 @@ Type Moc::parseType()
             type.name += lexem();
             isVoid |= (lookup(0) == VOID);
             break;
+        case NOTOKEN:
+            return type;
         default:
             prev();
             ;
@@ -533,7 +538,6 @@ bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
     return true;
 }
 
-
 void Moc::parse()
 {
     QVector<NamespaceDef> namespaceList;
@@ -549,14 +553,76 @@ void Moc::parse()
                         until(SEMIC);
                     } else if (!test(SEMIC)) {
                         NamespaceDef def;
-                        def.name = lexem();
+                        def.classname = lexem();
                         next(LBRACE);
                         def.begin = index - 1;
                         until(RBRACE);
                         def.end = index;
                         index = def.begin + 1;
+
+                        const bool parseNamespace = currentFilenames.size() <= 1;
+                        if (parseNamespace) {
+                            for (int i = namespaceList.size() - 1; i >= 0; --i) {
+                                if (inNamespace(&namespaceList.at(i))) {
+                                    def.qualified.prepend(namespaceList.at(i).classname + "::");
+                                }
+                            }
+                        }
+                        while (parseNamespace && inNamespace(&def) && hasNext()) {
+                            switch (next()) {
+                            case NAMESPACE:
+                                if (test(IDENTIFIER)) {
+                                    if (test(EQ)) {
+                                        // namespace Foo = Bar::Baz;
+                                        until(SEMIC);
+                                    } else if (!test(SEMIC)) {
+                                        until(RBRACE);
+                                    }
+                                }
+                                break;
+                            case Q_NAMESPACE_TOKEN:
+                                def.hasQNamespace = true;
+                                break;
+                            case Q_ENUMS_TOKEN:
+                            case Q_ENUM_NS_TOKEN:
+                                parseEnumOrFlag(&def, false);
+                                break;
+                            case Q_ENUM_TOKEN:
+                                error("Q_ENUM can't be used in a Q_NAMESPACE, use Q_ENUM_NS instead");
+                                break;
+                            case Q_FLAGS_TOKEN:
+                            case Q_FLAG_NS_TOKEN:
+                                parseEnumOrFlag(&def, true);
+                                break;
+                            case Q_FLAG_TOKEN:
+                                error("Q_FLAG can't be used in a Q_NAMESPACE, use Q_FLAG_NS instead");
+                                break;
+                            case Q_DECLARE_FLAGS_TOKEN:
+                                parseFlag(&def);
+                                break;
+                            case Q_CLASSINFO_TOKEN:
+                                parseClassInfo(&def);
+                                break;
+                            case ENUM: {
+                                EnumDef enumDef;
+                                if (parseEnum(&enumDef))
+                                    def.enumList += enumDef;
+                            } break;
+                            case CLASS:
+                            case STRUCT: {
+                                ClassDef classdef;
+                                if (!parseClassHead(&classdef))
+                                    continue;
+                                while (inClass(&classdef) && hasNext())
+                                    next(); // consume all Q_XXXX macros from this class
+                            } break;
+                            default: break;
+                            }
+                        }
                         namespaceList += def;
                         index = rewind;
+                        if (!def.hasQNamespace && (!def.classInfoList.isEmpty() || !def.enumDeclarations.isEmpty()))
+                            error("Namespace declaration lacks Q_NAMESPACE macro.");
                     }
                 }
                 break;
@@ -613,7 +679,7 @@ void Moc::parse()
 
                 for (int i = namespaceList.size() - 1; i >= 0; --i)
                     if (inNamespace(&namespaceList.at(i)))
-                        def.qualified.prepend(namespaceList.at(i).name + "::");
+                        def.qualified.prepend(namespaceList.at(i).classname + "::");
 
                 QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
                 classHash.insert(def.classname, def.qualified);
@@ -629,7 +695,7 @@ void Moc::parse()
             FunctionDef::Access access = FunctionDef::Private;
             for (int i = namespaceList.size() - 1; i >= 0; --i)
                 if (inNamespace(&namespaceList.at(i)))
-                    def.qualified.prepend(namespaceList.at(i).name + "::");
+                    def.qualified.prepend(namespaceList.at(i).classname + "::");
             while (inClass(&def) && hasNext()) {
                 switch ((t = next())) {
                 case PRIVATE:
@@ -693,9 +759,15 @@ void Moc::parse()
                 case Q_ENUM_TOKEN:
                     parseEnumOrFlag(&def, false);
                     break;
+                case Q_ENUM_NS_TOKEN:
+                    error("Q_ENUM_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_ENUM instead");
+                    break;
                 case Q_FLAGS_TOKEN:
                 case Q_FLAG_TOKEN:
                     parseEnumOrFlag(&def, true);
+                    break;
+                case Q_FLAG_NS_TOKEN:
+                    error("Q_FLAG_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_FLAG instead");
                     break;
                 case Q_DECLARE_FLAGS_TOKEN:
                     parseFlag(&def);
@@ -795,6 +867,28 @@ void Moc::parse()
             QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
             classHash.insert(def.classname, def.qualified);
             classHash.insert(def.qualified, def.qualified);
+        }
+    }
+    for (const auto &n : qAsConst(namespaceList)) {
+        if (!n.hasQNamespace)
+            continue;
+        ClassDef def;
+        static_cast<BaseDef &>(def) = static_cast<BaseDef>(n);
+        def.qualified += def.classname;
+        def.hasQGadget = true;
+        auto it = std::find_if(classList.begin(), classList.end(), [&def](const ClassDef &val) {
+            return def.classname == val.classname && def.qualified == val.qualified;
+        });
+
+        if (it != classList.end()) {
+            it->classInfoList += def.classInfoList;
+            it->enumDeclarations.unite(def.enumDeclarations);
+            it->enumList += def.enumList;
+            it->flagAliases.unite(def.flagAliases);
+        } else {
+            knownGadgets.insert(def.classname, def.qualified);
+            knownGadgets.insert(def.qualified, def.qualified);
+            classList += def;
         }
     }
 }
@@ -908,12 +1002,17 @@ void Moc::generate(FILE *out)
     fprintf(out, "#endif\n\n");
 
     fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
+    fprintf(out, "QT_WARNING_PUSH\n");
+    fprintf(out, "QT_WARNING_DISABLE_DEPRECATED\n");
 
+    fputs("", out);
     for (i = 0; i < classList.size(); ++i) {
         Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out);
         generator.generateCode();
     }
+    fputs("", out);
 
+    fprintf(out, "QT_WARNING_POP\n");
     fprintf(out, "QT_END_MOC_NAMESPACE\n");
 }
 
@@ -1243,7 +1342,7 @@ void Moc::parsePrivateProperty(ClassDef *def)
     def->propertyList += propDef;
 }
 
-void Moc::parseEnumOrFlag(ClassDef *def, bool isFlag)
+void Moc::parseEnumOrFlag(BaseDef *def, bool isFlag)
 {
     next(LPAREN);
     QByteArray identifier;
@@ -1258,7 +1357,7 @@ void Moc::parseEnumOrFlag(ClassDef *def, bool isFlag)
     next(RPAREN);
 }
 
-void Moc::parseFlag(ClassDef *def)
+void Moc::parseFlag(BaseDef *def)
 {
     next(LPAREN);
     QByteArray flagName, enumName;
@@ -1282,7 +1381,7 @@ void Moc::parseFlag(ClassDef *def)
     next(RPAREN);
 }
 
-void Moc::parseClassInfo(ClassDef *def)
+void Moc::parseClassInfo(BaseDef *def)
 {
     next(LPAREN);
     ClassInfoDef infoDef;

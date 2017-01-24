@@ -50,6 +50,8 @@
 //
 // We mean it.
 //
+
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <QtNetwork/qnetworkrequest.h>
 #include <QtNetwork/qnetworkreply.h>
 #include <QtNetwork/qabstractsocket.h>
@@ -70,17 +72,6 @@
 
 #ifndef QT_NO_HTTP
 
-#ifndef QT_NO_SSL
-#ifndef QT_NO_OPENSSL
-#    include <private/qsslcontext_openssl_p.h>
-#endif
-#    include <private/qsslsocket_p.h>
-#    include <QtNetwork/qsslsocket.h>
-#    include <QtNetwork/qsslerror.h>
-#else
-#   include <QtNetwork/qtcpsocket.h>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 class QHttpNetworkRequest;
@@ -88,6 +79,10 @@ class QHttpNetworkReply;
 class QHttpThreadDelegate;
 class QByteArray;
 class QHostInfo;
+#ifndef QT_NO_SSL
+class QSslConfiguration;
+class QSslContext;
+#endif // !QT_NO_SSL
 
 class QHttpNetworkConnectionPrivate;
 class Q_AUTOTEST_EXPORT QHttpNetworkConnection : public QObject
@@ -97,7 +92,8 @@ public:
 
     enum ConnectionType {
         ConnectionTypeHTTP,
-        ConnectionTypeSPDY
+        ConnectionTypeSPDY,
+        ConnectionTypeHTTP2
     };
 
 #ifndef QT_NO_BEARERMANAGEMENT
@@ -159,6 +155,7 @@ private:
     friend class QHttpNetworkReply;
     friend class QHttpNetworkReplyPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QHttp2ProtocolHandler;
     friend class QHttpProtocolHandler;
     friend class QSpdyProtocolHandler;
 
@@ -213,6 +210,7 @@ public:
     void requeueRequest(const HttpMessagePair &pair); // e.g. after pipeline broke
     bool dequeueRequest(QAbstractSocket *socket);
     void prepareRequest(HttpMessagePair &request);
+    void updateChannel(int i, const HttpMessagePair &messagePair);
     QHttpNetworkRequest predictNextRequest() const;
 
     void fillPipeline(QAbstractSocket *socket);

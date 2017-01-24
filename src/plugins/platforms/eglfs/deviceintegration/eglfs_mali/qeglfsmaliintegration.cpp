@@ -48,7 +48,7 @@
 
 QT_BEGIN_NAMESPACE
 
-struct fbdev_window {
+struct shadow_fbdev_window {
     unsigned short width;
     unsigned short height;
 };
@@ -56,7 +56,7 @@ struct fbdev_window {
 void QEglFSMaliIntegration::platformInit()
 {
     // Keep the non-overridden base class functions based on fb0 working.
-    QEGLDeviceIntegration::platformInit();
+    QEglFSDeviceIntegration::platformInit();
 
     int fd = qt_safe_open("/dev/fb0", O_RDWR, 0);
     if (fd == -1)
@@ -91,7 +91,7 @@ EGLNativeWindowType QEglFSMaliIntegration::createNativeWindow(QPlatformWindow *w
     Q_UNUSED(window);
     Q_UNUSED(format);
 
-    fbdev_window *fbwin = reinterpret_cast<fbdev_window *>(malloc(sizeof(fbdev_window)));
+    shadow_fbdev_window *fbwin = reinterpret_cast<shadow_fbdev_window *>(malloc(sizeof(shadow_fbdev_window)));
     if (NULL == fbwin)
         return 0;
 

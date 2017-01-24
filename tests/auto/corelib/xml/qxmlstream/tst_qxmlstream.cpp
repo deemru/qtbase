@@ -65,6 +65,16 @@ static inline int best(int a, int b, int c)
     return qMin(qMin(a, b), c);
 }
 
+template <typename C>
+const C sorted_by_name(C c) { // return by const value so we can feed directly into range-for loops below
+    using T = typename C::value_type;
+    auto byName = [](const T &lhs, const T &rhs) {
+        return lhs.name() < rhs.name();
+    };
+    std::sort(c.begin(), c.end(), byName);
+    return c;
+}
+
 /**
  *  Opens \a filename and returns content produced as per
  *  xmlconf/xmltest/canonxml.html.
@@ -97,7 +107,8 @@ static QByteArray makeCanonical(const QString &filename,
         while (!reader.atEnd()) {
             reader.readNext();
             if (reader.isDTD()) {
-                if (!reader.notationDeclarations().isEmpty()) {
+                const auto notationDeclarations = reader.notationDeclarations();
+                if (!notationDeclarations.isEmpty()) {
                     QString dtd;
                     QTextStream writeDtd(&dtd);
 
@@ -105,10 +116,7 @@ static QByteArray makeCanonical(const QString &filename,
                     writeDtd << docType;
                     writeDtd << " [";
                     writeDtd << endl;
-                    QMap<QString, QXmlStreamNotationDeclaration> sortedNotationDeclarations;
-                    foreach (QXmlStreamNotationDeclaration notation, reader.notationDeclarations())
-                        sortedNotationDeclarations.insert(notation.name().toString(), notation);
-                    foreach (QXmlStreamNotationDeclaration notation, sortedNotationDeclarations.values()) {
+                    for (const QXmlStreamNotationDeclaration &notation : sorted_by_name(notationDeclarations)) {
                         writeDtd << "<!NOTATION ";
                         writeDtd << notation.name().toString();
                         if (notation.publicId().isEmpty()) {
@@ -135,11 +143,7 @@ static QByteArray makeCanonical(const QString &filename,
                 }
             } else if (reader.isStartElement()) {
                 writer.writeStartElement(reader.namespaceUri().toString(), reader.name().toString());
-
-                QMap<QString, QXmlStreamAttribute> sortedAttributes;
-                foreach(QXmlStreamAttribute attribute, reader.attributes())
-                    sortedAttributes.insert(attribute.name().toString(), attribute);
-                foreach(QXmlStreamAttribute attribute, sortedAttributes.values())
+                for (const QXmlStreamAttribute &attribute : sorted_by_name(reader.attributes()))
                     writer.writeAttribute(attribute);
                 writer.writeCharacters(QString()); // write empty string to avoid having empty xml tags
             } else if (reader.isCharacters()) {
@@ -236,6 +240,8 @@ public:
      */
     class MissedBaseline
     {
+        friend class QVector<MissedBaseline>;
+        MissedBaseline() {} // for QVector, don't use
     public:
         MissedBaseline(const QString &aId,
                        const QByteArray &aExpected,
@@ -247,13 +253,20 @@ public:
                 qFatal("%s: aId must not be an empty string", Q_FUNC_INFO);
         }
 
+        void swap(MissedBaseline &other) Q_DECL_NOTHROW
+        {
+            qSwap(id, other.id);
+            qSwap(expected, other.expected);
+            qSwap(output, other.output);
+        }
+
         QString     id;
         QByteArray  expected;
         QByteArray  output;
     };
 
-    QList<GeneralFailure> failures;
-    QList<MissedBaseline> missedBaselines;
+    QVector<GeneralFailure> failures;
+    QVector<MissedBaseline> missedBaselines;
 
     /**
      * The count of how many tests that were run.
@@ -507,6 +520,9 @@ private:
     QString                 m_ch;
     QStack<QUrl>            m_baseURI;
 };
+QT_BEGIN_NAMESPACE
+Q_DECLARE_SHARED(TestSuiteHandler::MissedBaseline)
+QT_END_NAMESPACE
 
 class tst_QXmlStream: public QObject
 {
@@ -556,6 +572,9 @@ private slots:
     void checkCommentIndentation() const;
     void checkCommentIndentation_data() const;
     void crashInXmlStreamReader() const;
+    void write8bitCodec() const;
+    void invalidStringCharacters_data() const;
+    void invalidStringCharacters() const;
     void hasError() const;
 
 private:
@@ -715,8 +734,9 @@ QByteArray tst_QXmlStream::readFile(const QString &filename)
             writer << " qualifiedName=\"" << reader.qualifiedName().toString() << '"';
         if (!reader.prefix().isEmpty())
             writer << " prefix=\"" << reader.prefix().toString() << '"';
-        if (reader.attributes().size()) {
-            foreach(QXmlStreamAttribute attribute, reader.attributes()) {
+        const auto attributes = reader.attributes();
+        if (attributes.size()) {
+            for (const QXmlStreamAttribute &attribute : attributes) {
                 writer << endl << "    Attribute(";
                 if (!attribute.name().isEmpty())
                     writer << " name=\"" << attribute.name().toString() << '"';
@@ -731,8 +751,9 @@ QByteArray tst_QXmlStream::readFile(const QString &filename)
                 writer << " )" << endl;
             }
         }
-        if (reader.namespaceDeclarations().size()) {
-            foreach(QXmlStreamNamespaceDeclaration namespaceDeclaration, reader.namespaceDeclarations()) {
+        const auto namespaceDeclarations = reader.namespaceDeclarations();
+        if (namespaceDeclarations.size()) {
+            for (const QXmlStreamNamespaceDeclaration &namespaceDeclaration : namespaceDeclarations) {
                 writer << endl << "    NamespaceDeclaration(";
                 if (!namespaceDeclaration.prefix().isEmpty())
                     writer << " prefix=\"" << namespaceDeclaration.prefix().toString() << '"';
@@ -741,8 +762,9 @@ QByteArray tst_QXmlStream::readFile(const QString &filename)
                 writer << " )" << endl;
             }
         }
-        if (reader.notationDeclarations().size()) {
-            foreach(QXmlStreamNotationDeclaration notationDeclaration, reader.notationDeclarations()) {
+        const auto notationDeclarations = reader.notationDeclarations();
+        if (notationDeclarations.size()) {
+            for (const QXmlStreamNotationDeclaration &notationDeclaration : notationDeclarations) {
                 writer << endl << "    NotationDeclaration(";
                 if (!notationDeclaration.name().isEmpty())
                     writer << " name=\"" << notationDeclaration.name().toString() << '"';
@@ -753,8 +775,9 @@ QByteArray tst_QXmlStream::readFile(const QString &filename)
                 writer << " )" << endl;
             }
         }
-        if (reader.entityDeclarations().size()) {
-            foreach(QXmlStreamEntityDeclaration entityDeclaration, reader.entityDeclarations()) {
+        const auto entityDeclarations = reader.entityDeclarations();
+        if (entityDeclarations.size()) {
+            for (const QXmlStreamEntityDeclaration &entityDeclaration : entityDeclarations) {
                 writer << endl << "    EntityDeclaration(";
                 if (!entityDeclaration.name().isEmpty())
                     writer << " name=\"" << entityDeclaration.name().toString() << '"';
@@ -800,7 +823,8 @@ void tst_QXmlStream::testReader_data() const
     QTest::addColumn<QString>("ref");
     QDir dir;
     dir.cd(QFINDTESTDATA("data/"));
-    foreach(QString filename , dir.entryList(QStringList() << "*.xml")) {
+    const auto fileNames = dir.entryList(QStringList() << "*.xml");
+    for (const QString &filename : fileNames) {
         QString reference =  QFileInfo(filename).baseName() + ".ref";
         QTest::newRow(dir.filePath(filename).toLatin1().data()) << dir.filePath(filename) << dir.filePath(reference);
     }
@@ -1574,6 +1598,101 @@ void tst_QXmlStream::hasError() const
         QCOMPARE(fb.data(), QByteArray("<?xml vers"));
     }
 
+}
+
+void tst_QXmlStream::write8bitCodec() const
+{
+    QBuffer outBuffer;
+    QVERIFY(outBuffer.open(QIODevice::WriteOnly));
+    QXmlStreamWriter writer(&outBuffer);
+    writer.setAutoFormatting(false);
+
+    QTextCodec *codec = QTextCodec::codecForName("IBM500");
+    if (!codec) {
+        QSKIP("Encoding IBM500 not available.");
+    }
+    writer.setCodec(codec);
+
+    writer.writeStartDocument();
+    writer.writeStartElement("root");
+    writer.writeAttribute("attrib", "1");
+    writer.writeEndElement();
+    writer.writeEndDocument();
+    outBuffer.close();
+
+    // test 8 bit encoding
+    QByteArray values = outBuffer.data();
+    QVERIFY(values.size() > 1);
+    // check '<'
+    QCOMPARE(values[0] & 0x00FF, 0x4c);
+    // check '?'
+    QCOMPARE(values[1] & 0x00FF, 0x6F);
+
+    // convert the start of the XML
+    const QString expected = ("<?xml version=\"1.0\" encoding=\"IBM500\"?>");
+    QTextDecoder *decoder = codec->makeDecoder();
+    QVERIFY(decoder);
+    QString decodedText = decoder->toUnicode(values);
+    delete decoder;
+    QVERIFY(decodedText.startsWith(expected));
+}
+
+void tst_QXmlStream::invalidStringCharacters() const
+{
+    // test scan in attributes
+    QFETCH(QString, testString);
+    QFETCH(bool, expectedResultNoError);
+
+    QByteArray values = testString.toUtf8();
+    QBuffer inBuffer;
+    inBuffer.setData(values);
+    QVERIFY(inBuffer.open(QIODevice::ReadOnly));
+    QXmlStreamReader reader(&inBuffer);
+    do {
+        reader.readNext();
+    } while (!reader.atEnd());
+    QCOMPARE((reader.error() == QXmlStreamReader::NoError), expectedResultNoError);
+}
+
+void tst_QXmlStream::invalidStringCharacters_data() const
+{
+    // test scan in attributes
+    QTest::addColumn<bool>("expectedResultNoError");
+    QTest::addColumn<QString>("testString");
+    QChar ctrl(0x1A);
+    QTest::newRow("utf8, attributes, legal") << true << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'/>");
+    QTest::newRow("utf8, attributes, only char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='")+ctrl+QString("'/>");
+    QTest::newRow("utf8, attributes, 1st char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='")+ctrl+QString("abc'/>");
+    QTest::newRow("utf8, attributes, middle char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='abc")+ctrl+QString("efgx'/>");
+    QTest::newRow("utf8, attributes, last char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='abcde")+ctrl+QString("'/>");
+    //
+    QTest::newRow("utf8, text, legal") << true << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'>abcx1A</root>");
+    QTest::newRow("utf8, text, only, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'>")+ctrl+QString("</root>");
+    QTest::newRow("utf8, text, 1st char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'>abc")+ctrl+QString("def</root>");
+    QTest::newRow("utf8, text, middle char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'>abc")+ctrl+QString("efg</root>");
+    QTest::newRow("utf8, text, last char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'>abc")+ctrl+QString("</root>");
+    //
+    QTest::newRow("utf8, cdata text, legal") << true << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'><![CDATA[abcdefghi]]></root>");
+    QTest::newRow("utf8, cdata text, only, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'><![CDATA[")+ctrl+QString("]]></root>");
+    QTest::newRow("utf8, cdata text, 1st char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'><![CDATA[")+ctrl+QString("abcdefghi]]></root>");
+    QTest::newRow("utf8, cdata text, middle char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'><![CDATA[abcd")+ctrl+QString("efghi]]></root>");
+    QTest::newRow("utf8, cdata text, last char, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aa'><![CDATA[abcdefghi")+ctrl+QString("]]></root>");
+    //
+    QTest::newRow("utf8, mixed, control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='a")+ctrl+QString("a'><![CDATA[abcdefghi")+ctrl+QString("]]></root>");
+    QTest::newRow("utf8, tag") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><roo")+ctrl+QString("t attr='aa'><![CDATA[abcdefghi]]></roo")+ctrl+QString("t>");
+    //
+    QTest::newRow("utf8, attributes, 1st char, legal escaping hex") << true << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='a&#xA0;'/>");
+    QTest::newRow("utf8, attributes, 1st char, control escaping hex") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='&#x1A;aaa'/>");
+    QTest::newRow("utf8, attributes, middle char, legal escaping hex") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aaa&#x1A;aaa'/>");
+    QTest::newRow("utf8, attributes, last char, control escaping hex") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aaa&#x1A;'/>");
+    QTest::newRow("utf8, attributes, 1st char, legal escaping dec") << true << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='a&#160;'/>");
+    QTest::newRow("utf8, attributes, 1st char, control escaping dec") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='&#26;aaaa'/>");
+    QTest::newRow("utf8, attributes, middle char, legal escaping dec") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aaa&#26;aaaaa'/>");
+    QTest::newRow("utf8, attributes, last char, control escaping dec") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='aaaaaa&#26;'/>");
+    QTest::newRow("utf8, tag escaping") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><roo&#x1A;t attr='aa'><![CDATA[abcdefghi]]></roo&#x1A;t>");
+    //
+    QTest::newRow("utf8, mix of illegal control") << false << QString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root attr='a&#0;&#x4;&#x1c;a'><![CDATA[abcdefghi]]></root>");
+    //
 }
 
 #include "tst_qxmlstream.moc"

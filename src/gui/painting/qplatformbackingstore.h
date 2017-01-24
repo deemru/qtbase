@@ -49,6 +49,7 @@
 // source and binary incompatible with future versions of Qt.
 //
 
+#include <QtGui/qtguiglobal.h>
 #include <QtCore/qrect.h>
 #include <QtCore/qobject.h>
 
@@ -111,6 +112,7 @@ public:
     virtual ~QPlatformBackingStore();
 
     QWindow *window() const;
+    QBackingStore *backingStore() const;
 
     virtual QPaintDevice *paintDevice() = 0;
 
@@ -121,7 +123,9 @@ public:
     virtual void composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
                                  QPlatformTextureList *textures, QOpenGLContext *context,
                                  bool translucentBackground);
+#endif
     virtual QImage toImage() const;
+#ifndef QT_NO_OPENGL
     enum TextureFlag {
         TextureSwizzle = 0x01,
         TextureFlip = 0x02,
@@ -142,6 +146,9 @@ public:
 
 private:
     QPlatformBackingStorePrivate *d_ptr;
+
+    void setBackingStore(QBackingStore *);
+    friend class QBackingStore;
 };
 
 #ifndef QT_NO_OPENGL

@@ -71,11 +71,11 @@
 **
 ****************************************************************************/
 
-#include <qcocoaapplication.h>
+#include "qcocoaapplication.h"
 
-#include <qcocoaintrospection.h>
-#include <qcocoaapplicationdelegate.h>
-#include <qcocoahelpers.h>
+#include "qcocoaintrospection.h"
+#include "qcocoaapplicationdelegate.h"
+#include "qcocoahelpers.h"
 #include <qguiapplication.h>
 #include <qdebug.h>
 
@@ -86,11 +86,6 @@ QT_USE_NAMESPACE
 - (void)QT_MANGLE_NAMESPACE(qt_setDockMenu):(NSMenu *)newMenu
 {
     [[QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) sharedDelegate] setDockMenu:newMenu];
-}
-
-- (QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *)QT_MANGLE_NAMESPACE(qt_qcocoamenuLoader)
-{
-    return [[QT_MANGLE_NAMESPACE(QCocoaApplicationDelegate) sharedDelegate] menuLoader];
 }
 
 - (int)QT_MANGLE_NAMESPACE(qt_validModesForFontPanel):(NSFontPanel *)fontPanel

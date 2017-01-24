@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractscrollarea_p.h"
 #include "private/qabstractitemmodel_p.h"
 #include "QtWidgets/qapplication.h"
@@ -276,9 +277,7 @@ public:
     }
 
     const QEditorInfo &editorForIndex(const QModelIndex &index) const;
-    inline bool hasEditor(const QModelIndex &index) const {
-        return indexEditorHash.find(index) != indexEditorHash.constEnd();
-    }
+    bool hasEditor(const QModelIndex &index) const;
 
     QModelIndex indexForEditor(QWidget *editor) const;
     void addEditor(const QModelIndex &index, QWidget *editor, bool isStatic);

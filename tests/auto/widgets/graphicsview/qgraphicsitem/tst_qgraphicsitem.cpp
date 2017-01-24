@@ -57,9 +57,7 @@
 
 Q_DECLARE_METATYPE(QPainterPath)
 
-#include "../../../qtest-config.h"
-
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 #include <windows.h>
 #define Q_CHECK_PAINTEVENTS \
     if (::SwitchDesktop(::GetThreadDesktop(::GetCurrentThreadId())) == 0) \
@@ -279,9 +277,6 @@ class tst_QGraphicsItem : public QObject
 {
     Q_OBJECT
 
-public slots:
-    void init();
-
 private slots:
     void construction();
     void constructionWithParent();
@@ -355,7 +350,7 @@ private slots:
     void filtersChildEvents();
     void filtersChildEvents2();
     void ensureVisible();
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void cursor();
 #endif
     //void textControlGetterSetter();
@@ -480,13 +475,6 @@ private slots:
 private:
     QList<QGraphicsItem *> paintedItems;
 };
-
-void tst_QGraphicsItem::init()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QGraphicsItem::construction()
 {
@@ -845,14 +833,14 @@ void tst_QGraphicsItem::parentItem()
 void tst_QGraphicsItem::setParentItem()
 {
     QGraphicsScene scene;
-    QGraphicsItem *item = scene.addRect(QRectF(0, 0, 10, 10));
+    const QScopedPointer<QGraphicsItem> item(scene.addRect(QRectF(0, 0, 10, 10)));
     QCOMPARE(item->scene(), &scene);
 
-    QGraphicsRectItem *child = new QGraphicsRectItem;
+    const QScopedPointer<QGraphicsRectItem> child(new QGraphicsRectItem);
     QCOMPARE(child->scene(), (QGraphicsScene *)0);
 
     // This implicitly adds the item to the parent's scene
-    child->setParentItem(item);
+    child->setParentItem(item.data());
     QCOMPARE(child->scene(), &scene);
 
     // This just makes it a toplevel
@@ -860,8 +848,8 @@ void tst_QGraphicsItem::setParentItem()
     QCOMPARE(child->scene(), &scene);
 
     // Add the child back to the parent, then remove the parent from the scene
-    child->setParentItem(item);
-    scene.removeItem(item);
+    child->setParentItem(item.data());
+    scene.removeItem(item.data());
     QCOMPARE(child->scene(), (QGraphicsScene *)0);
 }
 
@@ -959,19 +947,19 @@ void tst_QGraphicsItem::flags()
         QCOMPARE(item->pos(), QPointF(10, 10));
     }
     {
-        QGraphicsItem* clippingParent = new QGraphicsRectItem;
+        const QScopedPointer<QGraphicsItem> clippingParent(new QGraphicsRectItem);
         clippingParent->setFlag(QGraphicsItem::ItemClipsChildrenToShape, true);
 
-        QGraphicsItem* nonClippingParent = new QGraphicsRectItem;
+        const QScopedPointer<QGraphicsItem> nonClippingParent(new QGraphicsRectItem);
         nonClippingParent->setFlag(QGraphicsItem::ItemClipsChildrenToShape, false);
 
-        QGraphicsItem* child = new QGraphicsRectItem(nonClippingParent);
+        QGraphicsItem* child = new QGraphicsRectItem(nonClippingParent.data());
         QVERIFY(!child->isClipped());
 
-        child->setParentItem(clippingParent);
+        child->setParentItem(clippingParent.data());
         QVERIFY(child->isClipped());
 
-        child->setParentItem(nonClippingParent);
+        child->setParentItem(nonClippingParent.data());
         QVERIFY(!child->isClipped());
     }
 }
@@ -3130,7 +3118,8 @@ void tst_QGraphicsItem::isAncestorOf()
 
 void tst_QGraphicsItem::commonAncestorItem()
 {
-    QGraphicsItem *ancestor = new QGraphicsRectItem;
+    QGraphicsRectItem ancestorItem;
+    QGraphicsItem *ancestor = &ancestorItem;
     QGraphicsItem *grandMa = new QGraphicsRectItem;
     QGraphicsItem *grandPa = new QGraphicsRectItem;
     QGraphicsItem *brotherInLaw = new QGraphicsRectItem;
@@ -3630,7 +3619,7 @@ void tst_QGraphicsItem::setGroup()
     QGraphicsItemGroup group1;
     QGraphicsItemGroup group2;
 
-    QGraphicsRectItem *rect = new QGraphicsRectItem;
+    const QScopedPointer<QGraphicsRectItem> rect(new QGraphicsRectItem);
     QCOMPARE(rect->group(), (QGraphicsItemGroup *)0);
     QCOMPARE(rect->parentItem(), (QGraphicsItem *)0);
     rect->setGroup(&group1);
@@ -4187,7 +4176,7 @@ void tst_QGraphicsItem::ensureVisible()
     QTest::qWait(25);
 }
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QGraphicsItem::cursor()
 {
     QGraphicsScene scene;
@@ -4535,7 +4524,7 @@ protected:
         case QGraphicsItem::ItemSceneHasChanged:
             break;
         case QGraphicsItem::ItemCursorChange:
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
             oldValues << cursor();
 #endif
             break;
@@ -5062,9 +5051,10 @@ void tst_QGraphicsItem::sceneEventFilter()
     delete ti;
 }
 
-class GeometryChanger : public QGraphicsItem
+class GeometryChanger : public QGraphicsRectItem
 {
 public:
+    explicit GeometryChanger(QRectF r) : QGraphicsRectItem(r) {}
     void changeGeometry()
     { prepareGeometryChange(); }
 };
@@ -5073,10 +5063,12 @@ void tst_QGraphicsItem::prepareGeometryChange()
 {
     {
         QGraphicsScene scene;
-        QGraphicsItem *item = scene.addRect(QRectF(0, 0, 100, 100));
-        QVERIFY(scene.items(QRectF(0, 0, 100, 100)).contains(item));
-        ((GeometryChanger *)item)->changeGeometry();
-        QVERIFY(scene.items(QRectF(0, 0, 100, 100)).contains(item));
+        const QRectF rect(0, 0, 100, 100);
+        GeometryChanger item(rect);
+        scene.addItem(&item);
+        QVERIFY(scene.items(rect).contains(&item));
+        item.changeGeometry();
+        QVERIFY(scene.items(rect).contains(&item));
     }
 }
 
@@ -5098,10 +5090,6 @@ public:
 
 void tst_QGraphicsItem::paint()
 {
-#ifdef Q_OS_MACX
-    if (QSysInfo::MacintoshVersion == QSysInfo::MV_10_7)
-        QSKIP("QTBUG-31454 - Unstable auto-test");
-#endif
     QGraphicsScene scene;
 
     PaintTester paintTester;
@@ -6586,12 +6574,6 @@ public:
 
 void tst_QGraphicsItem::ensureUpdateOnTextItem()
 {
-#ifdef Q_OS_MAC
-    if (QSysInfo::MacintoshVersion == QSysInfo::MV_10_7) {
-        QSKIP("This test is unstable on 10.7 in CI");
-    }
-#endif
-
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
@@ -6832,8 +6814,8 @@ void tst_QGraphicsItem::opacity()
     QFETCH(qreal, c2_effectiveOpacity);
     QFETCH(qreal, c3_effectiveOpacity);
 
-    QGraphicsRectItem *p = new QGraphicsRectItem;
-    QGraphicsRectItem *c1 = new QGraphicsRectItem(p);
+    const QScopedPointer<QGraphicsRectItem> p(new QGraphicsRectItem);
+    QGraphicsRectItem *c1 = new QGraphicsRectItem(p.data());
     QGraphicsRectItem *c2 = new QGraphicsRectItem(c1);
     QGraphicsRectItem *c3 = new QGraphicsRectItem(c2);
 
@@ -7221,11 +7203,12 @@ void tst_QGraphicsItem::sceneTransformCache()
     // Test that an item's scene transform is updated correctly when the
     // parent is transformed.
     QGraphicsScene scene;
-    QGraphicsRectItem *rect = scene.addRect(0, 0, 100, 100);
+
+    const QScopedPointer<QGraphicsRectItem> rect(scene.addRect(0, 0, 100, 100));
     rect->setPen(QPen(Qt::black, 0));
     QGraphicsRectItem *rect2 = scene.addRect(0, 0, 100, 100);
     rect2->setPen(QPen(Qt::black, 0));
-    rect2->setParentItem(rect);
+    rect2->setParentItem(rect.data());
     rect2->setTransform(QTransform().rotate(90), true);
     rect->setTransform(QTransform::fromTranslate(0, 50), true);
     QGraphicsView view(&scene);
@@ -7237,7 +7220,7 @@ void tst_QGraphicsItem::sceneTransformCache()
     x.rotate(90);
     QCOMPARE(rect2->sceneTransform(), x);
 
-    scene.removeItem(rect);
+    scene.removeItem(rect.data());
 
     //Crazy use case : rect4 child of rect3 so the transformation of rect4 will be cached.Good!
     //We remove rect4 from the scene, then the validTransform bit flag is set to 0 and the index of the cache
@@ -10693,7 +10676,7 @@ void tst_QGraphicsItem::scenePosChange()
 {
     ScenePosChangeTester* root = new ScenePosChangeTester;
     ScenePosChangeTester* child1 = new ScenePosChangeTester(root);
-    ScenePosChangeTester* grandChild1 = new ScenePosChangeTester(child1);
+    const QScopedPointer<ScenePosChangeTester> grandChild1(new ScenePosChangeTester(child1));
     ScenePosChangeTester* child2 = new ScenePosChangeTester(root);
     ScenePosChangeTester* grandChild2 = new ScenePosChangeTester(child2);
 
@@ -10745,7 +10728,7 @@ void tst_QGraphicsItem::scenePosChange()
     QCOMPARE(grandChild2->changes.count(QGraphicsItem::ItemScenePositionHasChanged), 3);
 
     // remove
-    scene.removeItem(grandChild1);
+    scene.removeItem(grandChild1.data());
     delete grandChild2; grandChild2 = 0;
     QCoreApplication::processEvents(); // QGraphicsScenePrivate::_q_updateScenePosDescendants()
     root->moveBy(1.0, 1.0);
@@ -11039,9 +11022,7 @@ void tst_QGraphicsItem::touchEventPropagation()
     touchPoints << tp;
 
     sendMousePress(&scene, tp.scenePos());
-    QTouchDevice *device = new QTouchDevice;
-    device->setType(QTouchDevice::TouchScreen);
-    QWindowSystemInterface::registerTouchDevice(device);
+    QTouchDevice *device = QTest::createTouchDevice();
     QTouchEvent touchBegin(QEvent::TouchBegin, device, Qt::NoModifier, Qt::TouchPointPressed, touchPoints);
 
     qApp->sendEvent(&scene, &touchBegin);

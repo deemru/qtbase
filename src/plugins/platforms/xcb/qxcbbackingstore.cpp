@@ -168,12 +168,13 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
         return;
 
     int id = shmget(IPC_PRIVATE, segmentSize, IPC_CREAT | 0600);
-    if (id == -1)
+    if (id == -1) {
         qWarning("QXcbShmImage: shmget() failed (%d: %s) for size %d (%dx%d)",
                  errno, strerror(errno), segmentSize, size.width(), size.height());
-    else
-        m_shm_info.shmid = id;
-    m_shm_info.shmaddr = m_xcb_image->data = (quint8 *)shmat (m_shm_info.shmid, 0, 0);
+    } else {
+        m_shm_info.shmaddr = m_xcb_image->data = (quint8 *)shmat(id, 0, 0);
+    }
+    m_shm_info.shmid = id;
     m_shm_info.shmseg = xcb_generate_id(xcb_connection());
 
     const xcb_query_extension_reply_t *shm_reply = xcb_get_extension_data(xcb_connection(), &xcb_shm_id);
@@ -184,9 +185,10 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
     if (!shm_present || error || id == -1) {
         free(error);
 
-        shmdt(m_shm_info.shmaddr);
-        shmctl(m_shm_info.shmid, IPC_RMID, 0);
-
+        if (id != -1) {
+            shmdt(m_shm_info.shmaddr);
+            shmctl(m_shm_info.shmid, IPC_RMID, 0);
+        }
         m_shm_info.shmaddr = 0;
 
         m_xcb_image->data = (uint8_t *)malloc(segmentSize);
@@ -223,14 +225,14 @@ bool QXcbShmImage::scroll(const QRegion &area, int dx, int dy)
         preparePaint(area);
 
     const QPoint delta(dx, dy);
-    foreach (const QRect &rect, area.rects())
+    for (const QRect &rect : area)
         qt_scrollRectInImage(*image(), rect, delta);
 
     if (m_xcb_pixmap) {
         flushPixmap(area);
         ensureGC(m_xcb_pixmap);
         const QRect bounds(QPoint(0, 0), size());
-        foreach (const QRect &src, area.rects()) {
+        for (const QRect &src : area) {
             const QRect dst = src.translated(delta).intersected(bounds);
             Q_XCB_CALL(xcb_copy_area(xcb_connection(),
                                      m_xcb_pixmap,
@@ -531,11 +533,9 @@ void QXcbBackingStore::beginPaint(const QRegion &region)
     if (m_image->hasAlpha()) {
         QPainter p(paintDevice());
         p.setCompositionMode(QPainter::CompositionMode_Source);
-        const QVector<QRect> rects = region.rects();
         const QColor blank = Qt::transparent;
-        for (QVector<QRect>::const_iterator it = rects.begin(); it != rects.end(); ++it) {
-            p.fillRect(*it, blank);
-        }
+        for (const QRect &rect : region)
+            p.fillRect(rect, blank);
     }
 }
 
@@ -555,22 +555,21 @@ void QXcbBackingStore::endPaint()
 
     // Slow path: the paint device was m_rgbImage. Now copy with swapping red
     // and blue into m_image.
-    const QVector<QRect> rects = region.rects();
-    if (rects.isEmpty())
+    auto it = region.begin();
+    const auto end = region.end();
+    if (it == end)
         return;
     QPainter p(m_image->image());
-    for (QVector<QRect>::const_iterator it = rects.begin(); it != rects.end(); ++it) {
+    while (it != end) {
         const QRect rect = *it;
         p.drawImage(rect.topLeft(), m_rgbImage.copy(rect).rgbSwapped());
     }
 }
 
-#ifndef QT_NO_OPENGL
 QImage QXcbBackingStore::toImage() const
 {
     return m_image && m_image->image() ? *m_image->image() : QImage();
 }
-#endif
 
 QPlatformGraphicsBuffer *QXcbBackingStore::graphicsBuffer() const
 {

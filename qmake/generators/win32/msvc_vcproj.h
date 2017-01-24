@@ -63,7 +63,8 @@ public:
     static bool hasBuiltinCompiler(const QString &file);
 
     QHash<QString, QStringList> extraCompilerSources;
-    QHash<QString, QStringList> extraCompilerOutputs;
+    QHash<QString, QString> extraCompilerOutputs;
+    const QString customBuildToolFilterFileSuffix;
     bool usePCH;
     VCProjectWriter *projectWriter;
 
@@ -129,6 +130,7 @@ private:
     bool isStandardSuffix(const QString &suffix) const;
     ProString firstInputFileName(const ProString &extraCompilerName) const;
     QString firstExpandedOutputFileName(const ProString &extraCompilerName);
+    void createCustomBuildToolFakeFile(const QString &cbtFilePath, const QString &realOutFilePath);
     friend class VCFilter;
 };
 

@@ -260,20 +260,28 @@ QJsonDocument QJsonDocument::fromBinaryData(const QByteArray &data, DataValidati
  Creates a QJsonDocument from the QVariant \a variant.
 
  If the \a variant contains any other type than a QVariantMap,
- QVariantList or QStringList, the returned document
- document is invalid.
+ QVariantHash, QVariantList or QStringList, the returned document is invalid.
 
  \sa toVariant()
  */
 QJsonDocument QJsonDocument::fromVariant(const QVariant &variant)
 {
     QJsonDocument doc;
-    if (variant.type() == QVariant::Map) {
+    switch (variant.type()) {
+    case QVariant::Map:
         doc.setObject(QJsonObject::fromVariantMap(variant.toMap()));
-    } else if (variant.type() == QVariant::List) {
+        break;
+    case QVariant::Hash:
+        doc.setObject(QJsonObject::fromVariantHash(variant.toHash()));
+        break;
+    case QVariant::List:
         doc.setArray(QJsonArray::fromVariantList(variant.toList()));
-    } else if (variant.type() == QVariant::StringList) {
+        break;
+    case QVariant::StringList:
         doc.setArray(QJsonArray::fromStringList(variant.toStringList()));
+        break;
+    default:
+        break;
     }
     return doc;
 }
@@ -342,10 +350,9 @@ QByteArray QJsonDocument::toJson() const
 #ifndef QT_JSON_READONLY
 QByteArray QJsonDocument::toJson(JsonFormat format) const
 {
-    if (!d)
-        return QByteArray();
-
     QByteArray json;
+    if (!d)
+        return json;
 
     if (d->header->root()->isArray())
         QJsonPrivate::Writer::arrayToJson(static_cast<QJsonPrivate::Array *>(d->header->root()), json, 0, (format == Compact));
@@ -357,16 +364,14 @@ QByteArray QJsonDocument::toJson(JsonFormat format) const
 #endif
 
 /*!
- Parses a UTF-8 encoded JSON document and creates a QJsonDocument
+ Parses \a json as a UTF-8 encoded JSON document, and creates a QJsonDocument
  from it.
 
- \a json contains the json document to be parsed.
+ Returns a valid (non-null) QJsonDocument if the parsing succeeds. If it fails,
+ the returned document will be null, and the optional \a error variable will contain
+ further details about the error.
 
- The optional \a error variable can be used to pass in a QJsonParseError data
- structure that will contain information about possible errors encountered during
- parsing.
-
- \sa toJson(), QJsonParseError
+ \sa toJson(), QJsonParseError, isNull()
  */
 QJsonDocument QJsonDocument::fromJson(const QByteArray &json, QJsonParseError *error)
 {

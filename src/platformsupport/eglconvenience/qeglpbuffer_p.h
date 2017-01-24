@@ -52,8 +52,7 @@
 //
 
 #include <qpa/qplatformoffscreensurface.h>
-#include <QtPlatformSupport/private/qeglplatformcontext_p.h>
-#include <EGL/egl.h>
+#include <QtEglSupport/private/qeglplatformcontext_p.h>
 
 QT_BEGIN_NAMESPACE
 

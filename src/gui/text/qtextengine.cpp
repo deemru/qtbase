@@ -37,6 +37,7 @@
 **
 ****************************************************************************/
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "qdebug.h"
 #include "qtextformat.h"
 #include "qtextformat_p.h"
@@ -508,7 +509,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                 case QChar::DirAN:
                     if (eor >= 0)
                         appendItems(analysis, sor, eor, control, dir);
-                    // fall through
+                    Q_FALLTHROUGH();
                 case QChar::DirR:
                 case QChar::DirAL:
                     dir = QChar::DirR; eor = current; status.eor = QChar::DirR; break;
@@ -564,7 +565,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                             status.eor = QChar::DirON;
                             dir = QChar::DirAN;
                         }
-                        // fall through
+                        Q_FALLTHROUGH();
                     case QChar::DirEN:
                     case QChar::DirL:
                         eor = current;
@@ -744,7 +745,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                 status.last = QChar::DirL;
                 break;
             }
-            // fall through
+            Q_FALLTHROUGH();
         default:
             status.last = dirCurrent;
         }
@@ -837,13 +838,13 @@ enum JustificationClass {
     Justification_Arabic_Kashida  = 13   // User-inserted Kashida(U+0640)
 };
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 
 /*
     Adds an inter character justification opportunity after the number or letter
     character and a space justification opportunity after the space character.
 */
-static inline void qt_getDefaultJustificationOpportunities(const ushort *string, int length, QGlyphLayout g, ushort *log_clusters, int spaceAs)
+static inline void qt_getDefaultJustificationOpportunities(const ushort *string, int length, const QGlyphLayout &g, ushort *log_clusters, int spaceAs)
 {
     int str_pos = 0;
     while (str_pos < length) {
@@ -877,7 +878,7 @@ static inline void qt_getDefaultJustificationOpportunities(const ushort *string,
     }
 }
 
-static inline void qt_getJustificationOpportunities(const ushort *string, int length, const QScriptItem &si, QGlyphLayout g, ushort *log_clusters)
+static inline void qt_getJustificationOpportunities(const ushort *string, int length, const QScriptItem &si, const QGlyphLayout &g, ushort *log_clusters)
 {
     Q_ASSERT(length > 0 && g.numGlyphs > 0);
 
@@ -916,7 +917,7 @@ static inline void qt_getJustificationOpportunities(const ushort *string, int le
     qt_getDefaultJustificationOpportunities(string, length, g, log_clusters, spaceAs);
 }
 
-#endif // QT_ENABLE_HARFBUZZ_NG
+#endif // harfbuzz
 
 
 // shape all the items that intersect with the line, taking tab widths into account to find out what text actually fits in the line.
@@ -928,7 +929,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
     if (item == -1)
         return;
 
-    const int end = findItem(line.from + line.length - 1, item);
+    const int end = findItem(line.from + line.length + line.trailingSpaces - 1, item);
     for ( ; item <= end; ++item) {
         QScriptItem &si = layoutData->items[item];
         if (si.analysis.flags == QScriptAnalysis::Tab) {
@@ -950,7 +951,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
     }
 }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 extern bool qt_useHarfbuzzNG(); // defined in qfontengine.cpp
 #endif
 
@@ -1063,7 +1064,7 @@ void QTextEngine::shapeText(int item) const
             letterSpacing *= font.d->dpi / qt_defaultDpiY();
     }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     if (Q_LIKELY(qt_useHarfbuzzNG()))
         si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled, letterSpacing != 0);
     else
@@ -1079,7 +1080,7 @@ void QTextEngine::shapeText(int item) const
 
     QGlyphLayout glyphs = shapedGlyphs(&si);
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     if (Q_LIKELY(qt_useHarfbuzzNG()))
         qt_getJustificationOpportunities(string, itemLength, si, glyphs, logClusters(&si));
 #endif
@@ -1119,7 +1120,7 @@ void QTextEngine::shapeText(int item) const
         si.width += glyphs.advances[i] * !glyphs.attributes[i].dontPrint;
 }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 
 QT_BEGIN_INCLUDE_NAMESPACE
 
@@ -1292,9 +1293,7 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
 
 #ifdef Q_OS_DARWIN
         if (actualFontEngine->type() == QFontEngine::Mac) {
-            // CTRunGetPosition has a bug which applies matrix on 10.6, so we disable
-            // scaling the advances for this particular version
-            if (QSysInfo::MacintoshVersion != QSysInfo::MV_10_6 && actualFontEngine->fontDef.stretch != 100) {
+            if (actualFontEngine->fontDef.stretch != 100) {
                 QFixed stretch = QFixed(int(actualFontEngine->fontDef.stretch)) / QFixed(100);
                 for (uint i = 0; i < num_glyphs; ++i)
                     g.advances[i] *= stretch;
@@ -1315,7 +1314,7 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
     return glyphs_shaped;
 }
 
-#endif // QT_ENABLE_HARFBUZZ_NG
+#endif // harfbuzz
 
 
 QT_BEGIN_INCLUDE_NAMESPACE
@@ -1569,12 +1568,13 @@ void QTextEngine::validate() const
     layoutData = new LayoutData();
     if (block.docHandle()) {
         layoutData->string = block.text();
-        if (block.next().isValid()) {
-            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
-                layoutData->string += QChar(0xb6);
-        } else if (option.flags() & QTextOption::ShowDocumentTerminator) {
+        const bool nextBlockValid = block.next().isValid();
+        if (!nextBlockValid && option.flags() & QTextOption::ShowDocumentTerminator) {
             layoutData->string += QChar(0xA7);
+        } else if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+            layoutData->string += QLatin1Char(nextBlockValid ? 0xb6 : 0x20);
         }
+
     } else {
         layoutData->string = text;
     }
@@ -1645,8 +1645,14 @@ void QTextEngine::itemize() const
             if (analysis->bidiLevel % 2)
                 --analysis->bidiLevel;
             analysis->flags = QScriptAnalysis::LineOrParagraphSeparator;
-            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
+            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+                const int offset = uc - string;
+                layoutData->string.detach();
+                string = reinterpret_cast<const ushort *>(layoutData->string.unicode());
+                uc = string + offset;
+                e = uc + length;
                 *const_cast<ushort*>(uc) = 0x21B5; // visual line separator
+            }
             break;
         case QChar::Tabulation:
             analysis->flags = QScriptAnalysis::Tab;
@@ -1659,12 +1665,12 @@ void QTextEngine::itemize() const
                 analysis->bidiLevel = control.baseLevel();
                 break;
             }
-        // fall through
+            Q_FALLTHROUGH();
         default:
             analysis->flags = QScriptAnalysis::None;
             break;
         }
-#ifndef QT_ENABLE_HARFBUZZ_NG
+#if !QT_CONFIG(harfbuzz)
         analysis->script = hbscript_to_script(script_to_hbscript(analysis->script));
 #endif
         ++uc;
@@ -1673,7 +1679,7 @@ void QTextEngine::itemize() const
     if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
         (analysis-1)->flags = QScriptAnalysis::LineOrParagraphSeparator; // to exclude it from width
     }
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     analysis = scriptAnalysis.data();
     if (qt_useHarfbuzzNG()) {
         // ### pretend HB-old behavior for now
@@ -2062,6 +2068,9 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     font = font.resolve(fnt);
                 }
                 engine = font.d->engineForScript(script);
+                if (engine)
+                    engine->ref.ref();
+
                 QTextCharFormat::VerticalAlignment valign = f.verticalAlignment();
                 if (valign == QTextCharFormat::AlignSuperScript || valign == QTextCharFormat::AlignSubScript) {
                     if (font.pointSize() != -1)
@@ -2069,16 +2078,14 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     else
                         font.setPixelSize((font.pixelSize() * 2) / 3);
                     scaledEngine = font.d->engineForScript(script);
+                    if (scaledEngine)
+                        scaledEngine->ref.ref();
                 }
 
-                if (engine)
-                    engine->ref.ref();
                 if (feCache.prevFontEngine)
                     releaseCachedFontEngine(feCache.prevFontEngine);
                 feCache.prevFontEngine = engine;
 
-                if (scaledEngine)
-                    scaledEngine->ref.ref();
                 if (feCache.prevScaledFontEngine)
                     releaseCachedFontEngine(feCache.prevScaledFontEngine);
                 feCache.prevScaledFontEngine = scaledEngine;
@@ -2246,7 +2253,6 @@ void QTextEngine::justify(const QScriptLine &line)
             case Justification_Prohibited:
                 break;
             case Justification_Space:
-                // fall through
             case Justification_Arabic_Space:
                 if (kashida_pos >= 0) {
 //                     qDebug("kashida position at %d in word", kashida_pos);
@@ -2259,7 +2265,7 @@ void QTextEngine::justify(const QScriptLine &line)
                 }
                 kashida_pos = -1;
                 kashida_type = Justification_Arabic_Normal;
-                // fall through
+                Q_FALLTHROUGH();
             case Justification_Character:
                 set(&justificationPoints[nPoints++], justification, g.mid(i), fontEngine(si));
                 maxJustify = qMax(maxJustify, justification);
@@ -2707,7 +2713,7 @@ static QString stringMidRetainingBidiCC(const QString &string,
             suffix += c;
     }
 
-    return prefix + ellidePrefix + string.mid(midStart, midLength) + ellideSuffix + suffix;
+    return prefix + ellidePrefix + string.midRef(midStart, midLength) + ellideSuffix + suffix;
 }
 
 QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int flags, int from, int count) const
@@ -2870,7 +2876,7 @@ QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int
         if (prevCharJoins(layoutData->string, rightPos))
             ellipsisText.append(QChar(0x200d) /* ZWJ */);
 
-        return layoutData->string.mid(from, leftPos - from) + ellipsisText + layoutData->string.mid(rightPos, to - rightPos);
+        return layoutData->string.midRef(from, leftPos - from) + ellipsisText + layoutData->string.midRef(rightPos, to - rightPos);
     }
 
     return layoutData->string.mid(from, to - from);
@@ -2962,9 +2968,8 @@ QFixed QTextEngine::calculateTabWidth(int item, QFixed x) const
                     switch (tabSpec.type) {
                     case QTextOption::CenterTab:
                         length /= 2;
-                        // fall through
+                        Q_FALLTHROUGH();
                     case QTextOption::DelimiterTab:
-                        // fall through
                     case QTextOption::RightTab:
                         tab = QFixed::fromReal(tabSpec.position) * dpiScale - length;
                         if (tab < x) // default to tab taking no space
@@ -3274,7 +3279,7 @@ int QTextEngine::endOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.last();
+        return insertionPoints.constLast();
     return 0;
 }
 
@@ -3284,7 +3289,7 @@ int QTextEngine::beginningOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.first();
+        return insertionPoints.constFirst();
     return 0;
 }
 
@@ -3512,7 +3517,7 @@ QTextItemInt QTextItemInt::midItem(QFontEngine *fontEngine, int firstGlyphIndex,
 }
 
 
-QTransform qt_true_matrix(qreal w, qreal h, QTransform x)
+QTransform qt_true_matrix(qreal w, qreal h, const QTransform &x)
 {
     QRectF rect = x.mapRect(QRectF(0, 0, w, h));
     return x * QTransform::fromTranslate(-rect.x(), -rect.y());

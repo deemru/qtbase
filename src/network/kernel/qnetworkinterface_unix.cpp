@@ -404,6 +404,9 @@ static QList<QNetworkInterfacePrivate *> createInterfaces(ifaddrs *rawList)
             if (seenIndexes.contains(ifindex))
                 continue;
 
+            seenInterfaces.insert(name);
+            seenIndexes.append(ifindex);
+
             QNetworkInterfacePrivate *iface = new QNetworkInterfacePrivate;
             interfaces << iface;
             iface->name = name;
@@ -488,7 +491,7 @@ static QList<QNetworkInterfacePrivate *> interfaceListing()
     interfaces = createInterfaces(interfaceListing);
     for (ifaddrs *ptr = interfaceListing; ptr; ptr = ptr->ifa_next) {
         // Find the interface
-        QString name = QString::fromLatin1(ptr->ifa_name);
+        QLatin1String name(ptr->ifa_name);
         QNetworkInterfacePrivate *iface = 0;
         QList<QNetworkInterfacePrivate *>::Iterator if_it = interfaces.begin();
         for ( ; if_it != interfaces.end(); ++if_it)

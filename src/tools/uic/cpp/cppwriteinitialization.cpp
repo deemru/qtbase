@@ -84,10 +84,14 @@ namespace {
         const QHash<QString, DomProperty *> properties = propertyMap(node->elementProperty());
                 output << "new QSpacerItem(";
 
+        int w = 0;
+        int h = 0;
         if (properties.contains(QLatin1String("sizeHint"))) {
             const DomSize *sizeHint = properties.value(QLatin1String("sizeHint"))->elementSize();
-            output << sizeHint->elementWidth() << ", " << sizeHint->elementHeight() << ", ";
+            w = sizeHint->elementWidth();
+            h = sizeHint->elementHeight();
         }
+        output << w << ", " << h << ", ";
 
         // size type
         QString sizeType = properties.contains(QLatin1String("sizeType"))  ?
@@ -770,22 +774,22 @@ void WriteInitialization::acceptWidget(DomWidget *node)
     //
     // Special handling for qtableview/qtreeview fake header attributes
     //
-    static const QStringList realPropertyNames =
-            (QStringList() << QLatin1String("visible")
-                           << QLatin1String("cascadingSectionResizes")
-                           << QLatin1String("defaultSectionSize")
-                           << QLatin1String("highlightSections")
-                           << QLatin1String("minimumSectionSize")
-                           << QLatin1String("showSortIndicator")
-                           << QLatin1String("stretchLastSection"));
+    static const QLatin1String realPropertyNames[] = {
+        QLatin1String("visible"),
+        QLatin1String("cascadingSectionResizes"),
+        QLatin1String("defaultSectionSize"),
+        QLatin1String("highlightSections"),
+        QLatin1String("minimumSectionSize"),
+        QLatin1String("showSortIndicator"),
+        QLatin1String("stretchLastSection"),
+    };
 
     if (m_uic->customWidgetsInfo()->extends(className, QLatin1String("QTreeView"))
                || m_uic->customWidgetsInfo()->extends(className, QLatin1String("QTreeWidget"))) {
         DomPropertyList headerProperties;
-        for (const QString &realPropertyName : realPropertyNames) {
-            const QString upperPropertyName = realPropertyName.at(0).toUpper()
-                                              + realPropertyName.mid(1);
-            const QString fakePropertyName = QLatin1String("header") + upperPropertyName;
+        for (auto realPropertyName : realPropertyNames) {
+            const QString fakePropertyName = QLatin1String("header")
+                    + QChar(realPropertyName.at(0)).toUpper() + realPropertyName.mid(1);
             if (DomProperty *fakeProperty = attributes.value(fakePropertyName)) {
                 fakeProperty->setAttributeName(realPropertyName);
                 headerProperties << fakeProperty;
@@ -797,16 +801,16 @@ void WriteInitialization::acceptWidget(DomWidget *node)
     } else if (m_uic->customWidgetsInfo()->extends(className, QLatin1String("QTableView"))
                || m_uic->customWidgetsInfo()->extends(className, QLatin1String("QTableWidget"))) {
 
-        static const QStringList headerPrefixes =
-                (QStringList() << QLatin1String("horizontalHeader")
-                               << QLatin1String("verticalHeader"));
+        static const QLatin1String headerPrefixes[] = {
+            QLatin1String("horizontalHeader"),
+            QLatin1String("verticalHeader"),
+        };
 
-        for (const QString &headerPrefix : headerPrefixes) {
+        for (auto headerPrefix : headerPrefixes) {
             DomPropertyList headerProperties;
-            for (const QString &realPropertyName : realPropertyNames) {
-                const QString upperPropertyName = realPropertyName.at(0).toUpper()
-                                                  + realPropertyName.mid(1);
-                const QString fakePropertyName = headerPrefix + upperPropertyName;
+            for (auto realPropertyName : realPropertyNames) {
+                const QString fakePropertyName = headerPrefix
+                        + QChar(realPropertyName.at(0)).toUpper() + realPropertyName.mid(1);
                 if (DomProperty *fakeProperty = attributes.value(fakePropertyName)) {
                     fakeProperty->setAttributeName(realPropertyName);
                     headerProperties << fakeProperty;
@@ -1255,14 +1259,14 @@ void WriteInitialization::writeProperties(const QString &varName,
         QString setFunction;
 
         if (stdset) {
-            setFunction = QLatin1String("->set");
-            setFunction += propertyName.left(1).toUpper();
-            setFunction += propertyName.mid(1);
-            setFunction += QLatin1Char('(');
+            setFunction = QLatin1String("->set")
+                        + propertyName.left(1).toUpper()
+                        + propertyName.midRef(1)
+                        + QLatin1Char('(');
         } else {
-            setFunction = QLatin1String("->setProperty(\"");
-            setFunction += propertyName;
-            setFunction += QLatin1String("\", QVariant");
+            setFunction += QLatin1String("->setProperty(\"")
+                         + propertyName
+                         + QLatin1String("\", QVariant");
             if (p->kind() == DomProperty::Enum)
                 setFunction += QLatin1String("::fromValue");
             setFunction += QLatin1Char('(');
@@ -1286,9 +1290,9 @@ void WriteInitialization::writeProperties(const QString &varName,
                 if (stdset)
                     propertyValue = fixString(p->elementCstring(), m_dindent);
                 else {
-                    propertyValue = QLatin1String("QByteArray(");
-                    propertyValue += fixString(p->elementCstring(), m_dindent);
-                    propertyValue += QLatin1Char(')');
+                    propertyValue = QLatin1String("QByteArray(")
+                                  + fixString(p->elementCstring(), m_dindent)
+                                  + QLatin1Char(')');
                 }
             }
             break;
@@ -1304,11 +1308,8 @@ void WriteInitialization::writeProperties(const QString &varName,
             break;
         case DomProperty::Enum:
             propertyValue = p->elementEnum();
-            if (!propertyValue.contains(QLatin1String("::"))) {
-                QString scope  = className;
-                scope += QLatin1String("::");
-                propertyValue.prepend(scope);
-            }
+            if (!propertyValue.contains(QLatin1String("::")))
+                propertyValue = className + QLatin1String("::") + propertyValue;
             break;
         case DomProperty::Set:
             propertyValue = p->elementSet();
@@ -1716,9 +1717,7 @@ void WriteInitialization::writeColorGroup(DomColorGroup *colorGroup, const QStri
 
     // new format
     const QList<DomColorRole *> colorRoles = colorGroup->elementColorRole();
-    QListIterator<DomColorRole *> itRole(colorRoles);
-    while (itRole.hasNext()) {
-        const DomColorRole *colorRole = itRole.next();
+    for (const DomColorRole *colorRole : colorRoles) {
         if (colorRole->hasAttributeRole()) {
             const QString brushName = writeBrushInitialization(colorRole->elementBrush());
             m_output << m_indent << paletteName << ".setBrush(" << group
@@ -1795,9 +1794,7 @@ void WriteInitialization::writeBrush(const DomBrush *brush, const QString &brush
         }
 
        const  QList<DomGradientStop *> stops = gradient->elementGradientStop();
-        QListIterator<DomGradientStop *> it(stops);
-        while (it.hasNext()) {
-            const DomGradientStop *stop = it.next();
+        for (const DomGradientStop *stop : stops) {
             const DomColor *color = stop->elementColor();
             m_output << m_indent << gradientName << ".setColorAt("
                 << stop->attributePosition() << ", "
@@ -1898,31 +1895,29 @@ QString WriteInitialization::pixCall(const QString &t, const QString &text) cons
         if (m_option.extractImages) {
             const QString format = image->elementData()->attributeFormat();
             const QString extension = format.left(format.indexOf(QLatin1Char('.'))).toLower();
-            QString rc = QLatin1String("QPixmap(QString::fromUtf8(\":/");
-            rc += m_generatedClass;
-            rc += QLatin1String("/images/");
-            rc += text;
-            rc += QLatin1Char('.');
-            rc += extension;
-            rc += QLatin1String("\"))");
-            return rc;
+            return QLatin1String("QPixmap(QString::fromUtf8(\":/")
+                 + m_generatedClass
+                 + QLatin1String("/images/")
+                 + text
+                 + QLatin1Char('.')
+                 + extension
+                 + QLatin1String("\"))");
         }
-        QString rc = WriteIconInitialization::iconFromDataFunction();
-        rc += QLatin1Char('(');
-        rc += text;
-        rc += QLatin1String("_ID)");
-        return rc;
+        return WriteIconInitialization::iconFromDataFunction()
+             + QLatin1Char('(')
+             + text
+             + QLatin1String("_ID)");
     }
 
     QString pixFunc = m_uic->pixmapFunction();
     if (pixFunc.isEmpty())
         pixFunc = QLatin1String("QString::fromUtf8");
 
-    type += QLatin1Char('(');
-    type += pixFunc;
-    type += QLatin1Char('(');
-    type += fixString(text, m_dindent);
-    type += QLatin1String("))");
+    type += QLatin1Char('(')
+          + pixFunc
+          + QLatin1Char('(')
+          + fixString(text, m_dindent)
+          + QLatin1String("))");
     return type;
 }
 
@@ -2028,7 +2023,7 @@ void WriteInitialization::addInitializer(Item *item,
         const QString &name, int column, const QString &value, const QString &directive, bool translatable) const
 {
     if (!value.isEmpty())
-        item->addSetter(QLatin1String("->set") + name.at(0).toUpper() + name.mid(1) +
+        item->addSetter(QLatin1String("->set") + name.at(0).toUpper() + name.midRef(1) +
                     QLatin1Char('(') + (column < 0 ? QString() : QString::number(column) +
                     QLatin1String(", ")) + value + QLatin1String(");"), directive, translatable);
 }
@@ -2312,27 +2307,24 @@ QString WriteInitialization::trCall(const QString &str, const QString &commentHi
         return QLatin1String("QString()");
 
     QString result;
-    const QString comment = commentHint.isEmpty() ? QString(QLatin1Char('0')) : fixString(commentHint, m_dindent);
+    const QString comment = commentHint.isEmpty() ? QString(QLatin1String("Q_NULLPTR")) : fixString(commentHint, m_dindent);
 
     if (m_option.translateFunction.isEmpty()) {
         if (m_option.idBased) {
-            result = QLatin1String("qtTrId(");
+            result += QLatin1String("qtTrId(");
         } else {
-            result = QLatin1String("QApplication::translate(\"");
-            result += m_generatedClass;
-            result += QLatin1Char('"');
-            result += QLatin1String(", ");
+            result += QLatin1String("QApplication::translate(\"")
+                    + m_generatedClass
+                    + QLatin1String("\", ");
         }
     } else {
-        result = m_option.translateFunction;
-        result += QLatin1Char('(');
+        result += m_option.translateFunction + QLatin1Char('(');
     }
 
     result += fixString(str, m_dindent);
 
     if (!m_option.idBased) {
-        result += QLatin1String(", ");
-        result += comment;
+        result += QLatin1String(", ") + comment;
     }
 
     result += QLatin1Char(')');
@@ -2473,10 +2465,8 @@ void WriteInitialization::acceptWidgetScripts(const DomScripts &widgetScripts, D
     QString script;
     for (const DomScript *domScript : qAsConst(scripts)) {
         const QString snippet = domScript->text();
-        if (!snippet.isEmpty()) {
-            script += snippet.trimmed();
-            script += QLatin1Char('\n');
-        }
+        if (!snippet.isEmpty())
+            script += QStringRef(&snippet).trimmed() + QLatin1Char('\n');
     }
     if (script.isEmpty())
         return;

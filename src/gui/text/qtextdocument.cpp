@@ -94,7 +94,7 @@ bool Qt::mightBeRichText(const QString& text)
         ++start;
 
     // skip a leading <?xml ... ?> as for example with xhtml
-    if (text.mid(start, 5) == QLatin1String("<?xml")) {
+    if (text.midRef(start, 5).compare(QLatin1String("<?xml")) == 0) {
         while (start < text.length()) {
             if (text.at(start) == QLatin1Char('?')
                 && start + 2 < text.length()
@@ -109,12 +109,12 @@ bool Qt::mightBeRichText(const QString& text)
             ++start;
     }
 
-    if (text.mid(start, 5).toLower() == QLatin1String("<!doc"))
+    if (text.midRef(start, 5).compare(QLatin1String("<!doc"), Qt::CaseInsensitive) == 0)
         return true;
     int open = start;
     while (open < text.length() && text.at(open) != QLatin1Char('<')
             && text.at(open) != QLatin1Char('\n')) {
-        if (text.at(open) == QLatin1Char('&') &&  text.mid(open+1,3) == QLatin1String("lt;"))
+        if (text.at(open) == QLatin1Char('&') &&  text.midRef(open + 1, 3) == QLatin1String("lt;"))
             return true; // support desperate attempt of user to see <...>
         ++open;
     }
@@ -1315,7 +1315,7 @@ QTextCursor QTextDocument::find(const QString &subString, int from, FindFlags op
     //do not include the character given in the position.
     if (options & FindBackward) {
         --pos ;
-        if (pos < subString.size())
+        if (pos < 0)
             return QTextCursor();
     }
 
@@ -1765,6 +1765,10 @@ QTextBlock QTextDocument::lastBlock() const
 /*!
     \property QTextDocument::pageSize
     \brief the page size that should be used for laying out the document
+
+    The units are determined by the underlying paint device. The size is
+    measured in logical pixels when painting to the screen, and in points
+    (1/72 inch) when painting to a printer.
 
     By default, for a newly-created, empty document, this property contains
     an undefined size.
@@ -2430,7 +2434,7 @@ bool QTextHtmlExporter::emitCharFormatStyle(const QTextCharFormat &format)
         html += QLatin1Char(';');
         attributesEmitted = true;
     } else {
-        html.chop(qstrlen(decorationTag.latin1()));
+        html.chop(decorationTag.size());
     }
 
     if (format.foreground() != defaultCharFormat.foreground()
@@ -2665,7 +2669,7 @@ void QTextHtmlExporter::emitFragment(const QTextFragment &fragment)
     if (attributesEmitted)
         html += QLatin1String("\">");
     else
-        html.chop(qstrlen(styleTag.latin1()));
+        html.chop(styleTag.size());
 
     if (isObject) {
         for (int i = 0; isImage && i < txt.length(); ++i) {
@@ -2700,13 +2704,8 @@ void QTextHtmlExporter::emitFragment(const QTextFragment &fragment)
         // split for [\n{LineSeparator}]
         QString forcedLineBreakRegExp = QString::fromLatin1("[\\na]");
         forcedLineBreakRegExp[3] = QChar::LineSeparator;
-
-        const QStringList lines = txt.split(QRegExp(forcedLineBreakRegExp));
-        for (int i = 0; i < lines.count(); ++i) {
-            if (i > 0)
-                html += QLatin1String("<br />"); // space on purpose for compatibility with Netscape, Lynx & Co.
-            html += lines.at(i);
-        }
+        // space in BR on purpose for compatibility with old-fashioned browsers
+        html += txt.replace(QRegExp(forcedLineBreakRegExp), QLatin1String("<br />"));
     }
 
     if (attributesEmitted)
@@ -3140,7 +3139,7 @@ void QTextHtmlExporter::emitTable(const QTextTable *table)
     html += QLatin1String("</table>");
 }
 
-void QTextHtmlExporter::emitFrame(QTextFrame::Iterator frameIt)
+void QTextHtmlExporter::emitFrame(const QTextFrame::Iterator &frameIt)
 {
     if (!frameIt.atEnd()) {
         QTextFrame::Iterator next = frameIt;
@@ -3227,7 +3226,7 @@ void QTextHtmlExporter::emitFrameStyle(const QTextFrameFormat &format, FrameType
                     QString::number(format.rightMargin()));
 
     if (html.length() == originalHtmlLength) // nothing emitted?
-        html.chop(qstrlen(styleAttribute.latin1()));
+        html.chop(styleAttribute.size());
     else
         html += QLatin1Char('\"');
 }

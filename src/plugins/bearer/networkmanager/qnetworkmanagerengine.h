@@ -44,9 +44,9 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
@@ -74,43 +74,36 @@ public:
 
     bool networkManagerAvailable() const;
 
-    QString getInterfaceFromId(const QString &id);
-    bool hasIdentifier(const QString &id);
+    QString getInterfaceFromId(const QString &id) override;
+    bool hasIdentifier(const QString &id) override;
 
-    void connectToId(const QString &id);
-    void disconnectFromId(const QString &id);
+    void connectToId(const QString &id) override;
+    void disconnectFromId(const QString &id) override;
 
     Q_INVOKABLE void initialize();
     Q_INVOKABLE void requestUpdate();
 
-    QNetworkSession::State sessionStateForId(const QString &id);
+    QNetworkSession::State sessionStateForId(const QString &id) override;
 
-    quint64 bytesWritten(const QString &id);
-    quint64 bytesReceived(const QString &id);
-    quint64 startTime(const QString &id);
+    quint64 bytesWritten(const QString &id) override;
+    quint64 bytesReceived(const QString &id) override;
+    quint64 startTime(const QString &id) override;
 
-    QNetworkConfigurationManager::Capabilities capabilities() const;
+    QNetworkConfigurationManager::Capabilities capabilities() const override;
 
-    QNetworkSessionPrivate *createSessionBackend();
+    QNetworkSessionPrivate *createSessionBackend() override;
 
-    QNetworkConfigurationPrivatePointer defaultConfiguration();
+    QNetworkConfigurationPrivatePointer defaultConfiguration() override;
 
 private Q_SLOTS:
     void interfacePropertiesChanged(const QMap<QString, QVariant> &properties);
     void activeConnectionPropertiesChanged(const QMap<QString, QVariant> &properties);
-
-    void deviceAdded(const QDBusObjectPath &path);
-    void deviceRemoved(const QDBusObjectPath &path);
 
     void newConnection(const QDBusObjectPath &path, QNetworkManagerSettings *settings = 0);
     void removeConnection(const QString &path);
     void updateConnection();
     void activationFinished(QDBusPendingCallWatcher *watcher);
     void deviceConnectionsChanged(const QStringList &activeConnectionsList);
-
-    void newAccessPoint(const QString &path);
-    void removeAccessPoint(const QString &path);
-    void scanFinished();
 
     void wiredCarrierChanged(bool);
 
@@ -140,14 +133,14 @@ private:
 
     QOfonoManagerInterface *ofonoManager;
     QHash <QString, QOfonoDataConnectionManagerInterface *> ofonoContextManagers;
-    QNetworkConfiguration::BearerType currentBearerType(const QString &id);
-    QString contextName(const QString &path);
+    QNetworkConfiguration::BearerType currentBearerType(const QString &id) const;
+    QString contextName(const QString &path) const;
 
-    bool isConnectionActive(const QString &settingsPath);
+    bool isConnectionActive(const QString &settingsPath) const;
     QDBusServiceWatcher *ofonoWatcher;
     QDBusServiceWatcher *nmWatcher;
 
-    bool isActiveContext(const QString &contextPath);
+    bool isActiveContext(const QString &contextPath) const;
     bool nmAvailable;
     void setupConfigurations();
 };

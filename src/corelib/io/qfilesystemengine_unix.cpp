@@ -61,8 +61,15 @@
 #include <CoreServices/CoreServices.h>
 #endif
 
-#ifdef Q_OS_IOS
+#if defined(QT_PLATFORM_UIKIT)
 #include <MobileCoreServices/MobileCoreServices.h>
+#endif
+
+#if defined(Q_OS_DARWIN)
+// We cannot include <Foundation/Foundation.h> (it's an Objective-C header), but
+// we need these declarations:
+Q_FORWARD_DECLARE_OBJC_CLASS(NSString);
+extern "C" NSString *NSTemporaryDirectory();
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -101,13 +108,13 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
 
     if (suffix.length() > 0) {
         // First step: is the extension known ?
-        QCFType<CFStringRef> extensionRef = QCFString::toCFStringRef(suffix);
+        QCFType<CFStringRef> extensionRef = suffix.toCFString();
         QCFType<CFStringRef> uniformTypeIdentifier = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extensionRef, NULL);
         if (UTTypeConformsTo(uniformTypeIdentifier, kUTTypeBundle))
             return true;
 
         // Second step: check if an application knows the package type
-        QCFType<CFStringRef> path = QCFString::toCFStringRef(entry.filePath());
+        QCFType<CFStringRef> path = entry.filePath().toCFString();
         QCFType<CFURLRef> url = CFURLCreateWithFileSystemPath(0, path, kCFURLPOSIXPathStyle, true);
 
         UInt32 type, creator;
@@ -126,7 +133,7 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
         if (application) {
             QCFType<CFBundleRef> bundle = CFBundleCreate(kCFAllocatorDefault, application);
             CFStringRef identifier = CFBundleGetIdentifier(bundle);
-            QString applicationId = QCFString::toQString(identifier);
+            QString applicationId = QString::fromCFString(identifier);
             if (applicationId != QLatin1String("com.apple.finder"))
                 return true;
         }
@@ -182,8 +189,9 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link, 
 #endif
 
         if (!ret.startsWith(QLatin1Char('/'))) {
-            if (link.filePath().startsWith(QLatin1Char('/'))) {
-                ret.prepend(link.filePath().left(link.filePath().lastIndexOf(QLatin1Char('/')))
+            const QString linkFilePath = link.filePath();
+            if (linkFilePath.startsWith(QLatin1Char('/'))) {
+                ret.prepend(linkFilePath.leftRef(linkFilePath.lastIndexOf(QLatin1Char('/')))
                             + QLatin1Char('/'));
             } else {
                 ret.prepend(QDir::currentPath() + QLatin1Char('/'));
@@ -221,7 +229,7 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link, 
         if (!cfstr)
             return QFileSystemEntry();
 
-        return QFileSystemEntry(QCFString::toQString(cfstr));
+        return QFileSystemEntry(QString::fromCFString(cfstr));
     }
 #endif
     return QFileSystemEntry();
@@ -282,7 +290,7 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
     if (ret) {
         data.knownFlagsMask |= QFileSystemMetaData::ExistsAttribute;
         data.entryFlags |= QFileSystemMetaData::ExistsAttribute;
-        QString canonicalPath = QDir::cleanPath(QString::fromLocal8Bit(ret));
+        QString canonicalPath = QDir::cleanPath(QFile::decodeName(ret));
         free(ret);
         return QFileSystemEntry(canonicalPath);
     } else if (errno == ENOENT) { // file doesn't exist
@@ -411,7 +419,7 @@ QString QFileSystemEngine::bundleName(const QFileSystemEntry &entry)
     if (QCFType<CFDictionaryRef> dict = CFBundleCopyInfoDictionaryForURL(url)) {
         if (CFTypeRef name = (CFTypeRef)CFDictionaryGetValue(dict, kCFBundleNameKey)) {
             if (CFGetTypeID(name) == CFStringGetTypeID())
-                return QCFString::toQString((CFStringRef)name);
+                return QString::fromCFString((CFStringRef)name);
         }
     }
     return QString();
@@ -702,8 +710,17 @@ QString QFileSystemEngine::tempPath()
     return QLatin1String(QT_UNIX_TEMP_PATH_OVERRIDE);
 #else
     QString temp = QFile::decodeName(qgetenv("TMPDIR"));
-    if (temp.isEmpty())
-        temp = QLatin1String("/tmp");
+    if (temp.isEmpty()) {
+#if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
+        if (NSString *nsPath = NSTemporaryDirectory()) {
+            temp = QString::fromCFString((CFStringRef)nsPath);
+        } else {
+#else
+        {
+#endif
+            temp = QLatin1String("/tmp");
+        }
+    }
     return QDir::cleanPath(temp);
 #endif
 }

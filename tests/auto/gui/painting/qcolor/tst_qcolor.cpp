@@ -52,6 +52,7 @@ private slots:
     void name();
     void namehex_data();
     void namehex();
+    void setNamedColor_data();
     void setNamedColor();
 
     void constructNamedColorWithSpace();
@@ -106,7 +107,7 @@ private slots:
     void qrgba64Premultiply();
     void qrgba64Equivalence();
 
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     void setallowX11ColorNames();
 #endif
 };
@@ -279,6 +280,8 @@ void tst_QColor::name_data()
     QTest::newRow("global color darkMagenta") << QColor(Qt::darkMagenta) << "#800080" << QColor::HexRgb;
     QTest::newRow("global color darkYellow") << QColor(Qt::darkYellow) << "#808000" << QColor::HexRgb;
     QTest::newRow("transparent red") << QColor(255, 0, 0, 102) << "#66ff0000" << QColor::HexArgb;
+    QTest::newRow("fully_transparent_green_rgb") << QColor(0, 0, 255, 0) << "#0000ff" << QColor::HexRgb;
+    QTest::newRow("fully_transparent_green_argb") << QColor(0, 0, 255, 0) << "#000000ff" << QColor::HexArgb;
 }
 
 void tst_QColor::name()
@@ -523,25 +526,48 @@ static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 
 #undef rgb
 
-void tst_QColor::setNamedColor()
+void tst_QColor::setNamedColor_data()
 {
-    for (int i = 0; i < rgbTblSize; ++i) {
+    QTest::addColumn<QColor>("byCtor");
+    QTest::addColumn<QColor>("bySetNamedColor");
+    QTest::addColumn<QColor>("expected");
+
+    for (const auto e : rgbTbl) {
         QColor expected;
-        expected.setRgba(rgbTbl[i].value);
+        expected.setRgba(e.value);
 
-        QColor color;
-        color.setNamedColor(QLatin1String(rgbTbl[i].name));
-        QCOMPARE(color, expected);
+#define ROW(expr)                                \
+        do {                                     \
+            QColor bySetNamedColor;              \
+            bySetNamedColor.setNamedColor(expr); \
+            auto byCtor = QColor(expr);          \
+            QTest::newRow(e.name + QByteArrayLiteral(#expr)) \
+                << byCtor << bySetNamedColor << expected;    \
+        } while (0)                              \
+        /*end*/
 
+        ROW(QLatin1String(e.name));
+        ROW(QString(QLatin1String(e.name)));
         // name should be case insensitive
-        color.setNamedColor(QString(rgbTbl[i].name).toUpper());
-        QCOMPARE(color, expected);
-
+        ROW(QLatin1String(QByteArray(e.name).toUpper()));
+        ROW(QString(e.name).toUpper());
         // spaces should be ignored
-        color.setNamedColor(QString(rgbTbl[i].name).insert(1, ' '));
-        QCOMPARE(color, expected);
+        ROW(QLatin1String(QByteArray(e.name).insert(1, ' ')));
+        ROW(QString(e.name).insert(1, ' '));
+#undef ROW
     }
 }
+
+void tst_QColor::setNamedColor()
+{
+    QFETCH(QColor, byCtor);
+    QFETCH(QColor, bySetNamedColor);
+    QFETCH(QColor, expected);
+
+    QCOMPARE(byCtor, expected);
+    QCOMPARE(bySetNamedColor, expected);
+}
+
 
 void tst_QColor::constructNamedColorWithSpace()
 {
@@ -554,7 +580,7 @@ void tst_QColor::colorNames()
     QStringList all = QColor::colorNames();
     QCOMPARE(all.size(), rgbTblSize);
     for (int i = 0; i < all.size(); ++i)
-        QCOMPARE(all.at(i), QString::fromLatin1(rgbTbl[i].name));
+        QCOMPARE(all.at(i), QLatin1String(rgbTbl[i].name));
 }
 
 void tst_QColor::spec()
@@ -1377,7 +1403,7 @@ void tst_QColor::achromaticHslHue()
     QCOMPARE(hsl.hslHue(), -1);
 }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
 void tst_QColor::setallowX11ColorNames()
 {
 #if defined(Q_OS_IRIX)

@@ -43,6 +43,7 @@
 #include <xcb/xcb.h>
 #include <xcb/randr.h>
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "qxcbexport.h"
 #include <QHash>
 #include <QList>
@@ -53,10 +54,11 @@
 #include <QVarLengthArray>
 #include <qpa/qwindowsysteminterface.h>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/private/qglobal_p.h>
 
 // This is needed to make Qt compile together with XKB. xkb.h is using a variable
 // which is called 'explicit', this is a reserved keyword in c++
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
 #define explicit dont_use_cxx_explicit
 #include <xcb/xkb.h>
 #undef explicit
@@ -85,6 +87,7 @@ QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcQpaXInput)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaXInputDevices)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaXInputEvents)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaScreen)
 
 class QXcbVirtualDesktop;
@@ -447,7 +450,6 @@ public:
     QXcbWindowEventListener *windowEventListenerFromId(xcb_window_t id);
     QXcbWindow *platformWindowFromId(xcb_window_t id);
 
-    xcb_generic_event_t *checkEvent(int type);
     template<typename T>
     inline xcb_generic_event_t *checkEvent(T &checker);
 
@@ -581,6 +583,8 @@ private:
         };
         QHash<int, ValuatorClassInfo> valuatorInfo;
     };
+    friend class QTypeInfo<TabletData>;
+    friend class QTypeInfo<TabletData::ValuatorClassInfo>;
     bool xi2HandleTabletEvent(const void *event, TabletData *tabletData);
     void xi2ReportTabletEvent(const void *event, TabletData *tabletData);
     QVector<TabletData> m_tabletData;
@@ -683,6 +687,12 @@ private:
 
     friend class QXcbEventReader;
 };
+#ifdef XCB_USE_XINPUT2
+#ifndef QT_NO_TABLETEVENT
+Q_DECLARE_TYPEINFO(QXcbConnection::TabletData::ValuatorClassInfo, Q_PRIMITIVE_TYPE);
+Q_DECLARE_TYPEINFO(QXcbConnection::TabletData, Q_MOVABLE_TYPE);
+#endif
+#endif
 
 #define DISPLAY_FROM_XCB(object) ((Display *)(object->connection()->xlib_display()))
 #define CREATE_VISUALINFO_FROM_DEFAULT_VISUALID(object) ((XVisualInfo *)(object->connection()->createVisualInfoForDefaultVisualId()))

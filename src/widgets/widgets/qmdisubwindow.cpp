@@ -280,7 +280,7 @@ static inline bool isHoverControl(QStyle::SubControl control)
     return control != QStyle::SC_None && control != QStyle::SC_TitleBarLabel;
 }
 
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
 static inline QRgb colorref2qrgb(COLORREF col)
 {
     return qRgb(GetRValue(col),GetGValue(col),GetBValue(col));
@@ -412,6 +412,10 @@ bool ControlLabel::event(QEvent *event)
 {
     if (event->type() == QEvent::WindowIconChange)
         updateWindowIcon();
+    else if (event->type() == QEvent::StyleChange) {
+        updateWindowIcon();
+        setFixedSize(label.size());
+    }
 #ifndef QT_NO_TOOLTIP
     else if (event->type() == QEvent::ToolTip) {
         QStyleOptionTitleBar options;
@@ -480,7 +484,8 @@ void ControlLabel::updateWindowIcon()
     QIcon menuIcon = windowIcon();
     if (menuIcon.isNull())
         menuIcon = style()->standardIcon(QStyle::SP_TitleBarMenuButton, 0, parentWidget());
-    label = menuIcon.pixmap(16, 16);
+    const int iconSize = style()->pixelMetric(QStyle::PM_TitleBarButtonIconSize, 0, parentWidget());
+    label = menuIcon.pixmap(iconSize);
     update();
 }
 
@@ -556,7 +561,8 @@ QSize ControllerWidget::sizeHint() const
     ensurePolished();
     QStyleOptionComplex opt;
     initStyleOption(&opt);
-    QSize size(48, 16);
+    const int buttonSize = style()->pixelMetric(QStyle::PM_TitleBarButtonSize, &opt, mdiArea);
+    QSize size(3 * buttonSize, buttonSize);
     return style()->sizeFromContents(QStyle::CT_MdiControls, &opt, size, mdiArea);
 }
 
@@ -1769,7 +1775,7 @@ bool QMdiSubWindowPrivate::drawTitleBarWhenMaximized() const
     if (isChildOfTabbedQMdiArea(q))
         return false;
 
-#if defined(Q_OS_MAC) && !defined(QT_NO_STYLE_MAC) || defined(Q_OS_WINCE_WM)
+#if defined(Q_OS_DARWIN) && !defined(QT_NO_STYLE_MAC)
     Q_UNUSED(isChildOfQMdiSubWindow);
     return true;
 #else
@@ -1926,7 +1932,7 @@ QPalette QMdiSubWindowPrivate::desktopPalette() const
     QPalette newPalette = q->palette();
 
     bool colorsInitialized = false;
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN // ask system properties on windows
+#if 0 // Used to be included in Qt4 for Q_WS_WIN // ask system properties on windows
 #ifndef SPI_GETGRADIENTCAPTIONS
 #define SPI_GETGRADIENTCAPTIONS 0x1008
 #endif
@@ -1962,7 +1968,7 @@ QPalette QMdiSubWindowPrivate::desktopPalette() const
                                 newPalette.color(QPalette::Inactive, QPalette::Highlight));
         }
     }
-#endif // Q_DEAD_CODE_FROM_QT4_WIN
+#endif
     if (!colorsInitialized) {
         newPalette.setColor(QPalette::Active, QPalette::Highlight,
                             newPalette.color(QPalette::Active, QPalette::Highlight));

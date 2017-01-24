@@ -151,6 +151,10 @@ DEFINEFUNC3(int, BIO_read, BIO *a, a, void *b, b, int c, c, return -1, return)
 DEFINEFUNC(BIO_METHOD *, BIO_s_mem, void, DUMMYARG, return 0, return)
 DEFINEFUNC3(int, BIO_write, BIO *a, a, const void *b, b, int c, c, return -1, return)
 DEFINEFUNC(int, BN_num_bits, const BIGNUM *a, a, return 0, return)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+DEFINEFUNC2(int, BN_is_word, BIGNUM *a, a, BN_ULONG w, w, return 0, return)
+#endif
+DEFINEFUNC2(BN_ULONG, BN_mod_word, const BIGNUM *a, a, BN_ULONG w, w, return -1, return)
 #ifndef OPENSSL_NO_EC
 DEFINEFUNC(const EC_GROUP*, EC_KEY_get0_group, const EC_KEY* k, k, return 0, return)
 DEFINEFUNC(int, EC_GROUP_get_degree, const EC_GROUP* g, g, return 0, return)
@@ -202,17 +206,20 @@ DEFINEFUNC(int, OBJ_obj2nid, const ASN1_OBJECT *a, a, return NID_undef, return)
 DEFINEFUNC6(void *, PEM_ASN1_read_bio, d2i_of_void *a, a, const char *b, b, BIO *c, c, void **d, d, pem_password_cb *e, e, void *f, f, return 0, return)
 DEFINEFUNC6(void *, PEM_ASN1_write_bio, d2i_of_void *a, a, const char *b, b, BIO *c, c, void **d, d, pem_password_cb *e, e, void *f, f, return 0, return)
 #else
+DEFINEFUNC4(EVP_PKEY *, PEM_read_bio_PrivateKey, BIO *a, a, EVP_PKEY **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 DEFINEFUNC4(DSA *, PEM_read_bio_DSAPrivateKey, BIO *a, a, DSA **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 DEFINEFUNC4(RSA *, PEM_read_bio_RSAPrivateKey, BIO *a, a, RSA **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 #ifndef OPENSSL_NO_EC
 DEFINEFUNC4(EC_KEY *, PEM_read_bio_ECPrivateKey, BIO *a, a, EC_KEY **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 #endif
+DEFINEFUNC4(DH *, PEM_read_bio_DHparams, BIO *a, a, DH **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 DEFINEFUNC7(int, PEM_write_bio_DSAPrivateKey, BIO *a, a, DSA *b, b, const EVP_CIPHER *c, c, unsigned char *d, d, int e, e, pem_password_cb *f, f, void *g, g, return 0, return)
 DEFINEFUNC7(int, PEM_write_bio_RSAPrivateKey, BIO *a, a, RSA *b, b, const EVP_CIPHER *c, c, unsigned char *d, d, int e, e, pem_password_cb *f, f, void *g, g, return 0, return)
 #ifndef OPENSSL_NO_EC
 DEFINEFUNC7(int, PEM_write_bio_ECPrivateKey, BIO *a, a, EC_KEY *b, b, const EVP_CIPHER *c, c, unsigned char *d, d, int e, e, pem_password_cb *f, f, void *g, g, return 0, return)
 #endif
 #endif
+DEFINEFUNC4(EVP_PKEY *, PEM_read_bio_PUBKEY, BIO *a, a, EVP_PKEY **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 DEFINEFUNC4(DSA *, PEM_read_bio_DSA_PUBKEY, BIO *a, a, DSA **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 DEFINEFUNC4(RSA *, PEM_read_bio_RSA_PUBKEY, BIO *a, a, RSA **b, b, pem_password_cb *c, c, void *d, d, return 0, return)
 #ifndef OPENSSL_NO_EC
@@ -300,6 +307,8 @@ DEFINEFUNC2(void *, SSL_get_ex_data, const SSL *ssl, ssl, int idx, idx, return N
 #endif
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
 DEFINEFUNC2(void, SSL_set_psk_client_callback, SSL* ssl, ssl, q_psk_client_callback_t callback, callback, return, DUMMYARG)
+DEFINEFUNC2(void, SSL_set_psk_server_callback, SSL* ssl, ssl, q_psk_server_callback_t callback, callback, return, DUMMYARG)
+DEFINEFUNC2(int, SSL_CTX_use_psk_identity_hint, SSL_CTX* ctx, ctx, const char *hint, hint, return 0, return)
 #endif
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 #ifndef OPENSSL_NO_SSL2
@@ -418,10 +427,24 @@ DEFINEFUNC3(void, SSL_CTX_set_next_proto_select_cb, SSL_CTX *s, s,
             void *arg, arg, return, DUMMYARG)
 DEFINEFUNC3(void, SSL_get0_next_proto_negotiated, const SSL *s, s,
             const unsigned char **data, data, unsigned *len, len, return, DUMMYARG)
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+DEFINEFUNC3(int, SSL_set_alpn_protos, SSL *s, s, const unsigned char *protos, protos,
+            unsigned protos_len, protos_len, return -1, return)
+DEFINEFUNC3(void, SSL_CTX_set_alpn_select_cb, SSL_CTX *s, s,
+            int (*cb) (SSL *ssl, const unsigned char **out,
+                       unsigned char *outlen,
+                       const unsigned char *in,
+                       unsigned int inlen, void *arg), cb,
+            void *arg, arg, return, DUMMYARG)
+DEFINEFUNC3(void, SSL_get0_alpn_selected, const SSL *s, s, const unsigned char **data, data,
+            unsigned *len, len, return, DUMMYARG)
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L ...
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
 DEFINEFUNC(DH *, DH_new, DUMMYARG, DUMMYARG, return 0, return)
 DEFINEFUNC(void, DH_free, DH *dh, dh, return, DUMMYARG)
 DEFINEFUNC3(DH *, d2i_DHparams, DH**a, a, const unsigned char **pp, pp, long length, length, return 0, return)
+DEFINEFUNC2(int, i2d_DHparams, DH *a, a, unsigned char **p, p, return -1, return)
+DEFINEFUNC2(int, DH_check, DH *dh, dh, int *codes, codes, return 0, return)
 DEFINEFUNC3(BIGNUM *, BN_bin2bn, const unsigned char *s, s, int len, len, BIGNUM *ret, ret, return 0, return)
 #ifndef OPENSSL_NO_EC
 DEFINEFUNC(EC_KEY *, EC_KEY_dup, const EC_KEY *ec, ec, return 0, return)
@@ -768,6 +791,10 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(EC_GROUP_get_degree)
 #endif
     RESOLVEFUNC(BN_num_bits)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    RESOLVEFUNC(BN_is_word)
+#endif
+    RESOLVEFUNC(BN_mod_word)
     RESOLVEFUNC(CRYPTO_free)
     RESOLVEFUNC(CRYPTO_num_locks)
     RESOLVEFUNC(CRYPTO_set_id_callback)
@@ -811,17 +838,20 @@ bool q_resolveOpenSslSymbols()
 #ifdef SSLEAY_MACROS // ### verify
     RESOLVEFUNC(PEM_ASN1_read_bio)
 #else
+    RESOLVEFUNC(PEM_read_bio_PrivateKey)
     RESOLVEFUNC(PEM_read_bio_DSAPrivateKey)
     RESOLVEFUNC(PEM_read_bio_RSAPrivateKey)
 #ifndef OPENSSL_NO_EC
     RESOLVEFUNC(PEM_read_bio_ECPrivateKey)
 #endif
+    RESOLVEFUNC(PEM_read_bio_DHparams)
     RESOLVEFUNC(PEM_write_bio_DSAPrivateKey)
     RESOLVEFUNC(PEM_write_bio_RSAPrivateKey)
 #ifndef OPENSSL_NO_EC
     RESOLVEFUNC(PEM_write_bio_ECPrivateKey)
 #endif
 #endif
+    RESOLVEFUNC(PEM_read_bio_PUBKEY)
     RESOLVEFUNC(PEM_read_bio_DSA_PUBKEY)
     RESOLVEFUNC(PEM_read_bio_RSA_PUBKEY)
 #ifndef OPENSSL_NO_EC
@@ -889,6 +919,8 @@ bool q_resolveOpenSslSymbols()
 #endif
 #if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
     RESOLVEFUNC(SSL_set_psk_client_callback)
+    RESOLVEFUNC(SSL_set_psk_server_callback)
+    RESOLVEFUNC(SSL_CTX_use_psk_identity_hint)
 #endif
     RESOLVEFUNC(SSL_write)
 #ifndef OPENSSL_NO_SSL2
@@ -972,9 +1004,16 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(SSL_CTX_set_next_proto_select_cb)
     RESOLVEFUNC(SSL_get0_next_proto_negotiated)
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    RESOLVEFUNC(SSL_set_alpn_protos)
+    RESOLVEFUNC(SSL_CTX_set_alpn_select_cb)
+    RESOLVEFUNC(SSL_get0_alpn_selected)
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L ...
     RESOLVEFUNC(DH_new)
     RESOLVEFUNC(DH_free)
     RESOLVEFUNC(d2i_DHparams)
+    RESOLVEFUNC(i2d_DHparams)
+    RESOLVEFUNC(DH_check)
     RESOLVEFUNC(BN_bin2bn)
 #ifndef OPENSSL_NO_EC
     RESOLVEFUNC(EC_KEY_dup)

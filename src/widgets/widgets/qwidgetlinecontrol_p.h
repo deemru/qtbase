@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #ifndef QT_NO_LINEEDIT
 #include "private/qwidget_p.h"
@@ -66,6 +66,8 @@
 #include "QtCore/qthread.h"
 
 #include "qplatformdefs.h"
+
+#include <vector>
 
 #ifdef DrawText
 #  undef DrawText
@@ -89,7 +91,7 @@ public:
         m_selstart(0), m_selend(0), m_passwordEchoEditing(false)
         , m_passwordEchoTimer(0)
         , m_passwordMaskDelay(-1)
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         , m_threadChecks(false)
         , m_textLayoutThread(0)
  #endif
@@ -380,14 +382,14 @@ public:
 
     QTextLayout *textLayout() const
     {
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         if (m_threadChecks && QThread::currentThread() != m_textLayoutThread)
             redoTextLayout();
 #endif
         return &m_textLayout;
     }
 
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     void setThreadChecks(bool threadChecks)
     {
         m_threadChecks = threadChecks;
@@ -469,7 +471,6 @@ private:
     // undo/redo handling
     enum CommandType { Separator, Insert, Remove, Delete, RemoveSelection, DeleteSelection, SetSelection };
     struct Command {
-        inline Command() {}
         inline Command(CommandType t, int p, QChar c, int ss, int se) : type(t),uc(c),pos(p),selStart(ss),selEnd(se) {}
         uint type : 4;
         QChar uc;
@@ -477,7 +478,7 @@ private:
     };
     int m_modifiedState;
     int m_undoState;
-    QVector<Command> m_history;
+    std::vector<Command> m_history;
     void addCommand(const Command& cmd);
 
     inline void separate() { m_separator = true; }
@@ -511,7 +512,7 @@ private:
     }
 
     int redoTextLayout() const;
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     bool m_threadChecks;
     mutable QThread *m_textLayoutThread;
 #endif

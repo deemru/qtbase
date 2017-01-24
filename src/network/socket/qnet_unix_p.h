@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "private/qcore_unix_p.h"
 
 #include <sys/types.h>
@@ -115,7 +116,11 @@ static inline int qt_safe_accept(int s, struct sockaddr *addr, QT_SOCKLEN_T *add
     int sockflags = SOCK_CLOEXEC;
     if (flags & O_NONBLOCK)
         sockflags |= SOCK_NONBLOCK;
+# if defined(Q_OS_NETBSD)
+    fd = ::paccept(s, addr, static_cast<QT_SOCKLEN_T *>(addrlen), NULL, sockflags);
+# else
     fd = ::accept4(s, addr, static_cast<QT_SOCKLEN_T *>(addrlen), sockflags);
+# endif
     return fd;
 #else
     fd = ::accept(s, addr, static_cast<QT_SOCKLEN_T *>(addrlen));

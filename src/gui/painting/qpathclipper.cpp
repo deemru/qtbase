@@ -1458,25 +1458,6 @@ QPathClipper::QPathClipper(const QPainterPath &subject,
     bMask = clipPath.fillRule() == Qt::WindingFill ? ~0x0 : 0x1;
 }
 
-template <typename Iterator, typename Equality>
-Iterator qRemoveDuplicates(Iterator begin, Iterator end, Equality eq)
-{
-    if (begin == end)
-        return end;
-
-    Iterator last = begin;
-    ++begin;
-    Iterator insert = begin;
-    for (Iterator it = begin; it != end; ++it) {
-        if (!eq(*it, *last)) {
-            *insert++ = *it;
-            last = it;
-        }
-    }
-
-    return insert;
-}
-
 static void clear(QWingedEdge& list, int edge, QPathEdge::Traversal traversal)
 {
     QWingedEdge::TraversalStatus status;
@@ -1643,12 +1624,12 @@ bool QPathClipper::doClip(QWingedEdge &list, ClipperMode mode)
         y_coords << list.vertex(i)->y;
 
     std::sort(y_coords.begin(), y_coords.end());
-    y_coords.resize(qRemoveDuplicates(y_coords.begin(), y_coords.end(), fuzzyCompare) - y_coords.begin());
+    y_coords.erase(std::unique(y_coords.begin(), y_coords.end(), fuzzyCompare), y_coords.end());
 
 #ifdef QDEBUG_CLIPPER
     printf("sorted y coords:\n");
     for (int i = 0; i < y_coords.size(); ++i) {
-        printf("%.9f\n", y_coords[i]);
+        printf("%.9f\n", y_coords.at(i));
     }
 #endif
 
@@ -1686,23 +1667,23 @@ bool QPathClipper::doClip(QWingedEdge &list, ClipperMode mode)
             QPathVertex *b = list.vertex(edge->second);
 
             // FIXME: this can be optimized by using binary search
-            const int first = qFuzzyFind(y_coords.begin(), y_coords.end(), qMin(a->y, b->y)) - y_coords.begin();
-            const int last = qFuzzyFind(y_coords.begin() + first, y_coords.end(), qMax(a->y, b->y)) - y_coords.begin();
+            const int first = qFuzzyFind(y_coords.cbegin(), y_coords.cend(), qMin(a->y, b->y)) - y_coords.cbegin();
+            const int last = qFuzzyFind(y_coords.cbegin() + first, y_coords.cend(), qMax(a->y, b->y)) - y_coords.cbegin();
 
             Q_ASSERT(first < y_coords.size() - 1);
             Q_ASSERT(last < y_coords.size());
 
-            qreal bestY = 0.5 * (y_coords[first] + y_coords[first+1]);
-            qreal biggestGap = y_coords[first+1] - y_coords[first];
-
+            qreal biggestGap = y_coords.at(first + 1) - y_coords.at(first);
+            int bestIdx = first;
             for (int i = first + 1; i < last; ++i) {
-                qreal gap = y_coords[i+1] - y_coords[i];
+                qreal gap = y_coords.at(i + 1) - y_coords.at(i);
 
                 if (gap > biggestGap) {
-                    bestY = 0.5 * (y_coords[i] + y_coords[i+1]);
+                    bestIdx = i;
                     biggestGap = gap;
                 }
             }
+            const qreal bestY = 0.5 * (y_coords.at(bestIdx) + y_coords.at(bestIdx + 1));
 
 #ifdef QDEBUG_CLIPPER
             printf("y: %.9f, gap: %.9f\n", bestY, biggestGap);
@@ -1760,7 +1741,7 @@ static bool bool_op(bool a, bool b, QPathClipper::Operation op)
     switch (op) {
     case QPathClipper::BoolAnd:
         return a && b;
-    case QPathClipper::BoolOr: // fall-through
+    case QPathClipper::BoolOr:
     case QPathClipper::Simplify:
         return a || b;
     case QPathClipper::BoolSub:
@@ -1956,7 +1937,7 @@ QPointF intersectLine(const QPointF &a, const QPointF &b, qreal t)
 {
     QLineF line(a, b);
     switch (edge) {
-    case Left: // fall-through
+    case Left:
     case Right:
         return line.pointAt((t - a.x()) / (b.x() - a.x()));
     default:

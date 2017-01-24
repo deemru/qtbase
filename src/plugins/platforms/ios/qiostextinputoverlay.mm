@@ -45,6 +45,7 @@
 #include "qiostextinputoverlay.h"
 
 typedef QPair<int, int> SelectionPair;
+typedef void (^Block)(void);
 
 static const CGFloat kKnobWidth = 10;
 
@@ -68,7 +69,7 @@ static bool hasSelection()
     return selection.first != selection.second;
 }
 
-static void executeBlockWithoutAnimation(void (^block)(void))
+static void executeBlockWithoutAnimation(Block block)
 {
     [CATransaction begin];
     [CATransaction setValue:(id)kCFBooleanTrue forKey:kCATransactionDisableActions];
@@ -135,7 +136,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
         // first responder, which is normally QIOSTextResponder.
         QRectF cr = qApp->inputMethod()->cursorRectangle();
         QRectF ar = qApp->inputMethod()->anchorRectangle();
-        CGRect targetRect = toCGRect(cr.united(ar));
+        CGRect targetRect = cr.united(ar).toCGRect();
         UIView *focusView = reinterpret_cast<UIView *>(qApp->focusWindow()->winId());
         [[UIMenuController sharedMenuController] setTargetRect:targetRect inView:focusView];
         [[UIMenuController sharedMenuController] setMenuVisible:YES animated:YES];
@@ -298,7 +299,11 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
 // -------------------------------------------------------------------------
 
+#if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_10_0)
+@interface QIOSHandleLayer : CALayer <CAAnimationDelegate> {
+#else
 @interface QIOSHandleLayer : CALayer {
+#endif
     CALayer *_handleCursorLayer;
     CALayer *_handleKnobLayer;
     Qt::Edge _selectionEdge;
@@ -306,6 +311,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 @property (nonatomic, assign) CGRect cursorRectangle;
 @property (nonatomic, assign) CGFloat handleScale;
 @property (nonatomic, assign) BOOL visible;
+@property (nonatomic, copy) Block onAnimationDidStop;
 @end
 
 @implementation QIOSHandleLayer
@@ -359,13 +365,22 @@ static void executeBlockWithoutAnimation(void (^block)(void))
                 [NSNumber numberWithFloat:1], nil];
             return animation;
         } else {
-            CABasicAnimation * animation = [CABasicAnimation animationWithKeyPath:key];
+            CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:key];
+            [animation setDelegate:self];
             animation.fromValue = [self valueForKey:key];
             [animation setDuration:0.2];
             return animation;
         }
     }
     return [super actionForKey:key];
+}
+
+- (void)animationDidStop:(CAAnimation *)animation finished:(BOOL)flag
+{
+    Q_UNUSED(animation);
+    Q_UNUSED(flag);
+    if (self.onAnimationDidStop)
+        self.onAnimationDidStop();
 }
 
 - (void)setVisible:(BOOL)visible
@@ -485,12 +500,12 @@ static void executeBlockWithoutAnimation(void (^block)(void))
         QGuiApplication::styleHints()->setCursorFlashTime(0);
         if (!_loupeLayer)
             [self createLoupe];
-        [self updateFocalPoint:fromCGPoint(_lastTouchPoint)];
+        [self updateFocalPoint:QPointF::fromCGPoint(_lastTouchPoint)];
         _loupeLayer.visible = YES;
         break;
     case UIGestureRecognizerStateChanged:
         // Tell the sub class to move the loupe to the correct position
-        [self updateFocalPoint:fromCGPoint(_lastTouchPoint)];
+        [self updateFocalPoint:QPointF::fromCGPoint(_lastTouchPoint)];
         break;
     case UIGestureRecognizerStateEnded:
         // Restore cursor blinking, and hide the loupe
@@ -515,12 +530,12 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
 - (QPointF)focalPoint
 {
-    return fromCGPoint([_loupeLayer.targetView convertPoint:_loupeLayer.focalPoint toView:_focusView]);
+    return QPointF::fromCGPoint([_loupeLayer.targetView convertPoint:_loupeLayer.focalPoint toView:_focusView]);
 }
 
 - (void)setFocalPoint:(QPointF)point
 {
-    _loupeLayer.focalPoint = [_loupeLayer.targetView convertPoint:toCGPoint(point) fromView:_focusView];
+    _loupeLayer.focalPoint = [_loupeLayer.targetView convertPoint:point.toCGPoint() fromView:_focusView];
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
@@ -537,7 +552,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
     // If the touch point is accepted by the sub class (e.g touch on cursor), we start a
     // press'n'hold timer that eventually will move the state to UIGestureRecognizerStateBegan.
-    if ([self acceptTouchesBegan:fromCGPoint(_firstTouchPoint)])
+    if ([self acceptTouchesBegan:QPointF::fromCGPoint(_firstTouchPoint)])
         _triggerStateBeganTimer.start();
     else
         self.state = UIGestureRecognizerStateFailed;
@@ -679,7 +694,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
     if (enabled) {
         // Create a layer that clips the handles inside the input field
-        _clipRectLayer = [[CALayer new] autorelease];
+        _clipRectLayer = [CALayer new];
         _clipRectLayer.masksToBounds = YES;
         [self.focusView.layer addSublayer:_clipRectLayer];
 
@@ -705,7 +720,26 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
         [self updateSelection];
     } else {
-        [_clipRectLayer removeFromSuperlayer];
+        // Fade out the handles by setting visible to NO, and wait for the animations
+        // to finish before removing the clip rect layer, including the handles.
+        // Create a local variable to hold the clipRectLayer while the animation is
+        // ongoing to ensure that any subsequent calls to setEnabled does not interfere.
+        // Also, declare it as __block to stop it from being automatically retained, which
+        // would cause a cyclic dependency between clipRectLayer and the block.
+        __block CALayer *clipRectLayer = _clipRectLayer;
+        __block int handleCount = 2;
+        Block block = ^{
+            if (--handleCount == 0) {
+                [clipRectLayer removeFromSuperlayer];
+                [clipRectLayer release];
+            }
+        };
+
+        _cursorLayer.onAnimationDidStop = block;
+        _anchorLayer.onAnimationDidStop = block;
+        _cursorLayer.visible = NO;
+        _anchorLayer.visible = NO;
+
         _clipRectLayer = 0;
         _cursorLayer = 0;
         _anchorLayer = 0;
@@ -826,8 +860,8 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
     // Adjust handles and input rect to match the new selection
     QRectF inputRect = QGuiApplication::inputMethod()->inputItemClipRectangle();
-    CGRect cursorRect = toCGRect(QGuiApplication::inputMethod()->cursorRectangle());
-    CGRect anchorRect = toCGRect(QGuiApplication::inputMethod()->anchorRectangle());
+    CGRect cursorRect = QGuiApplication::inputMethod()->cursorRectangle().toCGRect();
+    CGRect anchorRect = QGuiApplication::inputMethod()->anchorRectangle().toCGRect();
 
     if (!_multiLine) {
         // Resize the layer a bit bigger to ensure that the handles are
@@ -836,7 +870,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
         inputRect.adjust(-margin / 2, -margin, margin / 2, margin);
     }
 
-    executeBlockWithoutAnimation(^{ _clipRectLayer.frame = toCGRect(inputRect); });
+    executeBlockWithoutAnimation(^{ _clipRectLayer.frame = inputRect.toCGRect(); });
     _cursorLayer.cursorRectangle = [self.focusView.layer convertRect:cursorRect toLayer:_clipRectLayer];
     _anchorLayer.cursorRectangle = [self.focusView.layer convertRect:anchorRect toLayer:_clipRectLayer];
     _cursorLayer.visible = YES;
@@ -904,7 +938,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
     }
 
     QRectF inputRect = QGuiApplication::inputMethod()->inputItemClipRectangle();
-    QPointF touchPos = fromCGPoint([static_cast<UITouch *>([touches anyObject]) locationInView:_focusView]);
+    QPointF touchPos = QPointF::fromCGPoint([static_cast<UITouch *>([touches anyObject]) locationInView:_focusView]);
     if (!inputRect.contains(touchPos))
         self.state = UIGestureRecognizerStateFailed;
 
@@ -913,7 +947,7 @@ static void executeBlockWithoutAnimation(void (^block)(void))
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    QPointF touchPos = fromCGPoint([static_cast<UITouch *>([touches anyObject]) locationInView:_focusView]);
+    QPointF touchPos = QPointF::fromCGPoint([static_cast<UITouch *>([touches anyObject]) locationInView:_focusView]);
     const QTransform mapToLocal = QGuiApplication::inputMethod()->inputItemTransform().inverted();
     int cursorPosOnRelease = QInputMethod::queryFocusObject(Qt::ImCursorPosition, touchPos * mapToLocal).toInt();
 
@@ -960,7 +994,8 @@ QIOSTextInputOverlay::QIOSTextInputOverlay()
 
 QIOSTextInputOverlay::~QIOSTextInputOverlay()
 {
-    disconnect(qApp, 0, this, 0);
+    if (qApp)
+        disconnect(qApp, 0, this, 0);
 }
 
 void QIOSTextInputOverlay::updateFocusObject()

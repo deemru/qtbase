@@ -54,7 +54,7 @@
 #include <QtGui/QSurfaceFormat>
 #include <QtCore/QVector>
 #include <QtCore/QSizeF>
-#include <EGL/egl.h>
+#include <QtEglSupport/private/qt_egl_p.h>
 
 QT_BEGIN_NAMESPACE
 

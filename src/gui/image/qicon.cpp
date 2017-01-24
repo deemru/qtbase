@@ -47,6 +47,8 @@
 #include "private/qiconloader_p.h"
 #include "qpainter.h"
 #include "qfileinfo.h"
+#include <qmimedatabase.h>
+#include <qmimetype.h>
 #include "qpixmapcache.h"
 #include "qvariant.h"
 #include "qcache.h"
@@ -284,7 +286,7 @@ QPixmap QPixmapIconEngine::pixmap(const QSize &size, QIcon::Mode mode, QIcon::St
     if (pm.isNull()) {
         int idx = pixmaps.count();
         while (--idx >= 0) {
-            if (pe == &pixmaps[idx]) {
+            if (pe == &pixmaps.at(idx)) {
                 pixmaps.remove(idx);
                 break;
             }
@@ -301,7 +303,7 @@ QPixmap QPixmapIconEngine::pixmap(const QSize &size, QIcon::Mode mode, QIcon::St
 
     QString key = QLatin1String("qt_")
                   % HexString<quint64>(pm.cacheKey())
-                  % HexString<uint>(pe->mode)
+                  % HexString<uint>(pe ? pe->mode : QIcon::Normal)
                   % HexString<quint64>(QGuiApplication::palette().cacheKey())
                   % HexString<uint>(actualSize.width())
                   % HexString<uint>(actualSize.height());
@@ -839,8 +841,11 @@ QPixmap QIcon::pixmap(QWindow *window, const QSize &size, Mode mode, State state
     qreal devicePixelRatio = qt_effective_device_pixel_ratio(window);
 
     // Handle the simple normal-dpi case:
-    if (!(devicePixelRatio > 1.0))
-        return d->engine->pixmap(size, mode, state);
+    if (!(devicePixelRatio > 1.0)) {
+        QPixmap pixmap = d->engine->pixmap(size, mode, state);
+        pixmap.setDevicePixelRatio(1.0);
+        return pixmap;
+    }
 
     // Try get a pixmap that is big enough to be displayed at device pixel resolution.
     QPixmap pixmap = d->engine->pixmap(size * devicePixelRatio, mode, state);
@@ -976,6 +981,18 @@ void QIcon::addPixmap(const QPixmap &pixmap, Mode mode, State state)
     d->engine->addPixmap(pixmap, mode, state);
 }
 
+static QIconEngine *iconEngineFromSuffix(const QString &fileName, const QString &suffix)
+{
+    if (!suffix.isEmpty()) {
+        const int index = loader()->indexOf(suffix);
+        if (index != -1) {
+            if (QIconEnginePlugin *factory = qobject_cast<QIconEnginePlugin*>(loader()->instance(index))) {
+                return factory->create(fileName);
+            }
+        }
+    }
+    return nullptr;
+}
 
 /*!  Adds an image from the file with the given \a fileName to the
      icon, as a specialization for \a size, \a mode and \a state. The
@@ -1013,25 +1030,15 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
         return;
     detach();
     if (!d) {
+
         QFileInfo info(fileName);
-        QString suffix = info.suffix();
-        if (!suffix.isEmpty()) {
-            // first try version 2 engines..
-            const int index = loader()->indexOf(suffix);
-            if (index != -1) {
-                if (QIconEnginePlugin *factory = qobject_cast<QIconEnginePlugin*>(loader()->instance(index))) {
-                    if (QIconEngine *engine = factory->create(fileName)) {
-                        d = new QIconPrivate;
-                        d->engine = engine;
-                    }
-                }
-            }
-        }
-        // ...then fall back to the default engine
-        if (!d) {
-            d = new QIconPrivate;
-            d->engine = new QPixmapIconEngine;
-        }
+        QIconEngine *engine = iconEngineFromSuffix(fileName, info.suffix());
+#ifndef QT_NO_MIMETYPE
+        if (!engine)
+            engine = iconEngineFromSuffix(fileName, QMimeDatabase().mimeTypeForFile(info).preferredSuffix());
+#endif // !QT_NO_MIMETYPE
+        d = new QIconPrivate;
+        d->engine = engine ? engine : new QPixmapIconEngine;
     }
 
     d->engine->addFile(fileName, size, mode, state);
@@ -1227,8 +1234,8 @@ bool QIcon::hasThemeIcon(const QString &name)
 /*!
     \since 5.6
 
-    Indicate that this icon is a mask image, and hence can potentially
-    be modified based on where it's displayed.
+    Indicate that this icon is a mask image(boolean \a isMask), and hence can
+    potentially be modified based on where it's displayed.
     \sa isMask()
 */
 void QIcon::setIsMask(bool isMask)
@@ -1247,7 +1254,7 @@ void QIcon::setIsMask(bool isMask)
 
     Returns \c true if this icon has been marked as a mask image.
     Certain platforms render mask icons differently (for example,
-    menu icons on OS X).
+    menu icons on \macos).
 
     \sa setIsMask()
 */

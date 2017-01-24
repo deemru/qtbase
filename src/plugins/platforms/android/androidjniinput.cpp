@@ -1,7 +1,8 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: https://www.qt.io/licensing/
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -120,6 +121,12 @@ namespace QtAndroidInput
         return m_softwareKeyboardRect;
     }
 
+    void updateHandles(int mode, QPoint cursor, QPoint anchor)
+    {
+        QJNIObjectPrivate::callStaticMethod<void>(applicationClass(), "updateHandles", "(IIIII)V",
+                                                  mode, cursor.x(), cursor.y(), anchor.x(),
+                                                  anchor.y());
+    }
 
     static void mouseDown(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
     {
@@ -168,6 +175,10 @@ namespace QtAndroidInput
 
     static void longPress(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
     {
+        QAndroidInputContext *inputContext = QAndroidInputContext::androidInputContext();
+        if (inputContext && qGuiApp)
+            QMetaObject::invokeMethod(inputContext, "longPress", Q_ARG(int, x), Q_ARG(int, y));
+
         //### TODO: add proper API for Qt 5.2
         static bool rightMouseFromLongPress = qEnvironmentVariableIntValue("QT_NECESSITAS_COMPATIBILITY_LONG_PRESS");
         if (!rightMouseFromLongPress)
@@ -225,6 +236,12 @@ namespace QtAndroidInput
                                  double(dw*size),
                                  double(dh*size));
         m_touchPoints.push_back(touchPoint);
+
+        if (state == Qt::TouchPointPressed) {
+            QAndroidInputContext *inputContext = QAndroidInputContext::androidInputContext();
+            if (inputContext && qGuiApp)
+                QMetaObject::invokeMethod(inputContext, "touchDown", Q_ARG(int, x), Q_ARG(int, y));
+        }
     }
 
     static void touchEnd(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint /*action*/)
@@ -252,9 +269,19 @@ namespace QtAndroidInput
         QWindowSystemInterface::handleTouchEvent(window, touchDevice, m_touchPoints);
     }
 
+    static bool isTabletEventSupported(JNIEnv */*env*/, jobject /*thiz*/)
+    {
+#ifdef QT_NO_TABLETEVENT
+        return false;
+#else
+        return true;
+#endif // QT_NO_TABLETEVENT
+    }
+
     static void tabletEvent(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint deviceId, jlong time, jint action,
         jint pointerType, jint buttonState, jfloat x, jfloat y, jfloat pressure)
     {
+#ifndef QT_NO_TABLETEVENT
         QPointF globalPosF(x, y);
         QPoint globalPos((int)x, (int)y);
         QWindow *tlw = topLevelWindowAt(globalPos);
@@ -296,6 +323,7 @@ namespace QtAndroidInput
         QWindowSystemInterface::handleTabletEvent(tlw, ulong(time),
             localPos, globalPosF, QTabletEvent::Stylus, pointerType,
             buttons, pressure, 0, 0, 0., 0., 0, deviceId, Qt::NoModifier);
+#endif // QT_NO_TABLETEVENT
     }
 
     static int mapAndroidKey(int key)
@@ -775,6 +803,18 @@ namespace QtAndroidInput
 #endif
     }
 
+    static void handleLocationChanged(JNIEnv */*env*/, jobject /*thiz*/, int id, int x, int y)
+    {
+#ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
+        qDebug() << "@@@ handleLocationChanged" << id << x << y;
+#endif
+        QAndroidInputContext *inputContext = QAndroidInputContext::androidInputContext();
+        if (inputContext && qGuiApp)
+            QMetaObject::invokeMethod(inputContext, "handleLocationChanged", Qt::BlockingQueuedConnection,
+                                      Q_ARG(int, id), Q_ARG(int, x), Q_ARG(int, y));
+
+    }
+
     static JNINativeMethod methods[] = {
         {"touchBegin","(I)V",(void*)touchBegin},
         {"touchAdd","(IIIZIIFF)V",(void*)touchAdd},
@@ -783,11 +823,13 @@ namespace QtAndroidInput
         {"mouseUp", "(III)V", (void *)mouseUp},
         {"mouseMove", "(III)V", (void *)mouseMove},
         {"longPress", "(III)V", (void *)longPress},
+        {"isTabletEventSupported", "()Z", (void *)isTabletEventSupported},
         {"tabletEvent", "(IIJIIIFFF)V", (void *)tabletEvent},
         {"keyDown", "(IIIZ)V", (void *)keyDown},
         {"keyUp", "(IIIZ)V", (void *)keyUp},
         {"keyboardVisibilityChanged", "(Z)V", (void *)keyboardVisibilityChanged},
-        {"keyboardGeometryChanged", "(IIII)V", (void *)keyboardGeometryChanged}
+        {"keyboardGeometryChanged", "(IIII)V", (void *)keyboardGeometryChanged},
+        {"handleLocationChanged", "(III)V", (void *)handleLocationChanged}
     };
 
     bool registerNatives(JNIEnv *env)

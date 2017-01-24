@@ -70,14 +70,12 @@
 #   include <cstdio>
 #elif defined(Q_OS_HAIKU)
 #   include <kernel/OS.h>
-#elif defined(Q_OS_BSD4) && !defined(Q_OS_IOS)
-#   include <sys/user.h>
-# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
+#elif defined(Q_OS_BSD4) && !defined(QT_PLATFORM_UIKIT)
 #   include <sys/cdefs.h>
 #   include <sys/param.h>
 #   include <sys/sysctl.h>
-# else
-#   include <libutil.h>
+# if !defined(Q_OS_NETBSD)
+#   include <sys/user.h>
 # endif
 #endif
 
@@ -143,7 +141,7 @@ static QBasicMutex fcntlLock;
 /*!
   \internal
   Checks that the OS isn't using POSIX locks to emulate flock().
-  OS X is one of those.
+  \macos is one of those.
 */
 static bool fcntlWorksAfterFlock(const QString &fn)
 {
@@ -190,7 +188,7 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
                           % localHostName() % '\n';
 
     const QByteArray lockFileName = QFile::encodeName(fileName);
-    const int fd = qt_safe_open(lockFileName.constData(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    const int fd = qt_safe_open(lockFileName.constData(), O_WRONLY | O_CREAT | O_EXCL, 0666);
     if (fd < 0) {
         switch (errno) {
         case EEXIST:
@@ -231,7 +229,7 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
 bool QLockFilePrivate::removeStaleLock()
 {
     const QByteArray lockFileName = QFile::encodeName(fileName);
-    const int fd = qt_safe_open(lockFileName.constData(), O_WRONLY, 0644);
+    const int fd = qt_safe_open(lockFileName.constData(), O_WRONLY, 0666);
     if (fd < 0) // gone already?
         return false;
     bool success = setNativeLocks(fileName, fd) && (::unlink(lockFileName) == 0);
@@ -285,31 +283,34 @@ QString QLockFilePrivate::processNameByPid(qint64 pid)
     if (get_thread_info(pid, &info) != B_OK)
         return QString();
     return QFile::decodeName(info.name);
-#elif defined(Q_OS_BSD4) && !defined(Q_OS_IOS)
-# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
-    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, pid };
-    size_t len = 0;
-    if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
-        return QString();
-    kinfo_proc *proc = static_cast<kinfo_proc *>(malloc(len));
+#elif defined(Q_OS_BSD4) && !defined(QT_PLATFORM_UIKIT)
+# if defined(Q_OS_NETBSD)
+    struct kinfo_proc2 kp;
+    int mib[6] = { CTL_KERN, KERN_PROC2, KERN_PROC_PID, (int)pid, sizeof(struct kinfo_proc2), 1 };
+# elif defined(Q_OS_OPENBSD)
+    struct kinfo_proc kp;
+    int mib[6] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)pid, sizeof(struct kinfo_proc), 1 };
 # else
-    kinfo_proc *proc = kinfo_getproc(pid);
+    struct kinfo_proc kp;
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)pid };
 # endif
-    if (!proc)
+    size_t len = sizeof(kp);
+    u_int mib_len = sizeof(mib)/sizeof(u_int);
+
+    if (sysctl(mib, mib_len, &kp, &len, NULL, 0) < 0)
         return QString();
-# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
-    if (sysctl(mib, 4, proc, &len, NULL, 0) < 0) {
-        free(proc);
+
+# if defined(Q_OS_OPENBSD) || defined(Q_OS_NETBSD)
+    if (kp.p_pid != pid)
         return QString();
-    }
-    if (proc->ki_pid != pid) {
-        free(proc);
+    QString name = QFile::decodeName(kp.p_comm);
+# else
+    if (kp.ki_pid != pid)
         return QString();
-    }
+    QString name = QFile::decodeName(kp.ki_comm);
 # endif
-    QString name = QFile::decodeName(proc->ki_comm);
-    free(proc);
     return name;
+
 #else
     Q_UNUSED(pid);
     return QString();

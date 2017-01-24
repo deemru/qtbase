@@ -80,7 +80,7 @@ static const int xpmRgbTblSize = 657;
 
 static const struct XPMRGBData {
     uint  value;
-    const char *name;
+    const char name[21];
 } xpmRgbTbl[] = {
   { QRGB(240,248,255),  "aliceblue" },
   { QRGB(250,235,215),  "antiquewhite" },
@@ -845,7 +845,7 @@ static bool read_xpm_header(
     if (!read_xpm_string(buf, device, source, index, state))
         return false;
 
-#if defined(_MSC_VER) && _MSC_VER >= 1400 && !defined(Q_OS_WINCE)
+#ifdef Q_CC_MSVC
         if (sscanf_s(buf, "%d %d %d %d", w, h, ncols, cpp) < 4)
 #else
     if (sscanf(buf, "%d %d %d %d", w, h, ncols, cpp) < 4)
@@ -1154,7 +1154,7 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
         int cc = 0;
         for(x=0; x<w; x++) {
             int color = (int)(*(yp + x));
-            QByteArray chars(xpm_color_name(cpp, colorMap[color]));
+            const QByteArray chars(xpm_color_name(cpp, colorMap[color]));
             line[cc++] = QLatin1Char(chars[0]);
             if (cpp > 1) {
                 line[cc++] = QLatin1Char(chars[1]);

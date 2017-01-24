@@ -70,7 +70,7 @@
 #include FT_CONFIG_OPTIONS_H
 #endif
 
-#if defined(FT_LCD_FILTER_H) && defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
+#if defined(FT_LCD_FILTER_H)
 #define QT_USE_FREETYPE_LCDFILTER
 #endif
 
@@ -259,7 +259,6 @@ QFreetypeFace *QFreetypeFace::getFace(const QFontEngine::FaceId &face_id,
         newFreetype->ref.store(1);
         newFreetype->xsize = 0;
         newFreetype->ysize = 0;
-        newFreetype->scalableBitmapScaleFactor = 1;
         newFreetype->matrix.xx = 0x10000;
         newFreetype->matrix.yy = 0x10000;
         newFreetype->matrix.xy = 0;
@@ -321,8 +320,9 @@ void QFreetypeFace::release(const QFontEngine::FaceId &face_id)
 
             cleanup();
 
-            if (freetypeData->faces.contains(face_id))
-                freetypeData->faces.take(face_id);
+            auto it = freetypeData->faces.constFind(face_id);
+            if (it != freetypeData->faces.constEnd())
+                freetypeData->faces.erase(it);
 
             if (freetypeData->faces.isEmpty()) {
                 FT_Done_FreeType(freetypeData->library);
@@ -335,10 +335,11 @@ void QFreetypeFace::release(const QFontEngine::FaceId &face_id)
 }
 
 
-void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing)
+void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing, QFixed *scalableBitmapScaleFactor)
 {
     *ysize = qRound(fontDef.pixelSize * 64);
     *xsize = *ysize * fontDef.stretch / 100;
+    *scalableBitmapScaleFactor = 1;
     *outline_drawing = false;
 
     if (!(face->face_flags & FT_FACE_FLAG_SCALABLE)) {
@@ -376,7 +377,7 @@ void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize,
         // to make sure we can select the desired bitmap strike index
         if (FT_Select_Size(face, best) == 0) {
             if (isScalableBitmap())
-                scalableBitmapScaleFactor = QFixed::fromReal((qreal)fontDef.pixelSize / face->available_sizes[best].height);
+                *scalableBitmapScaleFactor = QFixed::fromReal((qreal)fontDef.pixelSize / face->available_sizes[best].height);
             *xsize = face->available_sizes[best].x_ppem;
             *ysize = face->available_sizes[best].y_ppem;
         } else {
@@ -414,6 +415,7 @@ QFontEngine::Properties QFreetypeFace::properties() const
     p.italicAngle = 0;
     p.capHeight = p.ascent;
     p.lineWidth = face->underline_thickness;
+
     return p;
 }
 
@@ -585,8 +587,7 @@ static void convertRGBToARGB_helper(const uchar *src, uint *dst, int width, int 
             uchar green = src[x + 1];
             uchar blue = src[x + 1 + offs];
             LcdFilter::filterPixel(red, green, blue);
-            // alpha = green
-            *dd++ = (green << 24) | (red << 16) | (green << 8) | blue;
+            *dd++ = (0xFF << 24) | (red << 16) | (green << 8) | blue;
         }
         dst += width;
         src += src_pitch;
@@ -611,8 +612,7 @@ static void convertRGBToARGB_V_helper(const uchar *src, uint *dst, int width, in
             uchar green = src[x + src_pitch];
             uchar blue = src[x + src_pitch + offs];
             LcdFilter::filterPixel(red, green, blue);
-            // alpha = green
-            *dst++ = (green << 24) | (red << 16) | (green << 8) | blue;
+            *dst++ = (0XFF << 24) | (red << 16) | (green << 8) | blue;
         }
         src += 3*src_pitch;
     }
@@ -729,7 +729,7 @@ bool QFontEngineFT::init(FaceId faceId, bool antialias, GlyphFormat format,
         symbol = bool(fontDef.family.contains(QLatin1String("symbol"), Qt::CaseInsensitive));
     }
 
-    freetype->computeSize(fontDef, &xsize, &ysize, &defaultGlyphSet.outline_drawing);
+    freetype->computeSize(fontDef, &xsize, &ysize, &defaultGlyphSet.outline_drawing, &scalableBitmapScaleFactor);
 
     FT_Face face = lockFace();
 
@@ -782,8 +782,14 @@ bool QFontEngineFT::init(FaceId faceId, bool antialias, GlyphFormat format,
 
                 FT_Select_Size(face, i);
                 if (face->size->metrics.ascender + face->size->metrics.descender > 0) {
+                    FT_Pos leading = metrics.height - metrics.ascender + metrics.descender;
                     metrics.ascender = face->size->metrics.ascender;
                     metrics.descender = face->size->metrics.descender;
+                    if (metrics.descender > 0
+                            && QString::fromUtf8(face->family_name) == QLatin1String("Courier New")) {
+                        metrics.descender *= -1;
+                    }
+                    metrics.height = metrics.ascender - metrics.descender + leading;
                 }
                 FT_Set_Char_Size(face, xsize, ysize, 0, 0);
 
@@ -883,10 +889,47 @@ static inline bool areMetricsTooLarge(const QFontEngineFT::GlyphInfo &info)
             || (uchar)(info.height) != info.height;
 }
 
+static inline void transformBoundingBox(int *left, int *top, int *right, int *bottom, FT_Matrix *matrix)
+{
+    int l, r, t, b;
+    FT_Vector vector;
+    vector.x = *left;
+    vector.y = *top;
+    FT_Vector_Transform(&vector, matrix);
+    l = r = vector.x;
+    t = b = vector.y;
+    vector.x = *right;
+    vector.y = *top;
+    FT_Vector_Transform(&vector, matrix);
+    if (l > vector.x) l = vector.x;
+    if (r < vector.x) r = vector.x;
+    if (t < vector.y) t = vector.y;
+    if (b > vector.y) b = vector.y;
+    vector.x = *right;
+    vector.y = *bottom;
+    FT_Vector_Transform(&vector, matrix);
+    if (l > vector.x) l = vector.x;
+    if (r < vector.x) r = vector.x;
+    if (t < vector.y) t = vector.y;
+    if (b > vector.y) b = vector.y;
+    vector.x = *left;
+    vector.y = *bottom;
+    FT_Vector_Transform(&vector, matrix);
+    if (l > vector.x) l = vector.x;
+    if (r < vector.x) r = vector.x;
+    if (t < vector.y) t = vector.y;
+    if (b > vector.y) b = vector.y;
+    *left = l;
+    *right = r;
+    *top = t;
+    *bottom = b;
+}
+
 QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
                                                QFixed subPixelPosition,
                                                GlyphFormat format,
-                                               bool fetchMetricsOnly) const
+                                               bool fetchMetricsOnly,
+                                               bool disableOutlineDrawing) const
 {
 //     Q_ASSERT(freetype->lock == 1);
 
@@ -971,11 +1014,20 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     info.xOff = TRUNC(ROUND(slot->advance.x));
     info.yOff = 0;
 
-    if ((set && set->outline_drawing) || fetchMetricsOnly) {
-        int left  = FLOOR(slot->metrics.horiBearingX);
-        int right = CEIL(slot->metrics.horiBearingX + slot->metrics.width);
-        int top    = CEIL(slot->metrics.horiBearingY);
-        int bottom = FLOOR(slot->metrics.horiBearingY - slot->metrics.height);
+    if ((set && set->outline_drawing && !disableOutlineDrawing) || fetchMetricsOnly) {
+        int left  = slot->metrics.horiBearingX;
+        int right = slot->metrics.horiBearingX + slot->metrics.width;
+        int top    = slot->metrics.horiBearingY;
+        int bottom = slot->metrics.horiBearingY - slot->metrics.height;
+
+        if (transform && slot->format != FT_GLYPH_FORMAT_BITMAP)
+            transformBoundingBox(&left, &top, &right, &bottom, &matrix);
+
+        left = FLOOR(left);
+        right = CEIL(right);
+        bottom = FLOOR(bottom);
+        top = CEIL(top);
+
         info.x = TRUNC(left);
         info.y = TRUNC(top);
         info.width = TRUNC(right - left);
@@ -1038,40 +1090,8 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     int right = slot->metrics.horiBearingX + slot->metrics.width;
     int top    = slot->metrics.horiBearingY;
     int bottom = slot->metrics.horiBearingY - slot->metrics.height;
-    if(transform && slot->format != FT_GLYPH_FORMAT_BITMAP) {
-        int l, r, t, b;
-        FT_Vector vector;
-        vector.x = left;
-        vector.y = top;
-        FT_Vector_Transform(&vector, &matrix);
-        l = r = vector.x;
-        t = b = vector.y;
-        vector.x = right;
-        vector.y = top;
-        FT_Vector_Transform(&vector, &matrix);
-        if (l > vector.x) l = vector.x;
-        if (r < vector.x) r = vector.x;
-        if (t < vector.y) t = vector.y;
-        if (b > vector.y) b = vector.y;
-        vector.x = right;
-        vector.y = bottom;
-        FT_Vector_Transform(&vector, &matrix);
-        if (l > vector.x) l = vector.x;
-        if (r < vector.x) r = vector.x;
-        if (t < vector.y) t = vector.y;
-        if (b > vector.y) b = vector.y;
-        vector.x = left;
-        vector.y = bottom;
-        FT_Vector_Transform(&vector, &matrix);
-        if (l > vector.x) l = vector.x;
-        if (r < vector.x) r = vector.x;
-        if (t < vector.y) t = vector.y;
-        if (b > vector.y) b = vector.y;
-        left = l;
-        right = r;
-        top = t;
-        bottom = b;
-    }
+    if (transform && slot->format != FT_GLYPH_FORMAT_BITMAP)
+        transformBoundingBox(&left, &top, &right, &bottom, &matrix);
     left = FLOOR(left);
     right = CEIL(right);
     bottom = FLOOR(bottom);
@@ -1294,56 +1314,60 @@ int QFontEngineFT::synthesized() const
 QFixed QFontEngineFT::ascent() const
 {
     QFixed v = QFixed::fromFixed(metrics.ascender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
+}
+
+QFixed QFontEngineFT::capHeight() const
+{
+    TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(freetype->face, ft_sfnt_os2);
+    if (os2 && os2->version >= 2) {
+        lockFace();
+        QFixed answer = QFixed::fromFixed(FT_MulFix(os2->sCapHeight, freetype->face->size->metrics.y_scale));
+        unlockFace();
+        return answer;
+    }
+    return calculatedCapHeight();
 }
 
 QFixed QFontEngineFT::descent() const
 {
     QFixed v = QFixed::fromFixed(-metrics.descender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
 }
 
 QFixed QFontEngineFT::leading() const
 {
     QFixed v = QFixed::fromFixed(metrics.height - metrics.ascender + metrics.descender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
 }
 
 QFixed QFontEngineFT::xHeight() const
 {
-    if (!isScalableBitmap()) {
-        TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(freetype->face, ft_sfnt_os2);
-        if (os2 && os2->sxHeight) {
-            lockFace();
-            QFixed answer = QFixed(os2->sxHeight * freetype->face->size->metrics.y_ppem) / emSquareSize();
-            unlockFace();
-            return answer;
-        }
-    } else {
-        return QFixed(freetype->face->size->metrics.y_ppem) * freetype->scalableBitmapScaleFactor;
+    TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(freetype->face, ft_sfnt_os2);
+    if (os2 && os2->sxHeight) {
+        lockFace();
+        QFixed answer = QFixed(os2->sxHeight * freetype->face->size->metrics.y_ppem) / emSquareSize();
+        unlockFace();
+        return answer;
     }
+
     return QFontEngine::xHeight();
 }
 
 QFixed QFontEngineFT::averageCharWidth() const
 {
-     if (!isScalableBitmap()) {
-         TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(freetype->face, ft_sfnt_os2);
-         if (os2 && os2->xAvgCharWidth) {
-             lockFace();
-             QFixed answer = QFixed(os2->xAvgCharWidth * freetype->face->size->metrics.x_ppem) / emSquareSize();
-             unlockFace();
-             return answer;
-         }
-     } else {
-         const qreal aspectRatio = (qreal)xsize / ysize;
-         return QFixed::fromReal(fontDef.pixelSize * aspectRatio);
+     TT_OS2 *os2 = (TT_OS2 *)FT_Get_Sfnt_Table(freetype->face, ft_sfnt_os2);
+     if (os2 && os2->xAvgCharWidth) {
+         lockFace();
+         QFixed answer = QFixed(os2->xAvgCharWidth * freetype->face->size->metrics.x_ppem) / emSquareSize();
+         unlockFace();
+         return answer;
      }
 
      return QFontEngine::averageCharWidth();
@@ -1352,8 +1376,8 @@ QFixed QFontEngineFT::averageCharWidth() const
 qreal QFontEngineFT::maxCharWidth() const
 {
     QFixed max_advance = QFixed::fromFixed(metrics.max_advance);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        max_advance *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        max_advance *= scalableBitmapScaleFactor;
     return max_advance.toReal();
 }
 
@@ -1639,7 +1663,7 @@ bool QFontEngineFT::shouldUseDesignMetrics(QFontEngine::ShaperFlags flags) const
 
 QFixed QFontEngineFT::scaledBitmapMetrics(QFixed m) const
 {
-    return m * freetype->scalableBitmapScaleFactor;
+    return m * scalableBitmapScaleFactor;
 }
 
 glyph_metrics_t QFontEngineFT::scaledBitmapMetrics(const glyph_metrics_t &m) const
@@ -1677,8 +1701,8 @@ void QFontEngineFT::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlag
                 delete g;
         }
 
-        if (freetype->scalableBitmapScaleFactor != 1)
-            glyphs->advances[i] *= freetype->scalableBitmapScaleFactor;
+        if (scalableBitmapScaleFactor != 1)
+            glyphs->advances[i] *= scalableBitmapScaleFactor;
     }
     if (face)
         unlockFace();
@@ -1827,7 +1851,7 @@ glyph_metrics_t QFontEngineFT::alphaMapBoundingBox(glyph_t glyph, QFixed subPixe
 
 static inline QImage alphaMapFromGlyphData(QFontEngineFT::Glyph *glyph, QFontEngine::GlyphFormat glyphFormat)
 {
-    if (glyph == Q_NULLPTR)
+    if (glyph == Q_NULLPTR || glyph->height == 0 || glyph->width == 0)
         return QImage();
 
     QImage::Format format = QImage::Format_Invalid;
@@ -1842,14 +1866,17 @@ static inline QImage alphaMapFromGlyphData(QFontEngineFT::Glyph *glyph, QFontEng
         bytesPerLine = (glyph->width + 3) & ~3;
         break;
     case QFontEngine::Format_A32:
-        format = QImage::Format_ARGB32;
+        format = QImage::Format_RGB32;
         bytesPerLine = glyph->width * 4;
         break;
     default:
         Q_UNREACHABLE();
     };
 
-    return QImage(static_cast<const uchar *>(glyph->data), glyph->width, glyph->height, bytesPerLine, format);
+    QImage img(static_cast<const uchar *>(glyph->data), glyph->width, glyph->height, bytesPerLine, format);
+    if (format == QImage::Format_Mono)
+        img.setColor(1, QColor(Qt::white).rgba());  // Expands color table to 2 items; item 0 set to transparent.
+    return img;
 }
 
 QImage *QFontEngineFT::lockedAlphaMapForGlyph(glyph_t glyphIndex, QFixed subPixelPosition,
@@ -1872,10 +1899,14 @@ QImage *QFontEngineFT::lockedAlphaMapForGlyph(glyph_t glyphIndex, QFixed subPixe
 
     currentlyLockedAlphaMap = alphaMapFromGlyphData(glyph, neededFormat);
 
+    const bool glyphHasGeometry = glyph != Q_NULLPTR && glyph->height != 0 && glyph->width != 0;
     if (!cacheEnabled && glyph != &emptyGlyph) {
         currentlyLockedAlphaMap = currentlyLockedAlphaMap.copy();
         delete glyph;
     }
+
+    if (!glyphHasGeometry)
+        return Q_NULLPTR;
 
     if (currentlyLockedAlphaMap.isNull())
         return QFontEngine::lockedAlphaMapForGlyph(glyphIndex, subPixelPosition, neededFormat, t, offset);
@@ -1894,17 +1925,18 @@ void QFontEngineFT::unlockAlphaMapForGlyph()
 static inline bool is2dRotation(const QTransform &t)
 {
     return qFuzzyCompare(t.m11(), t.m22()) && qFuzzyCompare(t.m12(), -t.m21())
-        && qFuzzyCompare(t.m11()*t.m22() - t.m12()*t.m21(), 1.0);
+        && qFuzzyCompare(t.m11()*t.m22() - t.m12()*t.m21(), qreal(1.0));
 }
 
 QFontEngineFT::Glyph *QFontEngineFT::loadGlyphFor(glyph_t g,
                                                   QFixed subPixelPosition,
                                                   GlyphFormat format,
                                                   const QTransform &t,
-                                                  bool fetchBoundingBox)
+                                                  bool fetchBoundingBox,
+                                                  bool disableOutlineDrawing)
 {
     QGlyphSet *glyphSet = loadGlyphSet(t);
-    if (glyphSet != 0 && glyphSet->outline_drawing && !fetchBoundingBox)
+    if (glyphSet != 0 && glyphSet->outline_drawing && !disableOutlineDrawing && !fetchBoundingBox)
         return 0;
 
     Glyph *glyph = glyphSet != 0 ? glyphSet->getGlyph(g, subPixelPosition) : 0;
@@ -1918,7 +1950,7 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyphFor(glyph_t g,
         FT_Matrix ftMatrix = glyphSet != 0 ? glyphSet->transformationMatrix : QTransformToFTMatrix(t);
         FT_Matrix_Multiply(&ftMatrix, &m);
         freetype->matrix = m;
-        glyph = loadGlyph(glyphSet, g, subPixelPosition, format, false);
+        glyph = loadGlyph(glyphSet, g, subPixelPosition, format, false, disableOutlineDrawing);
         unlockFace();
     }
 
@@ -1934,7 +1966,7 @@ QImage QFontEngineFT::alphaMapForGlyph(glyph_t g, QFixed subPixelPosition, const
 {
     const GlyphFormat neededFormat = antialias ? Format_A8 : Format_Mono;
 
-    Glyph *glyph = loadGlyphFor(g, subPixelPosition, neededFormat, t);
+    Glyph *glyph = loadGlyphFor(g, subPixelPosition, neededFormat, t, false, true);
 
     QImage img = alphaMapFromGlyphData(glyph, neededFormat);
     img = img.copy();
@@ -1945,7 +1977,7 @@ QImage QFontEngineFT::alphaMapForGlyph(glyph_t g, QFixed subPixelPosition, const
     if (!img.isNull())
         return img;
 
-    return QFontEngine::alphaMapForGlyph(g);
+    return QFontEngine::alphaMapForGlyph(g, subPixelPosition, t);
 }
 
 QImage QFontEngineFT::alphaRGBMapForGlyph(glyph_t g, QFixed subPixelPosition, const QTransform &t)
@@ -1955,7 +1987,7 @@ QImage QFontEngineFT::alphaRGBMapForGlyph(glyph_t g, QFixed subPixelPosition, co
 
     const GlyphFormat neededFormat = Format_A32;
 
-    Glyph *glyph = loadGlyphFor(g, subPixelPosition, neededFormat, t);
+    Glyph *glyph = loadGlyphFor(g, subPixelPosition, neededFormat, t, false, true);
 
     QImage img = alphaMapFromGlyphData(glyph, neededFormat);
     img = img.copy();
@@ -1981,9 +2013,9 @@ QImage QFontEngineFT::bitmapForGlyph(glyph_t g, QFixed subPixelPosition, const Q
     else if (defaultFormat == GlyphFormat::Format_Mono)
         img = QImage(glyph->data, glyph->width, glyph->height, QImage::Format_Mono).copy();
 
-    if (!img.isNull() && (!t.isIdentity() || freetype->scalableBitmapScaleFactor != 1)) {
+    if (!img.isNull() && (!t.isIdentity() || scalableBitmapScaleFactor != 1)) {
         QTransform trans(t);
-        const qreal scaleFactor = freetype->scalableBitmapScaleFactor.toReal();
+        const qreal scaleFactor = scalableBitmapScaleFactor.toReal();
         trans.scale(scaleFactor, scaleFactor);
         img = img.transformed(trans, Qt::SmoothTransformation);
     }

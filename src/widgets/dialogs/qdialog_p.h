@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qwidget_p.h"
 #include "QtCore/qeventloop.h"
 #include "QtCore/qpointer.h"
@@ -98,10 +99,6 @@ public:
     void setMainDefault(QPushButton *);
     void hideDefault();
     void resetModalitySetByOpen();
-
-#ifdef Q_OS_WINCE_WM
-    void _q_doneAction();
-#endif
 
     int rescode;
     int resetModalityTo;

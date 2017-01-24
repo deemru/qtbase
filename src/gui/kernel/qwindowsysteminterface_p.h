@@ -50,6 +50,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "qwindowsysteminterface.h"
 
 #include <QElapsedTimer>
@@ -329,8 +330,8 @@ public:
 
     class ExposeEvent : public WindowSystemEvent {
     public:
-        ExposeEvent(QWindow *exposed, const QRegion &region);
-        QPointer<QWindow> exposed;
+        ExposeEvent(QWindow *window, const QRegion &region);
+        QPointer<QWindow> window;
         bool isExposed;
         QRegion region;
     };
@@ -490,9 +491,14 @@ public:
     static WindowSystemEvent *getNonUserInputWindowSystemEvent();
     static WindowSystemEvent *peekWindowSystemEvent(EventType t);
     static void removeWindowSystemEvent(WindowSystemEvent *event);
-    static void postWindowSystemEvent(WindowSystemEvent *ev);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static bool handleWindowSystemEvent(WindowSystemEvent *ev);
 
+private:
+    static void postWindowSystemEvent(WindowSystemEvent *ev);
+    static bool processWindowSystemEvent(WindowSystemEvent *ev);
+
+public:
     static QElapsedTimer eventTime;
     static bool synchronousWindowSystemEvents;
 

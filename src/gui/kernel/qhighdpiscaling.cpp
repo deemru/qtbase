@@ -68,10 +68,11 @@ static inline qreal initialGlobalScaleFactor()
         }
     } else {
         if (qEnvironmentVariableIsSet(legacyDevicePixelEnvVar)) {
-            qWarning() << "Warning:" << legacyDevicePixelEnvVar << "is deprecated. Instead use:" << endl
-                       << "   " << autoScreenEnvVar << "to enable platform plugin controlled per-screen factors." << endl
-                       << "   " << screenFactorsEnvVar << "to set per-screen factors." << endl
-                       << "   " << scaleFactorEnvVar << "to set the application global scale factor.";
+            qWarning("Warning: %s is deprecated. Instead use:\n"
+                     "   %s to enable platform plugin controlled per-screen factors.\n"
+                     "   %s to set per-screen factors.\n"
+                     "   %s to set the application global scale factor.",
+                     legacyDevicePixelEnvVar, autoScreenEnvVar, screenFactorsEnvVar, scaleFactorEnvVar);
 
             int dpr = qEnvironmentVariableIntValue(legacyDevicePixelEnvVar);
             if (dpr > 0)
@@ -124,7 +125,7 @@ static inline qreal initialGlobalScaleFactor()
     The devicePixelRatio seen by applications is the product of the Qt scale
     factor and the OS scale factor. The value of the scale factors may be 1,
     in which case two or more of the coordinate systems are equivalent. Platforms
-    that (may) have an OS scale factor include OS X, iOS and Wayland.
+    that (may) have an OS scale factor include \macos, iOS and Wayland.
 
     Note that the functions in this file do not work with the OS scale factor
     directly and are limited to converting between device independent and native
@@ -169,11 +170,11 @@ static inline qreal initialGlobalScaleFactor()
         The QT_SCALE_FACTOR environment variable can be used to set
         a global scale factor for all windows in the processs. This
         is useful for testing and debugging (you can simulate any
-        devicePixelRatio without needing access to sepcial hardware),
+        devicePixelRatio without needing access to special hardware),
         and perhaps also for targeting a specific application to
         a specific display type (embedded use cases).
 
-    2) A per-screen scale factors
+    2) Per-screen scale factors
         Some platform plugins support providing a per-screen scale
         factor based on display density information. These platforms
         include X11, Windows, and Android.
@@ -186,13 +187,13 @@ static inline qreal initialGlobalScaleFactor()
         Enabling either will make QHighDpiScaling call QPlatformScreen::pixelDensity()
         and use the value provided as the scale factor for the screen in
         question. Disabling is done on a 'veto' basis where either the
-        environment or the application source can disable. The intended use
+        environment or the application can disable the scaling. The intended use
         cases are 'My system is not providing correct display density
         information' and 'My application needs to work in display pixels',
         respectively.
 
         The QT_SCREEN_SCALE_FACTORS environment variable can be used to set the screen
-        scale factors manually.Set this to a semicolon-separated
+        scale factors manually. Set this to a semicolon-separated
         list of scale factors (matching the order of QGuiApplications::screens()),
         or to a list of name=value pairs (where name matches QScreen::name()).
 
@@ -342,8 +343,10 @@ static const char scaleFactorProperty[] = "_q_scaleFactor";
 */
 void QHighDpiScaling::setScreenFactor(QScreen *screen, qreal factor)
 {
-    m_screenFactorSet = true;
-    m_active = true;
+    if (!qFuzzyCompare(factor, qreal(1))) {
+        m_screenFactorSet = true;
+        m_active = true;
+    }
     screen->setProperty(scaleFactorProperty, QVariant(factor));
 
     // hack to force re-evaluation of screen geometry

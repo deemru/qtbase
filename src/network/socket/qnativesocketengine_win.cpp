@@ -214,6 +214,7 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
     switch (opt) {
     case QNativeSocketEngine::NonBlockingSocketOption:      // WSAIoctl
     case QNativeSocketEngine::TypeOfServiceOption:          // not supported
+    case QNativeSocketEngine::MaxStreamsSocketOption:
         Q_UNREACHABLE();
 
     case QNativeSocketEngine::ReceiveBufferSocketOption:
@@ -325,6 +326,14 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
         return -1;
     }
     */
+
+    //### SCTP not implemented
+    if (socketType == QAbstractSocket::SctpSocket) {
+        setError(QAbstractSocket::UnsupportedSocketOperationError,
+                 ProtocolUnsupportedErrorString);
+        return false;
+    }
+
     QSysInfo::WinVersion osver = QSysInfo::windowsVersion();
 
     //Windows XP and 2003 support IPv6 but not dual stack sockets
@@ -387,7 +396,6 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
         return false;
     }
 
-#if !defined(Q_OS_WINCE)
     if (socketType == QAbstractSocket::UdpSocket) {
         // enable new behavior using
         // SIO_UDP_CONNRESET
@@ -414,7 +422,6 @@ bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType soc
                  &sendmsgguid, sizeof(sendmsgguid),
                  &sendmsg, sizeof(sendmsg), &bytesReturned, NULL, NULL) == SOCKET_ERROR)
         sendmsg = 0;
-#endif
 
     socketDescriptor = socket;
     if (socket != INVALID_SOCKET) {
@@ -453,6 +460,7 @@ int QNativeSocketEnginePrivate::option(QNativeSocketEngine::SocketOption opt) co
         break;
     }
     case QNativeSocketEngine::TypeOfServiceOption:
+    case QNativeSocketEngine::MaxStreamsSocketOption:
         return -1;
 
     default:
@@ -503,6 +511,7 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
         break;
         }
     case QNativeSocketEngine::TypeOfServiceOption:
+    case QNativeSocketEngine::MaxStreamsSocketOption:
         return false;
 
     default:
@@ -703,7 +712,7 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &address, quin
 
                 if (errorDetected)
                     break;
-                // fall through
+                Q_FALLTHROUGH();
             }
             case WSAEINPROGRESS:
                 setError(QAbstractSocket::UnfinishedSocketOperationError, InvalidSocketErrorString);
@@ -1091,7 +1100,6 @@ qint64 QNativeSocketEnginePrivate::nativeBytesAvailable() const
 
 bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
 {
-#if !defined(Q_OS_WINCE)
     // Create a sockaddr struct and reset its port number.
     qt_sockaddr storage;
     QT_SOCKLEN_T storageSize = sizeof(storage);
@@ -1118,18 +1126,6 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
         result = true;
     }
 
-#else // Q_OS_WINCE
-    bool result = false;
-    fd_set readS;
-    FD_ZERO(&readS);
-    FD_SET((SOCKET)socketDescriptor, &readS);
-    timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 5000;
-    int available = ::select(1, &readS, 0, 0, &timeout);
-    result = available > 0;
-#endif
-
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     qDebug("QNativeSocketEnginePrivate::nativeHasPendingDatagrams() == %s",
            result ? "true" : "false");
@@ -1141,7 +1137,6 @@ bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
 qint64 QNativeSocketEnginePrivate::nativePendingDatagramSize() const
 {
     qint64 ret = -1;
-#if !defined(Q_OS_WINCE)
     int recvResult = 0;
     DWORD flags;
     DWORD bufferCount = 5;
@@ -1186,30 +1181,12 @@ qint64 QNativeSocketEnginePrivate::nativePendingDatagramSize() const
     if (buf)
         delete[] buf;
 
-#else // Q_OS_WINCE
-    DWORD size = -1;
-    DWORD bytesReturned;
-    int ioResult = WSAIoctl(socketDescriptor, FIONREAD, 0,0, &size, sizeof(size), &bytesReturned, 0, 0);
-    if (ioResult == SOCKET_ERROR) {
-        int err = WSAGetLastError();
-        WS_ERROR_DEBUG(err);
-    } else {
-        ret = qint64(size);
-    }
-#endif
-
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     qDebug("QNativeSocketEnginePrivate::nativePendingDatagramSize() == %lli", ret);
 #endif
 
     return ret;
 }
-
-#ifdef Q_OS_WINCE
-// Windows CE has no support for sendmsg or recvmsg. We set it to null here to simplify the code below.
-static int (*const recvmsg)(...) = 0;
-static int (*const sendmsg)(...) = 0;
-#endif
 
 qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxLength, QIpPacketHeader *header,
                                                          QAbstractSocketEngine::PacketHeaderOptions options)
@@ -1330,12 +1307,7 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
 
     memset(&msg, 0, sizeof(msg));
     memset(&aa, 0, sizeof(aa));
-#if !defined(Q_OS_WINCE)
     buf.buf = len ? (char*)data : 0;
-#else
-    char tmp;
-    buf.buf = len ? (char*)data : &tmp;
-#endif
     msg.lpBuffers = &buf;
     msg.dwBufferCount = 1;
     msg.name = &aa.a;
@@ -1497,9 +1469,6 @@ qint64 QNativeSocketEnginePrivate::nativeRead(char *data, qint64 maxLength)
     buf.len = maxLength;
     DWORD flags = 0;
     DWORD bytesRead = 0;
-#if defined(Q_OS_WINCE)
-    WSASetLastError(0);
-#endif
     if (::WSARecv(socketDescriptor, &buf, 1, &bytesRead, &flags, 0,0) ==  SOCKET_ERROR) {
         int err = WSAGetLastError();
         WS_ERROR_DEBUG(err);
@@ -1613,11 +1582,7 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout,
     tv.tv_sec = timeout / 1000;
     tv.tv_usec = (timeout % 1000) * 1000;
 
-#if !defined(Q_OS_WINCE)
     ret = select(socketDescriptor + 1, &fdread, &fdwrite, &fdexception, timeout < 0 ? 0 : &tv);
-#else
-    ret = select(1, &fdread, &fdwrite, &fdexception, timeout < 0 ? 0 : &tv);
-#endif
 
      //... but if it is actually set, pretend it did not happen
     if (ret > 0 && FD_ISSET((SOCKET)socketDescriptor, &fdexception))

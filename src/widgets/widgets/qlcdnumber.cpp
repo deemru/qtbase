@@ -188,8 +188,8 @@ static QString int2string(int num, int base, int ndigits, bool *oflow)
                 } while (n != 0);
                 len = ndigits - len;
                 if (len > 0)
-                s.fill(QLatin1Char(' '), len);
-                s += QString::fromLatin1(p);
+                    s += QString(len, QLatin1Char(' '));
+                s += QLatin1String(p);
             }
             break;
     }
@@ -338,11 +338,8 @@ static const char *getSegments(char ch)               // gets list of segments f
 */
 
 QLCDNumber::QLCDNumber(QWidget *parent)
-        : QFrame(*new QLCDNumberPrivate, parent)
+    : QLCDNumber(5, parent)
 {
-    Q_D(QLCDNumber);
-    d->ndigits = 5;
-    d->init();
 }
 
 

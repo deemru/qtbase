@@ -81,15 +81,15 @@ QT_BEGIN_NAMESPACE
     contains() a QPoint or QRect. The bounding rectangle can be found
     with boundingRect().
 
-    The function rects() gives a decomposition of the region into
-    rectangles.
+    Iteration over the region (with begin(), end()) gives a decomposition of
+    the region into rectangles. The same sequence of rectangles is returned by rects().
 
     Example of using complex regions:
     \snippet code/src_gui_painting_qregion.cpp 0
 
     \section1 Additional License Information
 
-    On Embedded Linux, Windows CE and X11 platforms, parts of this class rely on
+    On Embedded Linux and X11 platforms, parts of this class rely on
     code obtained under the following licenses:
 
     \legalese
@@ -395,23 +395,24 @@ void QRegion::exec(const QByteArray &buffer, int ver, QDataStream::ByteOrder byt
 
 QDataStream &operator<<(QDataStream &s, const QRegion &r)
 {
-    QVector<QRect> a = r.rects();
-    if (a.isEmpty()) {
+    auto b = r.begin(), e = r.end();
+    if (b == e) {
         s << (quint32)0;
     } else {
+        const auto size = e - b;
         if (s.version() == 1) {
-            int i;
-            for (i = a.size() - 1; i > 0; --i) {
+            for (auto i = size - 1; i > 0; --i) {
                 s << (quint32)(12 + i * 24);
                 s << (int)QRGN_OR;
             }
-            for (i = 0; i < a.size(); ++i) {
-                s << (quint32)(4+8) << (int)QRGN_SETRECT << a[i];
-            }
+            for (auto it = b; it != e; ++it)
+                s << (quint32)(4+8) << (int)QRGN_SETRECT << *it;
         } else {
-            s << (quint32)(4 + 4 + 16 * a.size()); // 16: storage size of QRect
+            s << quint32(4 + 4 + 16 * size); // 16: storage size of QRect
             s << (qint32)QRGN_RECTS;
-            s << a;
+            s << quint32(size);
+            for (auto it = b; it != e; ++it)
+                s << *it;
         }
     }
     return s;
@@ -722,12 +723,9 @@ bool QRegion::intersects(const QRegion &region) const
     if (rectCount() == 1 && region.rectCount() == 1)
         return true;
 
-    const QVector<QRect> myRects = rects();
-    const QVector<QRect> otherRects = region.rects();
-
-    for (QVector<QRect>::const_iterator i1 = myRects.constBegin(); i1 < myRects.constEnd(); ++i1)
-        for (QVector<QRect>::const_iterator i2 = otherRects.constBegin(); i2 < otherRects.constEnd(); ++i2)
-            if (rect_intersects(*i1, *i2))
+    for (const QRect &myRect : *this)
+        for (const QRect &otherRect : region)
+            if (rect_intersects(myRect, otherRect))
                 return true;
     return false;
 }
@@ -928,6 +926,100 @@ QRegion QRegion::intersect(const QRect &r) const
 */
 
 /*!
+    \typedef QRegion::const_iterator
+    \since 5.8
+
+    An iterator over the QRects that make up the region.
+
+    QRegion does not offer mutable iterators.
+
+    \sa begin(), end()
+*/
+
+/*!
+    \typedef QRegion::const_reverse_iterator
+    \since 5.8
+
+    A reverse iterator over the QRects that make up the region.
+
+    QRegion does not offer mutable iterators.
+
+    \sa rbegin(), rend()
+*/
+
+/*!
+    \fn QRegion::begin() const
+    \since 5.8
+
+    Returns a const_iterator pointing to the beginning of the range of
+    rectangles that make up this range, in the order in which rects()
+    returns them.
+
+    \sa rbegin(), cbegin(), end()
+*/
+
+/*!
+    \fn QRegion::cbegin() const
+    \since 5.8
+
+    Same as begin().
+*/
+
+/*!
+    \fn QRegion::end() const
+    \since 5.8
+
+    Returns a const_iterator pointing to one past the end of the range of
+    rectangles that make up this range, in the order in which rects()
+    returns them.
+
+    \sa rend(), cend(), begin()
+*/
+
+/*!
+    \fn QRegion::cend() const
+    \since 5.8
+
+    Same as end().
+*/
+
+/*!
+    \fn QRegion::rbegin() const
+    \since 5.8
+
+    Returns a const_reverse_iterator pointing to the beginning of the range of
+    rectangles that make up this range, in the reverse order in which rects()
+    returns them.
+
+    \sa begin(), crbegin(), rend()
+*/
+
+/*!
+    \fn QRegion::crbegin() const
+    \since 5.8
+
+    Same as rbegin().
+*/
+
+/*!
+    \fn QRegion::rend() const
+    \since 5.8
+
+    Returns a const_reverse_iterator pointing to one past the end of the range of
+    rectangles that make up this range, in the reverse order in which rects()
+    returns them.
+
+    \sa end(), crend(), rbegin()
+*/
+
+/*!
+    \fn QRegion::crend() const
+    \since 5.8
+
+    Same as rend().
+*/
+
+/*!
     \fn void QRegion::setRects(const QRect *rects, int number)
 
     Sets the region using the array of rectangles specified by \a rects and
@@ -943,7 +1035,7 @@ QRegion QRegion::intersect(const QRect &r) const
        sort key and X as the minor sort key.
     \endlist
     \omit
-    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and OS X).
+    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and \macos).
     \endomit
 */
 
@@ -1065,13 +1157,11 @@ Q_GUI_EXPORT QPainterPath qt_regionToPath(const QRegion &region)
         return result;
     }
 
-    const QVector<QRect> rects = region.rects();
+    auto rect = region.begin();
+    const auto end = region.end();
 
     QVarLengthArray<Segment> segments;
-    segments.resize(4 * rects.size());
-
-    const QRect *rect = rects.constData();
-    const QRect *end = rect + rects.size();
+    segments.resize(4 * (end - rect));
 
     int lastRowSegmentCount = 0;
     Segment *lastRowSegments = 0;
@@ -1178,6 +1268,12 @@ struct QRegionPrivate {
             rects[0] = extents;
         }
     }
+
+    const QRect *begin() const Q_DECL_NOTHROW
+    { return numRects == 1 ? &extents : rects.data(); } // avoid vectorize()
+
+    const QRect *end() const Q_DECL_NOTHROW
+    { return begin() + numRects; }
 
     inline void append(const QRect *r);
     void append(const QRegionPrivate *r);
@@ -4200,7 +4296,7 @@ QRegion QRegion::xored(const QRegion &r) const
     }
 }
 
-QRect QRegion::boundingRect() const
+QRect QRegion::boundingRect() const Q_DECL_NOTHROW
 {
     if (isEmpty())
         return QRect();
@@ -4256,6 +4352,16 @@ QVector<QRect> QRegion::rects() const
     }
 }
 
+QRegion::const_iterator QRegion::begin() const Q_DECL_NOTHROW
+{
+    return d->qt_rgn ? d->qt_rgn->begin() : nullptr;
+}
+
+QRegion::const_iterator QRegion::end() const Q_DECL_NOTHROW
+{
+    return d->qt_rgn ? d->qt_rgn->end() : nullptr;
+}
+
 void QRegion::setRects(const QRect *rects, int num)
 {
     *this = QRegion();
@@ -4288,7 +4394,7 @@ void QRegion::setRects(const QRect *rects, int num)
     }
 }
 
-int QRegion::rectCount() const
+int QRegion::rectCount() const Q_DECL_NOTHROW
 {
     return (d->qt_rgn ? d->qt_rgn->numRects : 0);
 }
@@ -4318,10 +4424,10 @@ bool QRegion::intersects(const QRect &rect) const
     if (d->qt_rgn->numRects == 1)
         return true;
 
-    const QVector<QRect> myRects = rects();
-    for (QVector<QRect>::const_iterator it = myRects.constBegin(); it < myRects.constEnd(); ++it)
-        if (rect_intersects(r, *it))
+    for (const QRect &rect : *this) {
+        if (rect_intersects(r, rect))
             return true;
+    }
     return false;
 }
 

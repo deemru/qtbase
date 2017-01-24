@@ -60,15 +60,7 @@
 #include <qmimedatabase.h>
 #include <qapplication.h>
 #include <qstylepainter.h>
-#if !defined(Q_OS_WINCE)
 #include "ui_qfiledialog.h"
-#else
-#define Q_EMBEDDED_SMALLSCREEN
-#include "ui_qfiledialog_embedded.h"
-#if defined(Q_OS_WINCE)
-extern bool qt_priv_ptr_valid;
-#endif
-#endif
 #if defined(Q_OS_UNIX)
 #include <pwd.h>
 #include <unistd.h> // for pathconf() on OS X
@@ -533,7 +525,7 @@ QFileDialogPrivate::QFileDialogPrivate()
         showHiddenAction(0),
         useDefaultCaption(true),
         qFileDialogUi(0),
-        options(new QFileDialogOptions)
+        options(QFileDialogOptions::create())
 {
 }
 
@@ -700,12 +692,14 @@ void QFileDialogPrivate::emitFilesSelected(const QStringList &files)
 
 bool QFileDialogPrivate::canBeNativeDialog() const
 {
-    Q_Q(const QFileDialog);
+    // Don't use Q_Q here! This function is called from ~QDialog,
+    // so Q_Q calling q_func() invokes undefined behavior (invalid cast in q_func()).
+    const QDialog * const q = static_cast<const QDialog*>(q_ptr);
     if (nativeDialogInUse)
         return true;
     if (QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs)
         || q->testAttribute(Qt::WA_DontShowOnScreen)
-        || (q->options() & QFileDialog::DontUseNativeDialog)) {
+        || (options->options() & QFileDialog::DontUseNativeDialog)) {
         return false;
     }
 
@@ -898,6 +892,9 @@ void QFileDialogPrivate::_q_goToUrl(const QUrl &url)
         {QStandardPaths::standardLocations(QStandardPaths::PicturesLocation).last()},
         a native image picker dialog will be used for accessing the user's photo album.
         The filename returned can be loaded using QFile and related APIs.
+        For this to be enabled, the Info.plist assigned to QMAKE_INFO_PLIST in the
+        project file must contain the key \c NSPhotoLibraryUsageDescription. See
+        Info.plist documentation from Apple for more information regarding this key.
         This feature was added in Qt 5.5.
 */
 void QFileDialog::setDirectory(const QString &directory)
@@ -1750,7 +1747,7 @@ int QFileDialogPrivate::maxNameLength(const QString &path)
 {
 #if defined(Q_OS_UNIX)
     return ::pathconf(QFile::encodeName(path).data(), _PC_NAME_MAX);
-#elif defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+#elif defined(Q_OS_WINRT)
     Q_UNUSED(path);
     return MAX_PATH;
 #elif defined(Q_OS_WIN)
@@ -2040,10 +2037,12 @@ QString QFileDialog::labelText(DialogLabel label) const
             button = d->qFileDialogUi->buttonBox->button(QDialogButtonBox::Save);
         if (button)
             return button->text();
+        break;
     case Reject:
         button = d->qFileDialogUi->buttonBox->button(QDialogButtonBox::Cancel);
         if (button)
             return button->text();
+        break;
     }
     return QString();
 }
@@ -2076,7 +2075,7 @@ QString QFileDialog::labelText(DialogLabel label) const
     The dialog's caption is set to \a caption. If \a caption is not specified
     then a default caption will be used.
 
-    On Windows, and OS X, this static function will use the
+    On Windows, and \macos, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
@@ -2187,7 +2186,7 @@ QUrl QFileDialog::getOpenFileUrl(QWidget *parent,
     The dialog's caption is set to \a caption. If \a caption is not specified
     then a default caption will be used.
 
-    On Windows, and OS X, this static function will use the
+    On Windows, and \macos, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
@@ -2310,12 +2309,12 @@ QList<QUrl> QFileDialog::getOpenFileUrls(QWidget *parent,
     The dialog's caption is set to \a caption. If \a caption is not specified,
     a default caption will be used.
 
-    On Windows, and OS X, this static function will use the
+    On Windows, and \macos, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
     dispatch any QTimers, and if \a parent is not 0 then it will position the
-    dialog just below the parent's title bar. On OS X, with its native file
+    dialog just below the parent's title bar. On \macos, with its native file
     dialog, the filter argument is ignored.
 
     On Unix/X11, the normal behavior of the file dialog is to resolve and
@@ -2418,12 +2417,11 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
     pass. To ensure a native file dialog, \l{QFileDialog::}{ShowDirsOnly} must
     be set.
 
-    On Windows and OS X, this static function will use the
+    On Windows and \macos, this static function will use the
     native file dialog and not a QFileDialog. However, the native Windows file
     dialog does not support displaying files in the directory chooser. You need
     to pass \l{QFileDialog::}{DontUseNativeDialog} to display files using a
-    QFileDialog. On Windows CE, if the device has no native file dialog, a
-    QFileDialog will be used.
+    QFileDialog.
 
     On Unix/X11, the normal behavior of the file dialog is to resolve and
     follow symlinks. For example, if \c{/usr/tmp} is a symlink to \c{/var/tmp},
@@ -2800,7 +2798,7 @@ void QFileDialogPrivate::init(const QUrl &directory, const QString &nameFilter,
     }
 
     q->setAcceptMode(QFileDialog::AcceptOpen);
-    nativeDialogInUse = (canBeNativeDialog() && platformFileDialogHelper() != 0);
+    nativeDialogInUse = platformFileDialogHelper() != 0;
     if (!nativeDialogInUse)
         createWidgets();
     q->setFileMode(QFileDialog::AnyFile);
@@ -4015,7 +4013,7 @@ QString QFSCompleter::pathFromIndex(const QModelIndex &index) const
     QString currentLocation = dirModel->rootPath();
     QString path = index.data(QFileSystemModel::FilePathRole).toString();
     if (!currentLocation.isEmpty() && path.startsWith(currentLocation)) {
-#if defined(Q_OS_UNIX) || defined(Q_OS_WINCE)
+#if defined(Q_OS_UNIX)
         if (currentLocation == QDir::separator())
             return path.mid(currentLocation.length());
 #endif

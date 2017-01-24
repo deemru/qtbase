@@ -42,7 +42,7 @@
 #include "qcocoahelpers.h"
 #include <qdebug.h>
 #include <QtCore/private/qcore_mac_p.h>
-#include <QtPlatformSupport/private/cglconvenience_p.h>
+#include <QtCglSupport/private/cglconvenience_p.h>
 #include <QtPlatformHeaders/qcocoanativecontext.h>
 #include <dlfcn.h>
 
@@ -255,7 +255,7 @@ void QCocoaGLContext::setActiveWindow(QWindow *window)
     QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(window->handle());
     cocoaWindow->setCurrentContext(this);
 
-    [(QNSView *) cocoaWindow->contentView() setQCocoaGLContext:this];
+    [(QNSView *) cocoaWindow->view() setQCocoaGLContext:this];
 }
 
 void QCocoaGLContext::updateSurfaceFormat()
@@ -312,8 +312,16 @@ void QCocoaGLContext::updateSurfaceFormat()
         m_format.setSamples(samples);
 
     int doubleBuffered = -1;
+    int tripleBuffered = -1;
     [pixelFormat getValues:&doubleBuffered forAttribute:NSOpenGLPFADoubleBuffer forVirtualScreen:0];
-    m_format.setSwapBehavior(doubleBuffered == 1 ? QSurfaceFormat::DoubleBuffer : QSurfaceFormat::SingleBuffer);
+    [pixelFormat getValues:&tripleBuffered forAttribute:NSOpenGLPFATripleBuffer forVirtualScreen:0];
+
+    if (tripleBuffered == 1)
+        m_format.setSwapBehavior(QSurfaceFormat::TripleBuffer);
+    else if (doubleBuffered == 1)
+        m_format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    else
+        m_format.setSwapBehavior(QSurfaceFormat::SingleBuffer);
 
     int steroBuffers = -1;
     [pixelFormat getValues:&steroBuffers forAttribute:NSOpenGLPFAStereo forVirtualScreen:0];
@@ -321,6 +329,11 @@ void QCocoaGLContext::updateSurfaceFormat()
         m_format.setOption(QSurfaceFormat::StereoBuffers);
 
     [pixelFormat release];
+
+    GLint swapInterval = -1;
+    [m_context getValues:&swapInterval forParameter:NSOpenGLCPSwapInterval];
+    if (swapInterval >= 0)
+        m_format.setSwapInterval(swapInterval);
 
     // Restore the original context
     CGLSetCurrentContext(oldContext);

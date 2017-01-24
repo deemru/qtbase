@@ -90,7 +90,7 @@ static QSize determineScreenSize(screen_display_t display, bool primaryScreen) {
 
     const QString envPhySizeStr = qgetenv("QQNX_PHYSICAL_SCREEN_SIZE");
     if (!envPhySizeStr.isEmpty()) {
-        const QStringList envPhySizeStrList = envPhySizeStr.split(QLatin1Char(','));
+        const auto envPhySizeStrList = envPhySizeStr.splitRef(QLatin1Char(','));
         const int envWidth = envPhySizeStrList.size() == 2 ? envPhySizeStrList[0].toInt() : -1;
         const int envHeight = envPhySizeStrList.size() == 2 ? envPhySizeStrList[1].toInt() : -1;
 
@@ -340,11 +340,12 @@ qreal QQnxScreen::refreshRate() const
         qWarning("QQnxScreen: Failed to query screen mode. Using default value of 60Hz");
         return 60.0;
     }
-    qScreenDebug() << "screen mode:" << endl
-                   << "      width =" << displayMode.width << endl
-                   << "     height =" << displayMode.height << endl
-                   << "    refresh =" << displayMode.refresh << endl
-                   << " interlaced =" << displayMode.interlaced;
+    qScreenDebug("screen mode:\n"
+                 "      width = %u\n"
+                 "     height = %u\n"
+                 "    refresh = %u\n"
+                 " interlaced = %u",
+                 uint(displayMode.width), uint(displayMode.height), uint(displayMode.refresh), uint(displayMode.interlaced));
     return static_cast<qreal>(displayMode.refresh);
 }
 
@@ -384,10 +385,8 @@ Qt::ScreenOrientation QQnxScreen::orientation() const
 
 QWindow *QQnxScreen::topLevelAt(const QPoint &point) const
 {
-    QListIterator<QQnxWindow*> it(m_childWindows);
-    it.toBack();
-    while (it.hasPrevious()) {
-        QWindow *win = it.previous()->window();
+    for (auto it = m_childWindows.rbegin(), end = m_childWindows.rend(); it != end; ++it) {
+        QWindow *win = (*it)->window();
         if (win->geometry().contains(point))
             return win;
     }
@@ -404,7 +403,7 @@ static bool isOrthogonal(int angle1, int angle2)
 
 void QQnxScreen::setRotation(int rotation)
 {
-    qScreenDebug() << "orientation =" << rotation;
+    qScreenDebug("orientation = %d", rotation);
     // Check if rotation changed
     // We only want to rotate if we are the primary screen
     if (m_currentRotation != rotation && isPrimaryScreen()) {

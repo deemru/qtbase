@@ -39,6 +39,8 @@
 
 #include "quiaccessibilityelement.h"
 
+#ifndef QT_NO_ACCESSIBILITY
+
 #include "private/qaccessiblecache_p.h"
 
 @implementation QMacAccessibilityElement
@@ -61,7 +63,7 @@
 
     QAccessibleCache *cache = QAccessibleCache::instance();
 
-    QMacAccessibilityElement *element = cache->elementForId(anId);
+    QT_MANGLE_NAMESPACE(QMacAccessibilityElement) *element = cache->elementForId(anId);
     if (!element) {
         Q_ASSERT(QAccessible::accessibleInterface(anId));
         element = [[self alloc] initWithId:anId withAccessibilityContainer: view];
@@ -221,3 +223,5 @@
 }
 
 @end
+
+#endif

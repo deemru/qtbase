@@ -51,6 +51,8 @@
 
 #ifdef Q_OS_OSX
 #  include <AppKit/NSApplication.h>
+#elif defined(Q_OS_WATCHOS)
+#  include <WatchKit/WatchKit.h>
 #else
 #  include <UIKit/UIApplication.h>
 #endif
@@ -75,6 +77,8 @@ QT_USE_NAMESPACE
             name:nil
 #ifdef Q_OS_OSX
             object:[NSApplication sharedApplication]];
+#elif defined(Q_OS_WATCHOS)
+            object:[WKExtension sharedExtension]];
 #else
             object:[UIApplication sharedApplication]];
 #endif
@@ -113,7 +117,7 @@ static CFStringRef runLoopMode(NSDictionary *dictionary)
         if (CFStringCompare(mode, [self currentMode], 0) == kCFCompareEqualTo)
             m_runLoopModes.pop();
         else
-            qWarning("Tried to pop run loop mode '%s' that was never pushed!", qPrintable(QCFString::toQString(mode)));
+            qWarning("Tried to pop run loop mode '%s' that was never pushed!", qPrintable(QString::fromCFString(mode)));
 
         Q_ASSERT(m_runLoopModes.size() >= 1);
      }
@@ -210,6 +214,13 @@ QEventDispatcherCoreFoundation::~QEventDispatcherCoreFoundation()
     m_cfSocketNotifier.removeSocketNotifiers();
 }
 
+QEventLoop *QEventDispatcherCoreFoundation::currentEventLoop() const
+{
+    QEventLoop *eventLoop = QThreadData::current()->eventLoops.top();
+    Q_ASSERT(eventLoop);
+    return eventLoop;
+}
+
 /*!
     Processes all pending events that match \a flags until there are no
     more events to process. Returns \c true if pending events were handled;
@@ -274,7 +285,7 @@ bool QEventDispatcherCoreFoundation::processEvents(QEventLoop::ProcessEventsFlag
         CFTimeInterval duration = (m_processEvents.flags & QEventLoop::WaitForMoreEvents) ?
             kCFTimeIntervalDistantFuture : kCFTimeIntervalMinimum;
 
-        qEventDispatcherDebug() << "Calling CFRunLoopRunInMode = " << qPrintable(QCFString::toQString(mode))
+        qEventDispatcherDebug() << "Calling CFRunLoopRunInMode = " << qPrintable(QString::fromCFString(mode))
             << " for " << duration << " ms, processing single source = " << returnAfterSingleSourceHandled; qIndent();
 
         SInt32 result = CFRunLoopRunInMode(mode, duration, returnAfterSingleSourceHandled);
@@ -302,10 +313,7 @@ bool QEventDispatcherCoreFoundation::processEvents(QEventLoop::ProcessEventsFlag
                 // to exit, and then unwind back to the previous event loop which will break
                 // immediately, since it has already been exited.
 
-                QEventLoop *currentEventLoop = QThreadData::current()->eventLoops.top();
-                Q_ASSERT(currentEventLoop);
-
-                if (!currentEventLoop->isRunning()) {
+                if (!currentEventLoop()->isRunning()) {
                     qEventDispatcherDebug() << "Top level event loop was exited";
                     break;
                 } else {

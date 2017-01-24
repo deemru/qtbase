@@ -1,6 +1,7 @@
 requires(qtHaveModule(network))
 
 TEMPLATE      = subdirs
+QT_FOR_CONFIG += network-private
 SUBDIRS       = \
                 download \
                 downloadmanager
@@ -18,10 +19,9 @@ qtHaveModule(widgets) {
                 multicastreceiver \
                 multicastsender
 
-    load(qfeatures)
-    !contains(QT_DISABLED_FEATURES, bearermanagement) {
+    qtConfig(bearermanagement) {
         # no QProcess
-        !vxworks:!qnx:!winrt:!integrity: SUBDIRS += network-chat
+        !vxworks:!qnx:!winrt:!integrity:!uikit: SUBDIRS += network-chat
 
         SUBDIRS += \
                 bearermonitor \
@@ -30,6 +30,9 @@ qtHaveModule(widgets) {
 
     }
 
-    contains(QT_CONFIG, openssl):SUBDIRS += securesocketclient
-    contains(QT_CONFIG, openssl-linked):SUBDIRS += securesocketclient
+    qtConfig(openssl): SUBDIRS += securesocketclient
+    qtConfig(openssl-linked): SUBDIRS += securesocketclient
+    qtConfig(sctp): SUBDIRS += multistreamserver multistreamclient
 }
+
+EXAMPLE_FILES = shared

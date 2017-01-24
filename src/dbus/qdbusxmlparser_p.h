@@ -51,13 +51,16 @@
 // We mean it.
 //
 
+#include <QtDBus/private/qtdbusglobal_p.h>
+#include <QtCore/qloggingcategory.h>
 #include <QtCore/qmap.h>
-#include <qdbusmacros.h>
 #include "qdbusintrospection_p.h"
 
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(dbusParser)
 
 /*!
     \internal

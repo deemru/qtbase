@@ -200,7 +200,7 @@ int QMacPrintEngine::metric(QPaintDevice::PaintDeviceMetric m) const
             val = (int)resolution.vRes;
             break;
         }
-        //otherwise fall through
+        Q_FALLTHROUGH();
     }
     case QPaintDevice::PdmDpiY:
         val = (int)d->resolution.vRes;
@@ -673,7 +673,7 @@ QVariant QMacPrintEngine::property(PrintEnginePropertyKey key) const
     case PPK_DocumentName: {
         CFStringRef name;
         PMPrintSettingsGetJobName(d->settings(), &name);
-        ret = QCFString::toQString(name);
+        ret = QString::fromCFString(name);
         break;
     }
     case PPK_Duplex: {

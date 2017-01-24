@@ -1,17 +1,11 @@
 CONFIG += testcase
 TARGET = tst_qaccessibility
-requires(contains(QT_CONFIG,accessibility))
+requires(qtConfig(accessibility))
 QT += testlib core-private gui-private widgets-private
 SOURCES += tst_qaccessibility.cpp
 HEADERS += accessiblewidgets.h
 
 unix:!darwin:!haiku:!integity: LIBS += -lm
-
-wince {
-	accessneeded.files = $$QT_BUILD_TREE\\plugins\\accessible\\*.dll
-	accessneeded.path = accessible
-	DEPLOYMENT += accessneeded
-}
 
 win32 {
     !*g++:!winrt {

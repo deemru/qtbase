@@ -87,7 +87,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 extern void qt_mac_secure_keyboard(bool); //qapplication_mac.cpp
 #endif
 
@@ -260,10 +260,8 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
     \sa setText(), setMaxLength()
 */
 QLineEdit::QLineEdit(QWidget* parent)
-    : QWidget(*new QLineEditPrivate, parent,0)
+    : QLineEdit(QString(), parent)
 {
-    Q_D(QLineEdit);
-    d->init(QString());
 }
 
 /*!
@@ -575,7 +573,7 @@ void QLineEdit::setEchoMode(EchoMode mode)
     setInputMethodHints(imHints);
     d->control->setEchoMode(mode);
     update();
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (hasFocus())
         qt_mac_secure_keyboard(mode == Password || mode == NoEcho);
 #endif
@@ -605,7 +603,7 @@ const QValidator * QLineEdit::validator() const
     The initial setting is to have no input validator (i.e. any input
     is accepted up to maxLength()).
 
-    \sa validator(), QIntValidator, QDoubleValidator, QRegExpValidator
+    \sa validator(), hasAcceptableInput(), QIntValidator, QDoubleValidator, QRegExpValidator
 */
 
 void QLineEdit::setValidator(const QValidator *v)
@@ -1812,7 +1810,7 @@ void QLineEdit::focusInEvent(QFocusEvent *e)
     if((!hasSelectedText() && d->control->preeditAreaText().isEmpty())
        || style()->styleHint(QStyle::SH_BlinkCursorWhenTextSelected, &opt, this))
         d->setCursorVisible(true);
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (d->control->echoMode() == Password || d->control->echoMode() == NoEcho)
         qt_mac_secure_keyboard(true);
 #endif
@@ -1860,7 +1858,7 @@ void QLineEdit::focusOutEvent(QFocusEvent *e)
             if (hasAcceptableInput() || d->control->fixup())
                 emit editingFinished();
     }
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (d->control->echoMode() == Password || d->control->echoMode() == NoEcho)
         qt_mac_secure_keyboard(false);
 #endif
@@ -1911,13 +1909,19 @@ void QLineEdit::paintEvent(QPaintEvent *)
 
     if (d->shouldShowPlaceholderText()) {
         if (!d->placeholderText.isEmpty()) {
+            const Qt::LayoutDirection layoutDir = d->placeholderText.isRightToLeft() ? Qt::RightToLeft : Qt::LeftToRight;
+            const Qt::Alignment alignPhText = QStyle::visualAlignment(layoutDir, QFlag(d->alignment));
             QColor col = pal.text().color();
             col.setAlpha(128);
             QPen oldpen = p.pen();
             p.setPen(col);
-            QString elidedText = fm.elidedText(d->placeholderText, Qt::ElideRight, lineRect.width());
-            p.drawText(lineRect, va, elidedText);
+            Qt::LayoutDirection oldLayoutDir = p.layoutDirection();
+            p.setLayoutDirection(layoutDir);
+
+            const QString elidedText = fm.elidedText(d->placeholderText, Qt::ElideRight, lineRect.width());
+            p.drawText(lineRect, alignPhText, elidedText);
             p.setPen(oldpen);
+            p.setLayoutDirection(oldLayoutDir);
         }
     }
 

@@ -40,6 +40,8 @@
 
 #include "qxcbsessionmanager.h"
 
+#ifndef QT_NO_SESSIONMANAGER
+
 #include <qguiapplication.h>
 #include <qdatetime.h>
 #include <qfileinfo.h>
@@ -144,7 +146,7 @@ static void sm_setProperty(const QString &name, const QStringList &value)
     for (QStringList::ConstIterator it = value.begin(); it != value.end(); ++it) {
       prop[count].length = (*it).length();
       vl.append((*it).toUtf8());
-      prop[count].value = (char*)vl.last().data();
+      prop[count].value = (char*)vl.constLast().data();
       ++count;
     }
     sm_setProperty(name.toLatin1().data(), SmLISTofARRAY8, count, prop);
@@ -491,3 +493,5 @@ void QXcbSessionManager::exitEventLoop()
 }
 
 #include "qxcbsessionmanager.moc"
+
+#endif

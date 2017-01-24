@@ -153,7 +153,7 @@ static bool qt_sequence_no_mnemonics = false;
 
     Specifies whether mnemonics for menu items, labels, etc., should
     be honored or not. On Windows and X11, this feature is
-    on by default; on OS X, it is off. When this feature is off
+    on by default; on \macos, it is off. When this feature is off
     (that is, when \a b is false), QKeySequence::mnemonic() always
     returns an empty string.
 
@@ -217,7 +217,7 @@ void Q_GUI_EXPORT qt_set_sequence_auto_mnemonic(bool b) { qt_sequence_no_mnemoni
 
     QKeySequence objects can be cast to a QString to obtain a human-readable
     translated version of the sequence. Similarly, the toString() function
-    produces human-readable strings for use in menus. On OS X, the
+    produces human-readable strings for use in menus. On \macos, the
     appropriate symbols are used to describe keyboard shortcuts using special
     keys on the Macintosh keyboard.
 
@@ -225,12 +225,12 @@ void Q_GUI_EXPORT qt_set_sequence_auto_mnemonic(bool b) { qt_sequence_no_mnemoni
     code point of the character; for example, 'A' gives the same key sequence
     as Qt::Key_A.
 
-    \b{Note:} On OS X, references to "Ctrl", Qt::CTRL, Qt::Control
+    \note On \macos, references to "Ctrl", Qt::CTRL, Qt::Key_Control
     and Qt::ControlModifier correspond to the \uicontrol Command keys on the
-    Macintosh keyboard, and references to "Meta", Qt::META, Qt::Meta and
+    Macintosh keyboard, and references to "Meta", Qt::META, Qt::Key_Meta and
     Qt::MetaModifier correspond to the \uicontrol Control keys. Developers on
-    OS X can use the same shortcut descriptions across all platforms,
-    and their applications will automatically work as expected on OS X.
+    \macos can use the same shortcut descriptions across all platforms,
+    and their applications will automatically work as expected on \macos.
 
     \section1 Standard Shortcuts
 
@@ -239,18 +239,18 @@ void Q_GUI_EXPORT qt_set_sequence_auto_mnemonic(bool b) { qt_sequence_no_mnemoni
     setting up actions in a typical application. The table below shows
     some common key sequences that are often used for these standard
     shortcuts by applications on four widely-used platforms.  Note
-    that on OS X, the \uicontrol Ctrl value corresponds to the \uicontrol
+    that on \macos, the \uicontrol Ctrl value corresponds to the \uicontrol
     Command keys on the Macintosh keyboard, and the \uicontrol Meta value
     corresponds to the \uicontrol Control keys.
 
     \table
-    \header \li StandardKey      \li Windows                              \li OS X                 \li KDE          \li GNOME
+    \header \li StandardKey      \li Windows                              \li \macos                 \li KDE          \li GNOME
     \row    \li HelpContents     \li F1                                   \li Ctrl+?                   \li F1           \li F1
     \row    \li WhatsThis        \li Shift+F1                             \li Shift+F1                 \li Shift+F1     \li Shift+F1
     \row    \li Open             \li Ctrl+O                               \li Ctrl+O                   \li Ctrl+O       \li Ctrl+O
     \row    \li Close            \li Ctrl+F4, Ctrl+W                      \li Ctrl+W, Ctrl+F4          \li Ctrl+W       \li Ctrl+W
     \row    \li Save             \li Ctrl+S                               \li Ctrl+S                   \li Ctrl+S       \li Ctrl+S
-    \row    \li Quit             \li                                      \li Ctrl+Q                   \li Qtrl+Q       \li Qtrl+Q
+    \row    \li Quit             \li                                      \li Ctrl+Q                   \li Ctrl+Q       \li Ctrl+Q
     \row    \li SaveAs           \li                                      \li Ctrl+Shift+S             \li              \li Ctrl+Shift+S
     \row    \li New              \li Ctrl+N                               \li Ctrl+N                   \li Ctrl+N       \li Ctrl+N
     \row    \li Delete           \li Del                                  \li Del, Meta+D              \li Del, Ctrl+D  \li Del, Ctrl+D
@@ -411,7 +411,7 @@ void Q_GUI_EXPORT qt_set_sequence_auto_mnemonic(bool b) { qt_sequence_no_mnemoni
 
 static const struct {
     int key;
-    const char* name;
+    const char name[25];
 } keyname[] = {
     //: This and all following "incomprehensible" strings in QShortcut context
     //: are key names. Please use the localized names appearing on actual
@@ -693,8 +693,8 @@ static const struct {
     { Qt::Key_TouchpadOn,  QT_TRANSLATE_NOOP("QShortcut", "Touchpad On") },
     { Qt::Key_TouchpadOff,  QT_TRANSLATE_NOOP("QShortcut", "Touchpad Off") },
 
-    { 0, 0 }
 };
+static Q_CONSTEXPR int numKeyNames = sizeof keyname / sizeof *keyname;
 
 /*!
     \enum QKeySequence::StandardKey
@@ -726,7 +726,7 @@ static const struct {
     \value InsertLineSeparator      Insert a new line.
     \value InsertParagraphSeparator Insert a new paragraph.
     \value Italic           Italic text.
-    \value MoveToEndOfBlock         Move cursor to end of block. This shortcut is only used on the OS X.
+    \value MoveToEndOfBlock         Move cursor to end of block. This shortcut is only used on the \macos.
     \value MoveToEndOfDocument      Move cursor to end of document.
     \value MoveToEndOfLine          Move cursor to end of line.
     \value MoveToNextChar           Move cursor to next character.
@@ -737,7 +737,7 @@ static const struct {
     \value MoveToPreviousLine       Move cursor to previous line.
     \value MoveToPreviousPage       Move cursor to previous page.
     \value MoveToPreviousWord       Move cursor to previous word.
-    \value MoveToStartOfBlock       Move cursor to start of a block. This shortcut is only used on OS X.
+    \value MoveToStartOfBlock       Move cursor to start of a block. This shortcut is only used on \macos.
     \value MoveToStartOfDocument    Move cursor to start of document.
     \value MoveToStartOfLine        Move cursor to start of line.
     \value New              Create new document.
@@ -755,7 +755,7 @@ static const struct {
     \value Save             Save document.
     \value SelectAll        Select all text.
     \value Deselect         Deselect text. Since 5.1
-    \value SelectEndOfBlock         Extend selection to the end of a text block. This shortcut is only used on OS X.
+    \value SelectEndOfBlock         Extend selection to the end of a text block. This shortcut is only used on \macos.
     \value SelectEndOfDocument      Extend selection to end of document.
     \value SelectEndOfLine          Extend selection to end of line.
     \value SelectNextChar           Extend selection to next character.
@@ -766,7 +766,7 @@ static const struct {
     \value SelectPreviousLine       Extend selection to previous line.
     \value SelectPreviousPage       Extend selection to previous page.
     \value SelectPreviousWord       Extend selection to previous word.
-    \value SelectStartOfBlock       Extend selection to the start of a text block. This shortcut is only used on OS X.
+    \value SelectStartOfBlock       Extend selection to the start of a text block. This shortcut is only used on \macos.
     \value SelectStartOfDocument    Extend selection to start of document.
     \value SelectStartOfLine        Extend selection to start of line.
     \value Underline        Underline text.
@@ -1154,21 +1154,22 @@ int QKeySequencePrivate::decodeString(const QString &str, QKeySequence::Sequence
     }
 
     int p = accel.lastIndexOf(QLatin1Char('+'), str.length() - 2); // -2 so that Ctrl++ works
+    QStringRef accelRef(&accel);
     if(p > 0)
-        accel = accel.mid(p + 1);
+        accelRef = accelRef.mid(p + 1);
 
     int fnum = 0;
-    if (accel.length() == 1) {
+    if (accelRef.length() == 1) {
 #if defined(Q_OS_MACX)
-        int qtKey = qtkeyForMacSymbol(accel[0]);
+        int qtKey = qtkeyForMacSymbol(accelRef.at(0));
         if (qtKey != -1) {
             ret |= qtKey;
         } else
 #endif
         {
-            ret |= accel[0].toUpper().unicode();
+            ret |= accelRef.at(0).toUpper().unicode();
         }
-    } else if (accel[0] == QLatin1Char('f') && (fnum = accel.mid(1).toInt()) && (fnum >= 1) && (fnum <= 35)) {
+    } else if (accelRef.at(0) == QLatin1Char('f') && (fnum = accelRef.mid(1).toInt()) >= 1 && fnum <= 35) {
         ret |= Qt::Key_F1 + fnum - 1;
     } else {
         // For NativeText, check the traslation table first,
@@ -1178,11 +1179,11 @@ int QKeySequencePrivate::decodeString(const QString &str, QKeySequence::Sequence
         for (int tran = 0; tran < 2; ++tran) {
             if (!nativeText)
                 ++tran;
-            for (int i = 0; keyname[i].name; ++i) {
+            for (int i = 0; i < numKeyNames; ++i) {
                 QString keyName(tran == 0
                                 ? QCoreApplication::translate("QShortcut", keyname[i].name)
                                 : QString::fromLatin1(keyname[i].name));
-                if (accel == keyName.toLower()) {
+                if (accelRef == keyName.toLower()) {
                     ret |= keyname[i].key;
                     found = true;
                     break;
@@ -1210,9 +1211,13 @@ QString QKeySequence::encodeString(int key)
 
 static inline void addKey(QString &str, const QString &theKey, QKeySequence::SequenceFormat format)
 {
-    if (!str.isEmpty())
-        str += (format == QKeySequence::NativeText) ? QCoreApplication::translate("QShortcut", "+")
-                                                    : QString::fromLatin1("+");
+    if (!str.isEmpty()) {
+        if (format == QKeySequence::NativeText)
+            str += QCoreApplication::translate("QShortcut", "+");
+        else
+            str += QLatin1Char('+');
+    }
+
     str += theKey;
 }
 
@@ -1317,7 +1322,7 @@ QString QKeySequencePrivate::keyName(int key, QKeySequence::SequenceFormat forma
 #if defined(Q_OS_MACX)
 NonSymbol:
 #endif
-            while (keyname[i].name) {
+            while (i < numKeyNames) {
                 if (key == keyname[i].key) {
                     p = nativeText ? QCoreApplication::translate("QShortcut", keyname[i].name)
                                    : QString::fromLatin1(keyname[i].name);
@@ -1329,7 +1334,7 @@ NonSymbol:
             // fall back on the unicode representation of it...
             // Or else characters like Qt::Key_aring may not get displayed
             // (Really depends on you locale)
-            if (!keyname[i].name) {
+            if (i >= numKeyNames) {
                 if (!QChar::requiresSurrogates(key)) {
                     p = QChar(ushort(key)).toUpper();
                 } else {
@@ -1522,8 +1527,10 @@ bool QKeySequence::isDetached() const
 
     If the key sequence has no keys, an empty string is returned.
 
-    On OS X, the string returned resembles the sequence that is
-    shown in the menu bar.
+    On \macos, the string returned resembles the sequence that is
+    shown in the menu bar if \a format is
+    QKeySequence::NativeText; otherwise, the string uses the
+    "portable" format, suitable for writing to a file.
 
     \sa fromString()
 */

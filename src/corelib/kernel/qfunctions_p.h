@@ -51,11 +51,9 @@
 #ifndef QFUNCTIONS_P_H
 #define QFUNCTIONS_P_H
 
-#include <QtCore/qglobal.h>
+#include <QtCore/private/qglobal_p.h>
 
-#if defined(Q_OS_WINCE)
-#  include "QtCore/qfunctions_wince.h"
-#elif defined(Q_OS_VXWORKS)
+#if defined(Q_OS_VXWORKS)
 #  include "QtCore/qfunctions_vxworks.h"
 #elif defined(Q_OS_NACL)
 #  include "QtCore/qfunctions_nacl.h"

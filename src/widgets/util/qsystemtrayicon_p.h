@@ -44,13 +44,14 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of a number of Qt sources files.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qsystemtrayicon.h"
 #include "private/qobject_p.h"
 

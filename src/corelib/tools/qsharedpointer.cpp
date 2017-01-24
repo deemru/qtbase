@@ -442,15 +442,20 @@
 */
 
 /*!
-    \fn QSharedPointer::QSharedPointer(T *ptr)
+    \fn QSharedPointer::QSharedPointer(X *ptr)
 
     Creates a QSharedPointer that points to \a ptr. The pointer \a ptr
     becomes managed by this QSharedPointer and must not be passed to
     another QSharedPointer object or deleted outside this object.
+
+    Since Qt 5.8, when the last reference to this QSharedPointer gets
+    destroyed, \a ptr will be deleted by calling \c X's destructor (even if \c
+    X is not the same as QSharedPointer's template parameter \c T). Previously,
+    the destructor for \c T was called.
 */
 
 /*!
-    \fn QSharedPointer::QSharedPointer(T *ptr, Deleter deleter)
+    \fn QSharedPointer::QSharedPointer(X *ptr, Deleter deleter)
 
     Creates a QSharedPointer that points to \a ptr. The pointer \a ptr
     becomes managed by this QSharedPointer and must not be passed to
@@ -477,6 +482,9 @@
     }
     \endcode
 
+    Note that the custom deleter function will be called with a pointer to type
+    \c X, even if the QSharedPointer template parameter \c T is not the same.
+
     It is also possible to specify a member function directly, as in:
     \code
         QSharedPointer<MyObject> obj =
@@ -484,6 +492,22 @@
     \endcode
 
     \sa clear()
+*/
+
+/*!
+    \fn QSharedPointer::QSharedPointer(std::nullptr_t)
+    \since 5.8
+
+    Creates a QSharedPointer that is null. This is equivalent to the
+    QSharedPointer default constructor.
+*/
+
+/*!
+    \fn QSharedPointer::QSharedPointer(std::nullptr_t, Deleter)
+    \since 5.8
+
+    Creates a QSharedPointer that is null. This is equivalent to the
+    QSharedPointer default constructor.
 */
 
 /*!
@@ -1121,6 +1145,90 @@
     to ensure that the pointers being compared are equal. If \a ptr2's
     template parameter is not a base or a derived type from
     \a ptr1's, you will get a compiler error.
+*/
+
+/*!
+    \fn bool operator==(const QSharedPointer<T> &lhs, std::nullptr_t)
+    \relates QSharedPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a lhs is a null pointer.
+
+    \sa QSharedPointer::isNull()
+*/
+
+/*!
+    \fn bool operator==(std::nullptr_t, const QSharedPointer<T> &rhs)
+    \relates QSharedPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a rhs is a null pointer.
+
+    \sa QSharedPointer::isNull()
+*/
+
+/*!
+    \fn bool operator!=(const QSharedPointer<T> &lhs, std::nullptr_t)
+    \relates QSharedPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a lhs is a valid (i.e.
+    non-null) pointer.
+
+    \sa QSharedPointer::isNull()
+*/
+
+/*!
+    \fn bool operator!=(std::nullptr_t, const QSharedPointer<T> &rhs)
+    \relates QSharedPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a rhs is a valid (i.e.
+    non-null) pointer.
+
+    \sa QSharedPointer::isNull()
+*/
+
+/*!
+    \fn bool operator==(const QWeakPointer<T> &lhs, std::nullptr_t)
+    \relates QWeakPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a lhs is a null pointer.
+
+    \sa QWeakPointer::isNull()
+*/
+
+/*!
+    \fn bool operator==(std::nullptr_t, const QWeakPointer<T> &rhs)
+    \relates QWeakPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a rhs is a null pointer.
+
+    \sa QWeakPointer::isNull()
+*/
+
+/*!
+    \fn bool operator!=(const QWeakPointer<T> &lhs, std::nullptr_t)
+    \relates QWeakPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a lhs is a valid (i.e.
+    non-null) pointer.
+
+    \sa QWeakPointer::isNull()
+*/
+
+/*!
+    \fn bool operator!=(std::nullptr_t, const QWeakPointer<T> &rhs)
+    \relates QWeakPointer
+    \since 5.8
+
+    Returns \c true if the pointer referenced by \a rhs is a valid (i.e.
+    non-null) pointer.
+
+    \sa QWeakPointer::isNull()
 */
 
 /*!

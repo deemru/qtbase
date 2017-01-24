@@ -86,7 +86,7 @@ QT_BEGIN_NAMESPACE
    also have accessors to some relevant data in the physical font.
 
    QRawFont only provides support for the main font technologies: GDI and DirectWrite on Windows
-   platforms, FreeType on Linux platforms and CoreText on OS X. For other
+   platforms, FreeType on Linux platforms and CoreText on \macos. For other
    font back-ends, the APIs will be disabled.
 
    QRawFont can be constructed in a number of ways:
@@ -261,9 +261,13 @@ void QRawFont::loadFromData(const QByteArray &fontData,
    \a glyphIndex in the underlying font, using the \a transform specified.
    If the QRawFont is not valid, this function will return an invalid QImage.
 
-   If \a antialiasingType is set to QRawFont::SubPixelAntialiasing, then the resulting image will be
-   in QImage::Format_RGB32 and the RGB values of each pixel will represent the subpixel opacities of
-   the pixel in the rasterization of the glyph. Otherwise, the image will be in the format of
+   If the font is a color font, then the resulting image will contain the rendered
+   glyph at the current pixel size. In this case, the \a antialiasingType will be
+   ignored.
+
+   Otherwise, if \a antialiasingType is set to QRawFont::SubPixelAntialiasing, then the resulting image
+   will be in QImage::Format_RGB32 and the RGB values of each pixel will represent the subpixel opacities
+   of the pixel in the rasterization of the glyph. Otherwise, the image will be in the format of
    QImage::Format_Indexed8 and each pixel will contain the opacity of the pixel in the
    rasterization.
 
@@ -274,6 +278,9 @@ QImage QRawFont::alphaMapForGlyph(quint32 glyphIndex, AntialiasingType antialias
 {
     if (!d->isValid())
         return QImage();
+
+    if (d->fontEngine->glyphFormat == QFontEngine::Format_ARGB)
+        return d->fontEngine->bitmapForGlyph(glyphIndex, QFixed(), transform);
 
     if (antialiasingType == SubPixelAntialiasing)
         return d->fontEngine->alphaRGBMapForGlyph(glyphIndex, QFixed(), transform);
@@ -309,6 +316,19 @@ bool QRawFont::operator==(const QRawFont &other) const
 }
 
 /*!
+    Returns the hash value for \a font. If specified, \a seed is used
+    to initialize the hash.
+
+    \relates QRawFont
+    \since 5.8
+*/
+uint qHash(const QRawFont &font, uint seed) Q_DECL_NOTHROW
+{
+    return qHash(QRawFontPrivate::get(font)->fontEngine, seed);
+}
+
+
+/*!
     \fn bool QRawFont::operator!=(const QRawFont &other) const
 
     Returns \c true if this QRawFont is not equal to \a other. Otherwise, returns \c false.
@@ -316,6 +336,13 @@ bool QRawFont::operator==(const QRawFont &other) const
 
 /*!
    Returns the ascent of this QRawFont in pixel units.
+
+   The ascent of a font is the distance from the baseline to the
+   highest position characters extend to. In practice, some font
+   designers break this rule, e.g. when they put more than one accent
+   on top of a character, or to accommodate an unusual character in
+   an exotic language, so it is possible (though rare) that this
+   value will be too small.
 
    \sa QFontMetricsF::ascent()
 */
@@ -325,7 +352,29 @@ qreal QRawFont::ascent() const
 }
 
 /*!
+   Returns the cap height of this QRawFont in pixel units.
+
+   \since 5.8
+
+   The cap height of a font is the height of a capital letter above
+   the baseline. It specifically is the height of capital letters
+   that are flat - such as H or I - as opposed to round letters such
+   as O, or pointed letters like A, both of which may display overshoot.
+
+   \sa QFontMetricsF::capHeight()
+*/
+qreal QRawFont::capHeight() const
+{
+    return d->isValid() ? d->fontEngine->capHeight().toReal() : 0.0;
+}
+
+/*!
    Returns the descent of this QRawFont in pixel units.
+
+   The descent is the distance from the base line to the lowest point
+   characters extend to. In practice, some font designers break this rule,
+   e.g. to accommodate an unusual character in an exotic language, so
+   it is possible (though rare) that this value will be too small.
 
    \sa QFontMetricsF::descent()
 */
@@ -337,6 +386,8 @@ qreal QRawFont::descent() const
 /*!
    Returns the xHeight of this QRawFont in pixel units.
 
+   This is often but not always the same as the height of the character 'x'.
+
    \sa QFontMetricsF::xHeight()
 */
 qreal QRawFont::xHeight() const
@@ -346,6 +397,8 @@ qreal QRawFont::xHeight() const
 
 /*!
    Returns the leading of this QRawFont in pixel units.
+
+   This is the natural inter-line spacing.
 
    \sa QFontMetricsF::leading()
 */

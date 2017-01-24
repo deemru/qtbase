@@ -69,7 +69,7 @@ class CharacterWidget : public QWidget
 
 public:
     CharacterWidget(QWidget *parent = 0);
-    QSize sizeHint() const Q_DECL_OVERRIDE;
+    QSize sizeHint() const override;
 
 public slots:
     void updateFont(const QFont &font);
@@ -81,11 +81,13 @@ signals:
     void characterSelected(const QString &character);
 
 protected:
-    void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private:
+    void calculateSquareSize();
+
     QFont displayFont;
     int columns;
     int lastKey;

@@ -55,7 +55,8 @@
     QSslSocket establishes a secure, encrypted TCP connection you can
     use for transmitting encrypted data. It can operate in both client
     and server mode, and it supports modern SSL protocols, including
-    SSLv3 and TLSv1_0. By default, QSslSocket uses TLSv1_0, but you can
+    SSL 3 and TLS 1.2. By default, QSslSocket uses only SSL protocols
+    which are considered to be secure (QSsl::SecureProtocols), but you can
     change the SSL protocol by calling setProtocol() as long as you do
     it before the handshake has started.
 
@@ -141,7 +142,7 @@
     addDefaultCaCertificates(), and QSslConfiguration::defaultConfiguration().setCaCertificates().
     \endlist
 
-    \note If available, root certificates on Unix (excluding OS X) will be
+    \note If available, root certificates on Unix (excluding \macos) will be
     loaded on demand from the standard certificate directories. If you do not
     want to load root certificates on demand, you need to call either
     QSslConfiguration::defaultConfiguration().setCaCertificates() before the first
@@ -836,15 +837,7 @@ bool QSslSocket::atEnd() const
 // Note! docs copied from QAbstractSocket::flush()
 bool QSslSocket::flush()
 {
-    Q_D(QSslSocket);
-#ifdef QSSLSOCKET_DEBUG
-    qCDebug(lcSsl) << "QSslSocket::flush()";
-#endif
-    if (d->mode != UnencryptedMode)
-        // encrypt any unencrypted bytes in our buffer
-        d->transmit();
-
-    return d->plainSocket ? d->plainSocket->flush() : false;
+    return d_func()->flush();
 }
 
 /*!
@@ -923,6 +916,8 @@ void QSslSocket::setSslConfiguration(const QSslConfiguration &configuration)
     d->configuration.privateKey = configuration.privateKey();
     d->configuration.ciphers = configuration.ciphers();
     d->configuration.ellipticCurves = configuration.ellipticCurves();
+    d->configuration.preSharedKeyIdentityHint = configuration.preSharedKeyIdentityHint();
+    d->configuration.dhParams = configuration.diffieHellmanParameters();
     d->configuration.caCertificates = configuration.caCertificates();
     d->configuration.peerVerifyDepth = configuration.peerVerifyDepth();
     d->configuration.peerVerifyMode = configuration.peerVerifyMode();
@@ -2400,6 +2395,13 @@ void QSslSocketPrivate::_q_disconnectedSlot()
 #endif
     disconnected();
     emit q->disconnected();
+
+    q->setLocalPort(0);
+    q->setLocalAddress(QHostAddress());
+    q->setPeerPort(0);
+    q->setPeerAddress(QHostAddress());
+    q->setPeerName(QString());
+    cachedSocketDescriptor = -1;
 }
 
 /*!
@@ -2615,6 +2617,22 @@ QByteArray QSslSocketPrivate::peek(qint64 maxSize)
 /*!
     \internal
 */
+bool QSslSocketPrivate::flush()
+{
+#ifdef QSSLSOCKET_DEBUG
+    qCDebug(lcSsl) << "QSslSocketPrivate::flush()";
+#endif
+    if (mode != QSslSocket::UnencryptedMode) {
+        // encrypt any unencrypted bytes in our buffer
+        transmit();
+    }
+
+    return plainSocket && plainSocket->flush();
+}
+
+/*!
+    \internal
+*/
 bool QSslSocketPrivate::rootCertOnDemandLoadingSupported()
 {
     return s_loadRootCertsOnDemand;
@@ -2625,14 +2643,15 @@ bool QSslSocketPrivate::rootCertOnDemandLoadingSupported()
 */
 QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
 {
-    return QList<QByteArray>() <<  "/etc/ssl/certs/" // (K)ubuntu, OpenSUSE, Mandriva, MeeGo ...
+    return QList<QByteArray>() <<  "/etc/ssl/certs/" // (K)ubuntu, OpenSUSE, Mandriva ...
                                << "/usr/lib/ssl/certs/" // Gentoo, Mandrake
                                << "/usr/share/ssl/" // Centos, Redhat, SuSE
                                << "/usr/local/ssl/" // Normal OpenSSL Tarball
                                << "/var/ssl/certs/" // AIX
                                << "/usr/local/ssl/certs/" // Solaris
                                << "/etc/openssl/certs/" // BlackBerry
-                               << "/opt/openssl/certs/"; // HP-UX
+                               << "/opt/openssl/certs/" // HP-UX
+                               << "/etc/ssl/"; // OpenBSD
 }
 
 /*!

@@ -42,7 +42,6 @@
 
 #if !defined(QT_NO_STYLE_WINDOWS) || defined(QT_PLUGIN)
 
-#include <private/qsystemlibrary_p.h>
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qdrawutil.h" // for now
@@ -65,8 +64,12 @@
 #include "qlistview.h"
 #include <private/qmath_p.h>
 #include <qmath.h>
+#include <QtGui/qscreen.h>
+#include <QtGui/qwindow.h>
 #include <qpa/qplatformtheme.h>
+#include <qpa/qplatformscreen.h>
 #include <private/qguiapplication_p.h>
+#include <private/qhighdpiscaling_p.h>
 
 #include <private/qstylehelper_p.h>
 #include <private/qstyleanimation_p.h>
@@ -87,26 +90,7 @@ QT_END_INCLUDE_NAMESPACE
 #    define COLOR_GRADIENTINACTIVECAPTION   28
 #  endif
 
-
-typedef struct
-{
-    DWORD cbSize;
-    HICON hIcon;
-    int   iSysImageIndex;
-    int   iIcon;
-    WCHAR szPath[MAX_PATH];
-} QSHSTOCKICONINFO;
-
-#define _SHGFI_SMALLICON         0x000000001
-#define _SHGFI_LARGEICON         0x000000000
-#define _SHGFI_ICON              0x000000100
-#define _SIID_SHIELD             77
-
-typedef HRESULT (WINAPI *PtrSHGetStockIconInfo)(int siid, int uFlags, QSHSTOCKICONINFO *psii);
-static PtrSHGetStockIconInfo pSHGetStockIconInfo = 0;
-
 Q_GUI_EXPORT HICON qt_pixmapToWinHICON(const QPixmap &);
-Q_GUI_EXPORT QPixmap qt_pixmapFromWinHICON(HICON icon);
 #endif //Q_OS_WIN
 
 QT_BEGIN_INCLUDE_NAMESPACE
@@ -122,13 +106,6 @@ enum QSliderDirection { SlUp, SlDown, SlLeft, SlRight };
 QWindowsStylePrivate::QWindowsStylePrivate()
     : alt_down(false), menuBarTimer(0)
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
-    if ((QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA
-        && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based))) {
-        QSystemLibrary shellLib(QLatin1String("shell32"));
-        pSHGetStockIconInfo = (PtrSHGetStockIconInfo)shellLib.resolve("SHGetStockIconInfo");
-    }
-#endif
 }
 
 qreal QWindowsStylePrivate::appDevicePixelRatio()
@@ -305,25 +282,15 @@ int QWindowsStylePrivate::pixelMetricFromSystemDp(QStyle::PixelMetric pm, const 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     switch (pm) {
     case QStyle::PM_DockWidgetFrameWidth:
-#  ifndef Q_OS_WINCE
         return GetSystemMetrics(SM_CXFRAME);
-#  else
-        return GetSystemMetrics(SM_CXDLGFRAME);
-#  endif
-        break;
 
     case QStyle::PM_TitleBarHeight:
         if (widget && (widget->windowType() == Qt::Tool)) {
             // MS always use one less than they say
-#  ifndef Q_OS_WINCE
             return GetSystemMetrics(SM_CYSMCAPTION) - 1;
-#  else
-            return GetSystemMetrics(SM_CYCAPTION) - 1;
-#  endif
         }
         return GetSystemMetrics(SM_CYCAPTION) - 1;
 
-#  ifndef Q_OS_WINCE
     case QStyle::PM_ScrollBarExtent:
         {
             NONCLIENTMETRICS ncm;
@@ -332,14 +299,9 @@ int QWindowsStylePrivate::pixelMetricFromSystemDp(QStyle::PixelMetric pm, const 
                 return qMax(ncm.iScrollHeight, ncm.iScrollWidth);
         }
         break;
-#  endif // !Q_OS_WINCE
 
     case  QStyle::PM_MdiSubWindowFrameWidth:
-#  ifndef Q_OS_WINCE
         return GetSystemMetrics(SM_CYFRAME);
-#  else
-        return GetSystemMetrics(SM_CYDLGFRAME);
-#  endif
 
     default:
         break;
@@ -402,6 +364,47 @@ int QWindowsStylePrivate::fixedPixelMetric(QStyle::PixelMetric pm)
     return QWindowsStylePrivate::InvalidMetric;
 }
 
+static QWindow *windowOf(const QWidget *w)
+{
+    QWindow *result = Q_NULLPTR;
+    if (w) {
+        result = w->windowHandle();
+        if (!result) {
+            if (const QWidget *np = w->nativeParentWidget())
+                result = np->windowHandle();
+        }
+    }
+    return result;
+}
+
+static QScreen *screenOf(const QWidget *w)
+{
+    if (const QWindow *window = windowOf(w))
+        return window->screen();
+    return QGuiApplication::primaryScreen();
+}
+
+// Calculate the overall scale factor to obtain Qt Device Independent
+// Pixels from a native Windows size. Divide by devicePixelRatio
+// and account for secondary screens with differing logical DPI.
+qreal QWindowsStylePrivate::nativeMetricScaleFactor(const QWidget *widget)
+{
+    if (!QHighDpiScaling::isActive())
+        return 1;
+    qreal result = qreal(1) / QWindowsStylePrivate::devicePixelRatio(widget);
+    if (QGuiApplicationPrivate::screen_list.size() > 1) {
+        const QScreen *primaryScreen = QGuiApplication::primaryScreen();
+        const QScreen *screen = screenOf(widget);
+        if (screen != primaryScreen) {
+            const qreal primaryLogicalDpi = primaryScreen->handle()->logicalDpi().first;
+            const qreal logicalDpi = screen->handle()->logicalDpi().first;
+            if (!qFuzzyCompare(primaryLogicalDpi, logicalDpi))
+                result *= logicalDpi / primaryLogicalDpi;
+        }
+    }
+    return result;
+}
+
 /*!
   \reimp
 */
@@ -409,7 +412,7 @@ int QWindowsStyle::pixelMetric(PixelMetric pm, const QStyleOption *opt, const QW
 {
     int ret = QWindowsStylePrivate::pixelMetricFromSystemDp(pm, opt, widget);
     if (ret != QWindowsStylePrivate::InvalidMetric)
-        return qRound(qreal(ret) / QWindowsStylePrivate::devicePixelRatio(widget));
+        return qRound(qreal(ret) * QWindowsStylePrivate::nativeMetricScaleFactor(widget));
 
     ret = QWindowsStylePrivate::fixedPixelMetric(pm);
     if (ret != QWindowsStylePrivate::InvalidMetric)
@@ -476,7 +479,7 @@ int QWindowsStyle::pixelMetric(PixelMetric pm, const QStyleOption *opt, const QW
 QPixmap QWindowsStyle::standardPixmap(StandardPixmap standardPixmap, const QStyleOption *opt,
                                       const QWidget *widget) const
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     QPixmap desktopIcon;
     switch(standardPixmap) {
     case SP_DriveCDIcon:
@@ -515,7 +518,7 @@ QPixmap QWindowsStyle::standardPixmap(StandardPixmap standardPixmap, const QStyl
     if (!desktopIcon.isNull()) {
         return desktopIcon;
     }
-#endif // Q_OS_WIN && !Q_OS_WINCE && !Q_OS_WINRT
+#endif // Q_OS_WIN && !Q_OS_WINRT
     return QCommonStyle::standardPixmap(standardPixmap, opt, widget);
 }
 
@@ -592,12 +595,12 @@ int QWindowsStyle::styleHint(StyleHint hint, const QStyleOption *opt, const QWid
 #endif // Q_OS_WIN && !Q_OS_WINRT
     case SH_Menu_SubMenuSloppyCloseTimeout:
     case SH_Menu_SubMenuPopupDelay: {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
         DWORD delay;
         if (SystemParametersInfo(SPI_GETMENUSHOWDELAY, 0, &delay, 0))
             ret = delay;
         else
-#endif // Q_OS_WIN && !Q_OS_WINCE && !Q_OS_WINRT
+#endif // Q_OS_WIN && !Q_OS_WINRT
             ret = 400;
         break;
     }
@@ -805,7 +808,8 @@ void QWindowsStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, 
             p->setPen(opt->palette.dark().color());
         else
             p->setPen(opt->palette.text().color());
-        } // Fall through!
+        }
+        Q_FALLTHROUGH();
     case PE_IndicatorViewItemCheck:
         if (!doRestore) {
             p->save();
@@ -2173,9 +2177,8 @@ void QWindowsStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComp
 
                 if (sunkenArrow)
                     flags |= State_Sunken;
-                QStyleOption arrowOpt(0);
+                QStyleOption arrowOpt = *cmb;
                 arrowOpt.rect = ar.adjusted(1, 1, -1, -1);
-                arrowOpt.palette = cmb->palette;
                 arrowOpt.state = flags;
                 proxy()->drawPrimitive(PE_IndicatorArrowDown, &arrowOpt, p, widget);
             }
@@ -2381,7 +2384,7 @@ QSize QWindowsStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
     case CT_ToolButton:
         if (qstyleoption_cast<const QStyleOptionToolButton *>(opt))
             return sz += QSize(7, 6);
-        // Otherwise, fall through
+        Q_FALLTHROUGH();
 
     default:
         sz = QCommonStyle::sizeFromContents(ct, opt, csz, widget);

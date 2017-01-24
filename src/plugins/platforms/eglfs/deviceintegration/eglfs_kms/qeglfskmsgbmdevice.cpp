@@ -42,7 +42,7 @@
 #include "qeglfskmsgbmdevice.h"
 #include "qeglfskmsgbmscreen.h"
 
-#include "qeglfsintegration.h"
+#include "qeglfsintegration_p.h"
 
 #include <QtCore/QLoggingCategory>
 #include <QtCore/private/qcore_unix_p.h>
@@ -142,10 +142,10 @@ void QEglFSKmsGbmDevice::handleDrmEvent()
     drmHandleEvent(fd(), &drmEvent);
 }
 
-QEglFSKmsScreen *QEglFSKmsGbmDevice::createScreen(QEglFSKmsIntegration *integration, QEglFSKmsDevice *device, QEglFSKmsOutput output, QPoint position)
+QEglFSKmsScreen *QEglFSKmsGbmDevice::createScreen(QEglFSKmsIntegration *integration, QEglFSKmsDevice *device, QEglFSKmsOutput output)
 {
     static bool firstScreen = true;
-    QEglFSKmsGbmScreen *screen = new QEglFSKmsGbmScreen(integration, device, output, position);
+    QEglFSKmsGbmScreen *screen = new QEglFSKmsGbmScreen(integration, device, output);
 
     if (firstScreen && integration->hwCursor()) {
         m_globalCursor = new QEglFSKmsGbmCursor(screen);

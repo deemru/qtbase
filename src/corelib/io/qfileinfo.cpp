@@ -240,7 +240,7 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     isSymLink(). The symLinkTarget() function provides the name of the file
     the symlink points to.
 
-    On Unix (including OS X and iOS), the symlink has the same size() has
+    On Unix (including \macos and iOS), the symlink has the same size() has
     the file it points to, because Unix handles symlinks
     transparently; similarly, opening a symlink using QFile
     effectively opens the link's target. For example:
@@ -293,8 +293,7 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     \note To speed up performance, QFileInfo caches information about
     the file.
 
-    To speed up performance, QFileInfo caches information about the
-    file. Because files can be changed by other users or programs, or
+    Because files can be changed by other users or programs, or
     even by other parts of the same program, there is a function that
     refreshes the file information: refresh(). If you want to switch
     off a QFileInfo's caching and force it to access the file system
@@ -713,9 +712,6 @@ bool QFileInfo::exists(const QString &file)
 /*!
     Refreshes the information about the file, i.e. reads in information
     from the file system the next time a cached property is fetched.
-
-   \note On Windows CE, there might be a delay for the file system driver
-    to detect changes on the file.
 */
 void QFileInfo::refresh()
 {
@@ -760,7 +756,7 @@ QString QFileInfo::fileName() const
     \since 4.3
     Returns the name of the bundle.
 
-    On OS X and iOS this returns the proper localized name for a bundle if the
+    On \macos and iOS this returns the proper localized name for a bundle if the
     path isBundle(). On all other platforms an empty QString is returned.
 
     Example:
@@ -820,7 +816,7 @@ QString QFileInfo::completeBaseName() const
 }
 
 /*!
-    Returns the complete suffix of the file.
+    Returns the complete suffix (extension) of the file.
 
     The complete suffix consists of all characters in the file after
     (but not including) the first '.'.
@@ -839,7 +835,7 @@ QString QFileInfo::completeSuffix() const
 }
 
 /*!
-    Returns the suffix of the file.
+    Returns the suffix (extension) of the file.
 
     The suffix consists of all characters in the file after (but not
     including) the last '.'.
@@ -1042,7 +1038,7 @@ bool QFileInfo::isDir() const
 /*!
     \since 4.3
     Returns \c true if this object points to a bundle or to a symbolic
-    link to a bundle on OS X and iOS; otherwise returns \c false.
+    link to a bundle on \macos and iOS; otherwise returns \c false.
 
     \sa isDir(), isSymLink(), isFile()
 */
@@ -1063,7 +1059,7 @@ bool QFileInfo::isBundle() const
     Returns \c true if this object points to a symbolic link (or to a
     shortcut on Windows); otherwise returns \c false.
 
-    On Unix (including OS X and iOS), opening a symlink effectively opens
+    On Unix (including \macos and iOS), opening a symlink effectively opens
     the \l{symLinkTarget()}{link's target}. On Windows, it opens the \c
     .lnk file itself.
 

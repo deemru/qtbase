@@ -757,8 +757,7 @@ bool QAbstractSpinBox::event(QEvent *event)
     case QEvent::HoverEnter:
     case QEvent::HoverLeave:
     case QEvent::HoverMove:
-        if (const QHoverEvent *he = static_cast<const QHoverEvent *>(event))
-            d->updateHoverControl(he->pos());
+        d->updateHoverControl(static_cast<const QHoverEvent *>(event)->pos());
         break;
     case QEvent::ShortcutOverride:
         if (d->edit->event(event))
@@ -1090,6 +1089,8 @@ void QAbstractSpinBox::keyPressEvent(QKeyEvent *event)
     }
 
     d->edit->event(event);
+    if (!d->edit->text().isEmpty())
+        d->cleared = false;
     if (!isVisible())
         d->ignoreUpdateEdit = true;
 }
@@ -1418,7 +1419,7 @@ QStyle::SubControl QAbstractSpinBoxPrivate::newHoverControl(const QPoint &pos)
 
 QString QAbstractSpinBoxPrivate::stripped(const QString &t, int *pos) const
 {
-    QString text = t;
+    QStringRef text(&t);
     if (specialValueText.size() == 0 || text != specialValueText) {
         int from = 0;
         int size = text.size();
@@ -1440,7 +1441,7 @@ QString QAbstractSpinBoxPrivate::stripped(const QString &t, int *pos) const
     text = text.trimmed();
     if (pos)
         (*pos) -= (s - text.size());
-    return text;
+    return text.toString();
 
 }
 

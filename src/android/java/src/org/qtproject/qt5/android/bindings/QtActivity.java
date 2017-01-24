@@ -258,15 +258,19 @@ public class QtActivity extends Activity
     }
     //---------------------------------------------------------------------------
 
-    @Override
-    public void onCreate(Bundle savedInstanceState)
-    {
-        super.onCreate(savedInstanceState);
+    protected void onCreateHook(Bundle savedInstanceState) {
         m_loader.APPLICATION_PARAMETERS = APPLICATION_PARAMETERS;
         m_loader.ENVIRONMENT_VARIABLES = ENVIRONMENT_VARIABLES;
         m_loader.QT_ANDROID_THEMES = QT_ANDROID_THEMES;
         m_loader.QT_ANDROID_DEFAULT_THEME = QT_ANDROID_DEFAULT_THEME;
         m_loader.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState)
+    {
+        super.onCreate(savedInstanceState);
+        onCreateHook(savedInstanceState);
     }
     //---------------------------------------------------------------------------
 
@@ -981,4 +985,11 @@ public class QtActivity extends Activity
     //---------------------------------------------------------------------------
 //@ANDROID-12
 
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    {
+        if (QtApplication.m_delegateObject != null && QtApplication.onRequestPermissionsResult != null) {
+            QtApplication.invokeDelegateMethod(QtApplication.onRequestPermissionsResult, requestCode , permissions, grantResults);
+            return;
+        }
+    }
 }

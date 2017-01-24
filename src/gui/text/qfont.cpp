@@ -76,7 +76,9 @@
 
 QT_BEGIN_NAMESPACE
 
-
+#ifndef QFONTCACHE_DECREASE_TRIGGER_LIMIT
+#  define QFONTCACHE_DECREASE_TRIGGER_LIMIT 256
+#endif
 
 bool QFontDef::exactMatch(const QFontDef &other) const
 {
@@ -728,7 +730,7 @@ void QFont::setFamily(const QString &family)
     Returns the requested font style name, it will be used to match the
     font with irregular styles (that can't be normalized in other style
     properties). It depends on system font support, thus only works for
-    OS X and X11 so far. On Windows irregular styles will be added
+    \macos and X11 so far. On Windows irregular styles will be added
     as separate font families so there is no need for this.
 
     \sa setFamily(), setStyle()
@@ -823,7 +825,7 @@ int QFont::pointSize() const
     \li Vertical hinting (light)
     \li Full hinting
     \row
-    \li Cocoa on OS X
+    \li Cocoa on \macos
     \li No hinting
     \li No hinting
     \li No hinting
@@ -1374,6 +1376,7 @@ void QFont::setStyleStrategy(StyleStrategy s)
     Predefined stretch values that follow the CSS naming convention. The higher
     the value, the more stretched the text is.
 
+    \value AnyStretch 0 Accept any stretch matched using the other QFont properties (added in Qt 5.8)
     \value UltraCondensed 50
     \value ExtraCondensed 62
     \value Condensed 75
@@ -1400,20 +1403,25 @@ int QFont::stretch() const
 /*!
     Sets the stretch factor for the font.
 
-    The stretch factor changes the width of all characters in the font
-    by \a factor percent.  For example, setting \a factor to 150
+    The stretch factor matches a condensed or expanded version of the font or
+    applies a stretch transform that changes the width of all characters
+    in the font by \a factor percent.  For example, setting \a factor to 150
     results in all characters in the font being 1.5 times (ie. 150%)
-    wider.  The default stretch factor is 100.  The minimum stretch
-    factor is 1, and the maximum stretch factor is 4000.
+    wider.  The minimum stretch factor is 1, and the maximum stretch factor
+    is 4000.  The default stretch factor is \c AnyStretch, which will accept
+    any stretch factor and not apply any transform on the font.
 
     The stretch factor is only applied to outline fonts.  The stretch
     factor is ignored for bitmap fonts.
+
+    \note When matching a font with a native non-default stretch factor,
+    requesting a stretch of 100 will stretch it back to a medium width font.
 
     \sa stretch(), QFont::Stretch
 */
 void QFont::setStretch(int factor)
 {
-    if (factor < 1 || factor > 4000) {
+    if (factor < 0 || factor > 4000) {
         qWarning("QFont::setStretch: Parameter '%d' out of range", factor);
         return;
     }
@@ -1999,7 +2007,7 @@ QString QFont::key() const
 QString QFont::toString() const
 {
     const QChar comma(QLatin1Char(','));
-    return family() + comma +
+    QString fontDescription = family() + comma +
         QString::number(     pointSizeF()) + comma +
         QString::number(      pixelSize()) + comma +
         QString::number((int) styleHint()) + comma +
@@ -2009,6 +2017,12 @@ QString QFont::toString() const
         QString::number((int) strikeOut()) + comma +
         QString::number((int)fixedPitch()) + comma +
         QString::number((int)   false);
+
+    QString fontStyle = styleName();
+    if (!fontStyle.isEmpty())
+        fontDescription += comma + fontStyle;
+
+    return fontDescription;
 }
 
 /*!
@@ -2033,7 +2047,7 @@ uint qHash(const QFont &font, uint seed) Q_DECL_NOTHROW
  */
 bool QFont::fromString(const QString &descrip)
 {
-    QStringList l(descrip.split(QLatin1Char(',')));
+    const auto l = descrip.splitRef(QLatin1Char(','));
 
     int count = l.count();
     if (!count || (count > 2 && count < 9) || count > 11) {
@@ -2042,7 +2056,7 @@ bool QFont::fromString(const QString &descrip)
         return false;
     }
 
-    setFamily(l[0]);
+    setFamily(l[0].toString());
     if (count > 1 && l[1].toDouble() > 0.0)
         setPointSizeF(l[1].toDouble());
     if (count == 9) {
@@ -2052,7 +2066,7 @@ bool QFont::fromString(const QString &descrip)
         setUnderline(l[5].toInt());
         setStrikeOut(l[6].toInt());
         setFixedPitch(l[7].toInt());
-    } else if (count == 10) {
+    } else if (count >= 10) {
         if (l[2].toInt() > 0)
             setPixelSize(l[2].toInt());
         setStyleHint((StyleHint) l[3].toInt());
@@ -2061,7 +2075,10 @@ bool QFont::fromString(const QString &descrip)
         setUnderline(l[6].toInt());
         setStrikeOut(l[7].toInt());
         setFixedPitch(l[8].toInt());
+        if (count == 11)
+            d->request.styleName = l[10].toString();
     }
+
     if (count >= 9 && !d->request.fixedPitch) // assume 'false' fixedPitch equals default
         d->request.ignorePitch = true;
 
@@ -2800,7 +2817,7 @@ void QFontCache::insertEngineData(const QFontDef &def, QFontEngineData *engineDa
 
     engineData->ref.ref();
     // Decrease now rather than waiting
-    if (total_cost > min_cost * 2)
+    if (total_cost > min_cost * 2 && engineDataCache.size() >= QFONTCACHE_DECREASE_TRIGGER_LIMIT)
         decreaseCache();
 
     engineDataCache.insert(def, engineData);
@@ -2849,7 +2866,7 @@ void QFontCache::insertEngine(const Key &key, QFontEngine *engine, bool insertMu
 #endif
     engine->ref.ref();
     // Decrease now rather than waiting
-    if (total_cost > min_cost * 2)
+    if (total_cost > min_cost * 2 && engineCache.size() >= QFONTCACHE_DECREASE_TRIGGER_LIMIT)
         decreaseCache();
 
     Engine data(engine);

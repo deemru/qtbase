@@ -48,7 +48,6 @@
 #include "qelapsedtimer.h"
 #include "qthread.h"
 #include "qmutex_p.h"
-#include "qtypetraits.h"
 
 #ifndef QT_LINUX_FUTEX
 #include "private/qfreelist_p.h"
@@ -77,7 +76,7 @@ public:
 
     // written to by the thread that first owns 'mutex';
     // read during attempts to acquire ownership of 'mutex' from any other thread:
-    QAtomicPointer<QtPrivate::remove_pointer<Qt::HANDLE>::type> owner;
+    QAtomicPointer<std::remove_pointer<Qt::HANDLE>::type> owner;
 
     // only ever accessed from the thread that owns 'mutex':
     uint count;
@@ -263,6 +262,61 @@ bool QMutex::tryLock(int timeout) QT_MUTEX_LOCK_NOEXCEPT
     else
         return lockInternal(timeout);
 }
+
+/*! \fn bool QMutex::try_lock()
+    \since 5.8
+
+    This function is provided for compatibility with the Standard Library
+    concept \c Lockable. It is equivalent to tryLock().
+*/
+
+/*! \fn bool QMutex::try_lock_for(std::chrono::duration<Rep, Period> duration)
+    \since 5.8
+
+    Attempts to lock the mutex. This function returns \c true if the lock
+    was obtained; otherwise it returns \c false. If another thread has
+    locked the mutex, this function will wait for at least \a duration
+    for the mutex to become available.
+
+    Note: Passing a negative duration as the \a duration is equivalent to
+    calling try_lock(). This behavior differs from tryLock().
+
+    If the lock was obtained, the mutex must be unlocked with unlock()
+    before another thread can successfully lock it.
+
+    Calling this function multiple times on the same mutex from the
+    same thread is allowed if this mutex is a
+    \l{QMutex::Recursive}{recursive mutex}. If this mutex is a
+    \l{QMutex::NonRecursive}{non-recursive mutex}, this function will
+    \e always return false when attempting to lock the mutex
+    recursively.
+
+    \sa lock(), unlock()
+*/
+
+/*! \fn bool QMutex::try_lock_until(std::chrono::time_point<Clock, Duration> timePoint)
+    \since 5.8
+
+    Attempts to lock the mutex. This function returns \c true if the lock
+    was obtained; otherwise it returns \c false. If another thread has
+    locked the mutex, this function will wait at least until \a timePoint
+    for the mutex to become available.
+
+    Note: Passing a \a timePoint which has already passed is equivalent
+    to calling try_lock(). This behavior differs from tryLock().
+
+    If the lock was obtained, the mutex must be unlocked with unlock()
+    before another thread can successfully lock it.
+
+    Calling this function multiple times on the same mutex from the
+    same thread is allowed if this mutex is a
+    \l{QMutex::Recursive}{recursive mutex}. If this mutex is a
+    \l{QMutex::NonRecursive}{non-recursive mutex}, this function will
+    \e always return false when attempting to lock the mutex
+    recursively.
+
+    \sa lock(), unlock()
+*/
 
 /*! \fn void QMutex::unlock()
     Unlocks the mutex. Attempting to unlock a mutex in a different
@@ -580,34 +634,11 @@ const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
 
 typedef QFreeList<QMutexPrivate, FreeListConstants> FreeList;
 // We cannot use Q_GLOBAL_STATIC because it uses QMutex
-#if defined(Q_COMPILER_THREADSAFE_STATICS)
+static FreeList freeList_;
 FreeList *freelist()
 {
-    static FreeList list;
-    return &list;
+    return &freeList_;
 }
-#else
-static QBasicAtomicPointer<FreeList> freeListPtr;
-
-FreeList *freelist()
-{
-    FreeList *local = freeListPtr.loadAcquire();
-    if (!local) {
-        local = new FreeList;
-        if (!freeListPtr.testAndSetRelease(0, local)) {
-            delete local;
-            local = freeListPtr.loadAcquire();
-        }
-    }
-    return local;
-}
-
-static void qFreeListDeleter()
-{
-    delete freeListPtr.load();
-}
-Q_DESTRUCTOR_FUNCTION(qFreeListDeleter)
-#endif
 }
 
 QMutexPrivate *QMutexPrivate::allocate()

@@ -205,6 +205,7 @@ private Q_SLOTS:
     void invalidProtocol();
     void getFromData_data();
     void getFromData();
+    void getFromFile_data();
     void getFromFile();
     void getFromFileSpecial_data();
     void getFromFileSpecial();
@@ -489,45 +490,6 @@ private:
 
 bool tst_QNetworkReply::seedCreated = false;
 
-QT_BEGIN_NAMESPACE
-
-namespace QTest {
-    template<>
-    char *toString(const QNetworkReply::NetworkError& code)
-    {
-        const QMetaObject *mo = &QNetworkReply::staticMetaObject;
-        int index = mo->indexOfEnumerator("NetworkError");
-        if (index == -1)
-            return qstrdup("");
-
-        QMetaEnum qme = mo->enumerator(index);
-        return qstrdup(qme.valueToKey(code));
-    }
-
-    template<>
-    char *toString(const QNetworkCookie &cookie)
-    {
-        return qstrdup(cookie.toRawForm());
-    }
-
-    template<>
-    char *toString(const QList<QNetworkCookie> &list)
-    {
-        QByteArray result = "QList(";
-        bool first = true;
-        foreach (QNetworkCookie cookie, list) {
-            if (!first)
-                result += ", ";
-            first = false;
-            result += "QNetworkCookie(" + cookie.toRawForm() + ')';
-        }
-        result.append(')');
-        return qstrdup(result.constData());
-    }
-}
-
-QT_END_NAMESPACE
-
 #define RUN_REQUEST(call)                       \
     do {                                        \
         QString errorMsg = call;                \
@@ -650,8 +612,10 @@ private slots:
 #endif
     void slotError(QAbstractSocket::SocketError err)
     {
-        Q_ASSERT(!client.isNull());
-        qDebug() << "slotError" << err << client->errorString();
+        if (client.isNull())
+            qDebug() << "slotError" << err;
+        else
+            qDebug() << "slotError" << err << client->errorString();
     }
 
 public slots:
@@ -1674,14 +1638,26 @@ void tst_QNetworkReply::getFromData()
     QCOMPARE(reply->readAll(), expected);
 }
 
+void tst_QNetworkReply::getFromFile_data()
+{
+    QTest::addColumn<bool>("backgroundAttribute");
+
+    QTest::newRow("no-background-attribute") << false;
+    QTest::newRow("background-attribute") << true;
+}
+
 void tst_QNetworkReply::getFromFile()
 {
+    QFETCH(bool, backgroundAttribute);
+
     // create the file:
     QTemporaryFile file(QDir::currentPath() + "/temp-XXXXXX");
     file.setAutoRemove(true);
     QVERIFY2(file.open(), qPrintable(file.errorString()));
 
     QNetworkRequest request(QUrl::fromLocalFile(file.fileName()));
+    if (backgroundAttribute)
+        request.setAttribute(QNetworkRequest::BackgroundRequestAttribute, QVariant::fromValue(true));
     QNetworkReplyPtr reply;
 
     static const char fileData[] = "This is some data that is in the file.\r\n";
@@ -1691,6 +1667,7 @@ void tst_QNetworkReply::getFromFile()
     QCOMPARE(file.size(), qint64(data.size()));
 
     RUN_REQUEST(runSimpleRequest(QNetworkAccessManager::GetOperation, request, reply));
+    QVERIFY(waitForFinish(reply) != Timeout);
 
     QCOMPARE(reply->url(), request.url());
     QCOMPARE(reply->error(), QNetworkReply::NoError);
@@ -4319,9 +4296,6 @@ void tst_QNetworkReply::ioPutToFileFromProcess()
     QSKIP("No qprocess support", SkipAll);
 #else
 
-#if defined(Q_OS_WINCE)
-    QSKIP("Currently no stdin/out supported for Windows CE");
-#else
 #ifdef Q_OS_WIN
     if (qstrcmp(QTest::currentDataTag(), "small") == 0)
         QSKIP("When passing a CR-LF-LF sequence through Windows stdio, it gets converted, "
@@ -4355,7 +4329,6 @@ void tst_QNetworkReply::ioPutToFileFromProcess()
     QCOMPARE(file.size(), qint64(data.size()));
     QByteArray contents = file.readAll();
     QCOMPARE(contents, data);
-#endif
 
 #endif // QT_NO_PROCESS
 }
@@ -4952,7 +4925,7 @@ void tst_QNetworkReply::ioGetFromBuiltinHttp()
         const int maxRate = rate * 1024 * (100+allowedDeviation) / 100;
         qDebug() << minRate << "<="<< server.transferRate << "<=" << maxRate << '?';
         // The test takes too long to run if sending enough data to overwhelm the
-        // reciever's kernel buffers.
+        // receiver's kernel buffers.
         //QEXPECT_FAIL("http+limited", "Limiting is broken right now, check QTBUG-15065", Continue);
         //QEXPECT_FAIL("https+limited", "Limiting is broken right now, check QTBUG-15065", Continue);
         //QVERIFY(server.transferRate >= minRate && server.transferRate <= maxRate);
@@ -6328,17 +6301,7 @@ void tst_QNetworkReply::getAndThenDeleteObject()
     reply->setReadBufferSize(1);
     reply->setParent((QObject*)0); // must be 0 because else it is the manager
 
-    QTime stopWatch;
-    stopWatch.start();
-    forever {
-        QCoreApplication::instance()->processEvents();
-        if (reply->bytesAvailable())
-            break;
-        if (stopWatch.elapsed() >= 30000)
-            break;
-    }
-
-    QVERIFY(reply->bytesAvailable());
+    QTRY_VERIFY_WITH_TIMEOUT(reply->bytesAvailable(), 30000);
     QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
     QVERIFY(!reply->isFinished()); // must not be finished
 
@@ -6561,12 +6524,7 @@ void tst_QNetworkReply::getFromHttpIntoBuffer2()
     QFETCH(bool, useDownloadBuffer);
 
     // On my Linux Desktop the results are already visible with 128 kB, however we use this to have good results.
-#if defined(Q_OS_WINCE_WM)
-    // Show some mercy to non-desktop platform/s
-    enum {UploadSize = 4*1024*1024}; // 4 MB
-#else
     enum {UploadSize = 32*1024*1024}; // 32 MB
-#endif
 
     GetFromHttpIntoBuffer2Server server(UploadSize, true, false);
 
@@ -7310,7 +7268,11 @@ void tst_QNetworkReply::qtbug45581WrongReplyStatusCode()
 
     const QByteArray expectedContent =
             "<root attr=\"value\" attr2=\"value2\">"
-            "<person /><fruit /></root>\n";
+            "<person /><fruit /></root>"
+#ifdef Q_OS_WIN
+            "\r"
+#endif
+            "\n";
 
     QCOMPARE(reply->readAll(), expectedContent);
 
@@ -7888,10 +7850,6 @@ void tst_QNetworkReply::backgroundRequestInterruption()
         QNetworkSessionPrivate::setUsagePolicies(*const_cast<QNetworkSession *>(session.data()), original);
 
     QVERIFY(reply->isFinished());
-#ifdef Q_OS_OSX
-    if (QSysInfo::MacintoshVersion == QSysInfo::MV_10_8)
-        QEXPECT_FAIL("ftp, bg, nobg", "See QTBUG-32435", Abort);
-#endif
     QCOMPARE(reply->error(), error);
 #endif
 }

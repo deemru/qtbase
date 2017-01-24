@@ -45,15 +45,6 @@
 
 QT_BEGIN_NAMESPACE
 
-inline static void blend_pixel(quint32 &dst, const quint32 src)
-{
-    if (src >= 0xff000000)
-        dst = src;
-    else if (src != 0)
-        dst = src + BYTE_MUL(dst, qAlpha(~src));
-}
-
-
 /* The instruction palignr uses direct arguments, so we have to generate the code fo the different
    shift (4, 8, 12). Checking the alignment inside the loop is unfortunatelly way too slow.
  */
@@ -224,7 +215,7 @@ static inline void store_uint24_ssse3(uchar *dst, const uint *src, int len)
     dst24 = reinterpret_cast<quint24*>(dstVectorPtr);
     src = reinterpret_cast<const uint*>(inVectorPtr);
 
-    for (; i < len; ++i)
+    SIMD_EPILOGUE(i, len, 15)
         *dst24++ = quint24(*src++);
 }
 

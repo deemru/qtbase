@@ -52,6 +52,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qapplication.h"
 #include "QtGui/qevent.h"
 #include "QtGui/qfont.h"
@@ -90,11 +91,8 @@ extern Q_GUI_EXPORT bool qt_is_gui_used;
 extern QClipboard *qt_clipboard;
 #endif
 
-#if defined (Q_OS_WIN32) || defined (Q_OS_CYGWIN) || defined(Q_OS_WINCE)
+#if defined (Q_OS_WIN32) || defined (Q_OS_CYGWIN)
 extern QSysInfo::WinVersion qt_winver;
-# ifdef Q_OS_WINCE
-  extern DWORD qt_cever;
-# endif
 #elif defined (Q_OS_MAC)
 extern QSysInfo::MacVersion qt_macver;
 #endif
@@ -120,14 +118,11 @@ public:
     virtual bool shouldQuit() Q_DECL_OVERRIDE;
     bool tryCloseAllWindows() Q_DECL_OVERRIDE;
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
 #ifndef QT_NO_SETTINGS
     static bool x11_apply_settings();
 #endif
     static void reset_instance_pointer();
-#endif
-#ifdef Q_OS_WINCE
-    static int autoMaximizeThreshold;
 #endif
     static bool autoSipEnabled;
     static QString desktopStyleKey();
@@ -143,7 +138,7 @@ public:
     static bool isBlockedByModal(QWidget *widget);
     static bool modalState();
     static bool tryModalHelper(QWidget *widget, QWidget **rettop = 0);
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     static QWidget *tryModalHelper_sys(QWidget *top);
     bool canQuit();
 #endif
@@ -157,14 +152,14 @@ public:
     bool notify_helper(QObject *receiver, QEvent * e);
 
     void init(
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
                    Display *dpy = 0, Qt::HANDLE visual = 0, Qt::HANDLE cmap = 0
 #endif
                    );
     void initialize();
     void process_cmdline();
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     static void x11_initialize_style();
 #endif
 
@@ -189,7 +184,6 @@ public:
     static QWidgetList *popupWidgets;
     static QStyle *app_style;
     static bool overrides_native_style;
-    static int app_cspec;
     static QPalette *sys_pal;
     static QPalette *set_pal;
 
@@ -220,7 +214,7 @@ public:
     static void initializeWidgetFontHash();
     static void setSystemFont(const QFont &font);
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     static void applyX11SpecificCommandLineArguments(QWidget *main_widget);
 #endif
 
@@ -231,7 +225,7 @@ public:
     static Qt::NavigationMode navigationMode;
 #endif
 
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC) || defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ || 0 /* Used to be included in Qt4 for Q_WS_X11 */
     void _q_alertTimeOut();
     QHash<QWidget *, QTimer *> alertTimerHash;
 #endif
@@ -271,12 +265,12 @@ public:
     QGestureManager *gestureManager;
     QWidget *gestureWidget;
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) || defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ || 0 /* Used to be included in Qt4 for Q_WS_WIN */
     QPixmap *move_cursor;
     QPixmap *copy_cursor;
     QPixmap *link_cursor;
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     QPixmap *ignore_cursor;
 #endif
 
@@ -307,9 +301,9 @@ private:
     static bool isAlien(QWidget *);
 };
 
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
   extern void qt_win_set_cursor(QWidget *, bool);
-#elif defined(Q_DEAD_CODE_FROM_QT4_X11)
+#elif 0 // Used to be included in Qt4 for Q_WS_X11
   extern void qt_x11_enforce_cursor(QWidget *, bool);
   extern void qt_x11_enforce_cursor(QWidget *);
 #else

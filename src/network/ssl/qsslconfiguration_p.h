@@ -67,12 +67,14 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "qsslconfiguration.h"
 #include "qlist.h"
 #include "qsslcertificate.h"
 #include "qsslcipher.h"
 #include "qsslkey.h"
 #include "qsslellipticcurve.h"
+#include "qssldiffiehellmanparameters.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -87,8 +89,10 @@ public:
           allowRootCertOnDemandLoading(true),
           peerSessionShared(false),
           sslOptions(QSslConfigurationPrivate::defaultSslOptions),
+          dhParams(QSslDiffieHellmanParameters::defaultParameters()),
           sslSessionTicketLifeTimeHint(-1),
           ephemeralServerKey(),
+          preSharedKeyIdentityHint(),
           nextProtocolNegotiationStatus(QSslConfiguration::NextProtocolNegotiationNone)
     { }
 
@@ -117,10 +121,14 @@ public:
 
     QVector<QSslEllipticCurve> ellipticCurves;
 
+    QSslDiffieHellmanParameters dhParams;
+
     QByteArray sslSession;
     int sslSessionTicketLifeTimeHint;
 
     QSslKey ephemeralServerKey;
+
+    QByteArray preSharedKeyIdentityHint;
 
     QList<QByteArray> nextAllowedProtocols;
     QByteArray nextNegotiatedProtocol;

@@ -1,15 +1,19 @@
-TARGET = qtharfbuzzng
+TARGET = qtharfbuzz
 
 CONFIG += \
     static \
     hide_symbols \
     exceptions_off rtti_off warn_off
 
+MODULE_INCLUDEPATH += $$PWD/include
+
 load(qt_helper_lib)
 
 # built-in shapers list configuration:
 SHAPERS += opentype       # HB's main shaper; enabling it should be enough most of the time
-mac: SHAPERS += coretext  # native shaper on OSX/iOS; could be used alone to handle both OT and AAT fonts
+
+# native shaper on Apple platforms; could be used alone to handle both OT and AAT fonts
+darwin:!if(watchos:CONFIG(simulator, simulator|device)): SHAPERS += coretext
 
 DEFINES += HAVE_CONFIG_H
 DEFINES += HB_NO_UNICODE_FUNCS HB_DISABLE_DEPRECATED
@@ -22,8 +26,9 @@ win32: DEFINES += HB_NO_WIN1256
 #Workaround https://code.google.com/p/android/issues/detail?id=194631
 android: DEFINES += _POSIX_C_SOURCE=200112L
 
-INCLUDEPATH += $$PWD/include
+# Harfbuzz-NG inside Qt uses the Qt atomics (inline code only)
 INCLUDEPATH += $$QT.core.includes
+DEFINES += QT_NO_VERSION_TAGGING
 
 SOURCES += \
     $$PWD/src/hb-blob.cc \
@@ -143,8 +148,8 @@ contains(SHAPERS, coretext) {
     HEADERS += \
         $$PWD/src/hb-coretext.h
 
-    ios: \
-        # On iOS CoreText and CoreGraphics are stand-alone frameworks
+    uikit: \
+        # On iOS/tvOS/watchOS CoreText and CoreGraphics are stand-alone frameworks
         LIBS_PRIVATE += -framework CoreText -framework CoreGraphics
     else: \
         # On Mac OS they are part of the ApplicationServices umbrella framework,

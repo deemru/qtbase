@@ -57,10 +57,6 @@
 #include <QtPlatformHeaders/qxcbintegrationfunctions.h>
 #include <QtPlatformHeaders/qxcbscreenfunctions.h>
 
-#ifndef QT_NO_DBUS
-#include "QtPlatformSupport/private/qdbusmenuconnection_p.h"
-#endif
-
 #ifdef XCB_USE_XLIB
 #  include <X11/Xlib.h>
 #else
@@ -85,7 +81,6 @@ static int resourceType(const QByteArray &key)
         QByteArrayLiteral("gettimestamp"), QByteArrayLiteral("x11screen"),
         QByteArrayLiteral("rootwindow"),
         QByteArrayLiteral("subpixeltype"), QByteArrayLiteral("antialiasingenabled"),
-        QByteArrayLiteral("nofonthinting"),
         QByteArrayLiteral("atspibus"),
         QByteArrayLiteral("compositingenabled")
     };
@@ -242,9 +237,6 @@ void *QXcbNativeInterface::nativeResourceForScreen(const QByteArray &resourceStr
     case GetTimestamp:
         result = getTimestamp(xcbScreen);
         break;
-    case NoFontHinting:
-        result = xcbScreen->noFontHinting() ? this : 0; //qboolptr...
-        break;
     case RootWindow:
         result = reinterpret_cast<void *>(xcbScreen->root());
         break;
@@ -363,6 +355,9 @@ QFunctionPointer QXcbNativeInterface::platformFunction(const QByteArray &functio
     //case sensitive
     if (function == QXcbWindowFunctions::setWmWindowTypeIdentifier())
         return QFunctionPointer(QXcbWindowFunctions::SetWmWindowType(QXcbWindow::setWmWindowTypeStatic));
+
+    if (function == QXcbWindowFunctions::setWmWindowRoleIdentifier())
+        return QFunctionPointer(QXcbWindowFunctions::SetWmWindowRole(QXcbWindow::setWmWindowRoleStatic));
 
     if (function == QXcbWindowFunctions::setWmWindowIconTextIdentifier())
         return QFunctionPointer(QXcbWindowFunctions::SetWmWindowIconText(QXcbWindow::setWindowIconTextStatic));

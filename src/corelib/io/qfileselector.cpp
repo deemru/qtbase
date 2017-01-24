@@ -55,8 +55,6 @@ QT_BEGIN_NAMESPACE
 //Environment variable to allow tooling full control of file selectors
 static const char env_override[] = "QT_NO_BUILTIN_SELECTORS";
 
-static const ushort selectorIndicator = '+';
-
 Q_GLOBAL_STATIC(QFileSelectorSharedData, sharedData);
 static QBasicMutex sharedDataMutex;
 
@@ -267,7 +265,7 @@ QUrl QFileSelector::select(const QUrl &filePath) const
     return ret;
 }
 
-static QString selectionHelper(const QString &path, const QString &fileName, const QStringList &selectors)
+QString QFileSelectorPrivate::selectionHelper(const QString &path, const QString &fileName, const QStringList &selectors, const QChar &indicator)
 {
     /* selectionHelper does a depth-first search of possible selected files. Because there is strict
        selector ordering in the API, we can stop checking as soon as we find the file in a directory
@@ -276,12 +274,15 @@ static QString selectionHelper(const QString &path, const QString &fileName, con
     Q_ASSERT(path.isEmpty() || path.endsWith(QLatin1Char('/')));
 
     for (const QString &s : selectors) {
-        QString prospectiveBase = path + QLatin1Char(selectorIndicator) + s + QLatin1Char('/');
+        QString prospectiveBase = path;
+        if (!indicator.isNull())
+            prospectiveBase += indicator;
+        prospectiveBase += s + QLatin1Char('/');
         QStringList remainingSelectors = selectors;
         remainingSelectors.removeAll(s);
         if (!QDir(prospectiveBase).exists())
             continue;
-        QString prospectiveFile = selectionHelper(prospectiveBase, fileName, remainingSelectors);
+        QString prospectiveFile = selectionHelper(prospectiveBase, fileName, remainingSelectors, indicator);
         if (!prospectiveFile.isEmpty())
             return prospectiveFile;
     }
@@ -369,7 +370,7 @@ QStringList QFileSelectorPrivate::platformSelectors()
 #if defined(Q_OS_WIN)
     // can't fall back to QSysInfo because we need both "winphone" and "winrt" for the Windows Phone case
     ret << QStringLiteral("windows");
-    ret << QSysInfo::kernelType();  // "wince" and "winnt"
+    ret << QSysInfo::kernelType();  // "winnt"
 #  if defined(Q_OS_WINRT)
     ret << QStringLiteral("winrt");
 #    if defined(Q_OS_WINPHONE)
@@ -386,8 +387,12 @@ QStringList QFileSelectorPrivate::platformSelectors()
 #     endif
 #  endif
     QString productName = QSysInfo::productType();
+#     ifdef Q_OS_MACOS
+    if (productName != QLatin1String("osx"))
+        ret << QStringLiteral("osx"); // compatibility
+#     endif
     if (productName != QLatin1String("unknown"))
-        ret << productName; // "opensuse", "fedora", "osx", "ios", "android"
+        ret << productName; // "opensuse", "fedora", "macos", "ios", "android"
 #endif
     return ret;
 }

@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtCore/qrect.h"
 #include "QtCore/qpair.h"
 #include "QtCore/qlist.h"
@@ -174,7 +175,7 @@ public:
     QList<int> indexOf(QWidget *widget) const;
     QList<int> indexOfPlaceHolder(const QString &objectName) const;
 
-    void apply(bool animate);
+    QDockWidget *apply(bool animate);
 
     void paintSeparators(QPainter *p, QWidget *widget, const QRegion &clip,
                             const QPoint &mouse) const;
@@ -261,6 +262,7 @@ public:
     QLayoutItem *plug(const QList<int> &path);
     QLayoutItem *unplug(const QList<int> &path);
     void remove(const QList<int> &path);
+    void removePlaceHolder(const QString &name);
 
     void fitLayout();
 

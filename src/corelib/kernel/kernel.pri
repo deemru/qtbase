@@ -4,6 +4,9 @@ HEADERS += \
         kernel/qabstracteventdispatcher.h \
         kernel/qabstractnativeeventfilter.h \
         kernel/qbasictimer.h \
+        kernel/qdeadlinetimer.h \
+        kernel/qdeadlinetimer_p.h \
+        kernel/qelapsedtimer.h \
         kernel/qeventloop.h\
         kernel/qpointer.h \
         kernel/qcorecmdlineargs_p.h \
@@ -45,6 +48,8 @@ SOURCES += \
         kernel/qabstracteventdispatcher.cpp \
         kernel/qabstractnativeeventfilter.cpp \
         kernel/qbasictimer.cpp \
+        kernel/qdeadlinetimer.cpp \
+        kernel/qelapsedtimer.cpp \
         kernel/qeventloop.cpp \
         kernel/qcoreapplication.cpp \
         kernel/qcoreevent.cpp \
@@ -69,6 +74,7 @@ SOURCES += \
 win32 {
         SOURCES += \
                 kernel/qcoreapplication_win.cpp \
+                kernel/qelapsedtimer_win.cpp \
                 kernel/qwineventnotifier.cpp \
                 kernel/qsharedmemory_win.cpp \
                 kernel/qsystemsemaphore_win.cpp
@@ -82,14 +88,6 @@ win32 {
             SOURCES += kernel/qeventdispatcher_win.cpp
             HEADERS += kernel/qeventdispatcher_win_p.h
         }
-}
-
-wince {
-        SOURCES += \
-                kernel/qfunctions_wince.cpp
-        HEADERS += \
-                kernel/qfunctions_fake_env_p.h \
-                kernel/qfunctions_wince.h
 }
 
 winrt {
@@ -109,7 +107,9 @@ mac {
     SOURCES += \
         kernel/qcfsocketnotifier.cpp \
         kernel/qcoreapplication_mac.cpp \
-        kernel/qcore_mac.cpp
+        kernel/qcore_mac.cpp \
+        kernel/qcore_foundation.mm
+    !nacl: SOURCES += kernel/qelapsedtimer_mac.cpp
 
     OBJECTIVE_SOURCES += \
         kernel/qcore_mac_objc.mm \
@@ -119,9 +119,14 @@ mac {
 
     osx: LIBS_PRIVATE += -framework CoreServices -framework AppKit
 
-    ios {
+    uikit {
         # We need UIKit for UIDevice
         LIBS_PRIVATE += -framework UIKit
+    }
+
+    watchos {
+        # We need WatchKit for WKExtension in qeventdispatcher_cf.mm
+        LIBS_PRIVATE += -framework WatchKit
     }
 }
 
@@ -135,32 +140,30 @@ nacl {
 unix|integrity {
     SOURCES += \
             kernel/qcore_unix.cpp \
-            kernel/qcrashhandler.cpp \
             kernel/qeventdispatcher_unix.cpp \
             kernel/qtimerinfo_unix.cpp
+    !darwin|nacl: SOURCES += kernel/qelapsedtimer_unix.cpp
 
     HEADERS += \
             kernel/qcore_unix_p.h \
-            kernel/qcrashhandler_p.h \
             kernel/qeventdispatcher_unix_p.h \
             kernel/qpoll_p.h \
             kernel/qtimerinfo_unix_p.h
 
-    contains(QT_CONFIG, poll_select): SOURCES += kernel/qpoll.cpp
-    contains(QT_CONFIG, poll_poll): DEFINES += QT_HAVE_POLL
-    contains(QT_CONFIG, poll_ppoll): DEFINES += QT_HAVE_POLL QT_HAVE_PPOLL
-    contains(QT_CONFIG, poll_pollts): DEFINES += QT_HAVE_POLL QT_HAVE_POLLTS
+    qtConfig(poll_select): SOURCES += kernel/qpoll.cpp
+    qtConfig(poll_poll): DEFINES += QT_HAVE_POLL
+    qtConfig(poll_ppoll): DEFINES += QT_HAVE_POLL QT_HAVE_PPOLL
+    qtConfig(poll_pollts): DEFINES += QT_HAVE_POLL QT_HAVE_POLLTS
 
-    contains(QT_CONFIG, glib) {
+    qtConfig(glib) {
         SOURCES += \
             kernel/qeventdispatcher_glib.cpp
         HEADERS += \
             kernel/qeventdispatcher_glib_p.h
-        QMAKE_CXXFLAGS += $$QT_CFLAGS_GLIB
-        LIBS_PRIVATE +=$$QT_LIBS_GLIB
+        QMAKE_USE_PRIVATE += glib
     }
 
-   contains(QT_CONFIG, clock-gettime):include($$QT_SOURCE_TREE/config.tests/unix/clock-gettime/clock-gettime.pri)
+   qtConfig(clock-gettime): include($$QT_SOURCE_TREE/config.tests/unix/clock-gettime/clock-gettime.pri)
 
     !android {
         SOURCES += kernel/qsharedmemory_posix.cpp \
@@ -183,7 +186,7 @@ vxworks {
 }
 
 qqnx_pps {
-        LIBS_PRIVATE += -lpps
+        QMAKE_USE_PRIVATE += pps
         SOURCES += \
                 kernel/qppsattribute.cpp \
                 kernel/qppsobject.cpp
@@ -203,3 +206,5 @@ android {
                    kernel/qjnihelpers_p.h \
                    kernel/qjni_p.h
 }
+
+!darwin:!unix:!win32: SOURCES += kernel/qelapsedtimer_generic.cpp

@@ -52,11 +52,6 @@ QT_BEGIN_NAMESPACE
 
 static QList<QCocoaMenuBar*> static_menubars;
 
-static inline QCocoaMenuLoader *getMenuLoader()
-{
-    return [NSApp QT_MANGLE_NAMESPACE(qt_qcocoamenuLoader)];
-}
-
 QCocoaMenuBar::QCocoaMenuBar() :
     m_window(0)
 {
@@ -93,6 +88,32 @@ QCocoaMenuBar::~QCocoaMenuBar()
         qDeleteAll(children());
         updateMenuBarImmediately();
     }
+}
+
+bool QCocoaMenuBar::needsImmediateUpdate()
+{
+    if (m_window && m_window->window()->isActive()) {
+        return true;
+    } else if (!m_window) {
+        // Only update if the focus/active window has no
+        // menubar, which means it'll be using this menubar.
+        // This is to avoid a modification in a parentless
+        // menubar to affect a window-assigned menubar.
+        QWindow *fw = QGuiApplication::focusWindow();
+        if (!fw) {
+            // Same if there's no focus window, BTW.
+            return true;
+        } else {
+            QCocoaWindow *cw = static_cast<QCocoaWindow *>(fw->handle());
+            if (cw && !cw->menubar())
+                return true;
+        }
+    }
+
+    // Either the menubar is attached to a non-active window,
+    // or the application's focus window has its own menubar
+    // (which is different from this one)
+    return false;
 }
 
 void QCocoaMenuBar::insertMenu(QPlatformMenu *platformMenu, QPlatformMenu *before)
@@ -135,7 +156,7 @@ void QCocoaMenuBar::insertMenu(QPlatformMenu *platformMenu, QPlatformMenu *befor
 
     syncMenu(menu);
 
-    if (m_window && m_window->window()->isActive())
+    if (needsImmediateUpdate())
         updateMenuBarImmediately();
 }
 
@@ -179,9 +200,11 @@ void QCocoaMenuBar::syncMenu(QPlatformMenu *menu)
             }
     }
 
-    NSMenuItem *nativeMenuItem = nativeItemForMenu(cocoaMenu);
-    nativeMenuItem.title = cocoaMenu->nsMenu().title;
-    nativeMenuItem.hidden = shouldHide;
+    if (NSMenuItem *attachedItem = cocoaMenu->attachedItem()) {
+        // Non-nil attached item means the item's submenu is set
+        attachedItem.title = cocoaMenu->nsMenu().title;
+        attachedItem.hidden = shouldHide;
+    }
 }
 
 NSMenuItem *QCocoaMenuBar::nativeItemForMenu(QCocoaMenu *menu) const
@@ -325,10 +348,10 @@ void QCocoaMenuBar::updateMenuBarImmediately()
         menu->setMenuParent(mb);
         // force a sync?
         mb->syncMenu(menu);
-        menu->syncModalState(disableForModal);
+        menu->propagateEnabledState(!disableForModal);
     }
 
-    QCocoaMenuLoader *loader = getMenuLoader();
+    QCocoaMenuLoader *loader = [QCocoaMenuLoader sharedMenuLoader];
     [loader ensureAppMenuInMenu:mb->nsMenu()];
 
     NSMutableSet *mergedItems = [[NSMutableSet setWithCapacity:0] retain];

@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qgtk3dialoghelpers.h"
+#include "qgtk3theme.h"
 
 #include <qeventloop.h>
 #include <qwindow.h>
@@ -55,6 +56,11 @@
 #include <pango/pango.h>
 
 QT_BEGIN_NAMESPACE
+
+static const char *standardButtonText(int button)
+{
+    return QGtk3Theme::defaultStandardButtonText(button).toUtf8();
+}
 
 class QGtk3Dialog : public QWindow
 {
@@ -117,8 +123,10 @@ void QGtk3Dialog::exec()
 
 bool QGtk3Dialog::show(Qt::WindowFlags flags, Qt::WindowModality modality, QWindow *parent)
 {
-    connect(parent, &QWindow::destroyed, this, &QGtk3Dialog::onParentWindowDestroyed,
-            Qt::UniqueConnection);
+    if (parent) {
+        connect(parent, &QWindow::destroyed, this, &QGtk3Dialog::onParentWindowDestroyed,
+                Qt::UniqueConnection);
+    }
     setParent(parent);
     setFlags(flags);
     setModality(modality);
@@ -127,10 +135,12 @@ bool QGtk3Dialog::show(Qt::WindowFlags flags, Qt::WindowModality modality, QWind
 
     GdkWindow *gdkWindow = gtk_widget_get_window(gtkWidget);
     if (parent) {
-        GdkDisplay *gdkDisplay = gdk_window_get_display(gdkWindow);
-        XSetTransientForHint(gdk_x11_display_get_xdisplay(gdkDisplay),
-                             gdk_x11_window_get_xid(gdkWindow),
-                             parent->winId());
+        if (GDK_IS_X11_WINDOW(gdkWindow)) {
+            GdkDisplay *gdkDisplay = gdk_window_get_display(gdkWindow);
+            XSetTransientForHint(gdk_x11_display_get_xdisplay(gdkDisplay),
+                                 gdk_x11_window_get_xid(gdkWindow),
+                                 parent->winId());
+        }
     }
 
     if (modality != Qt::NonModal) {
@@ -169,7 +179,7 @@ QGtk3ColorDialogHelper::QGtk3ColorDialogHelper()
     connect(d.data(), SIGNAL(accept()), this, SLOT(onAccepted()));
     connect(d.data(), SIGNAL(reject()), this, SIGNAL(reject()));
 
-    g_signal_connect_swapped(d->gtkDialog(), "color-activated", G_CALLBACK(onColorChanged), this);
+    g_signal_connect_swapped(d->gtkDialog(), "notify::rgba", G_CALLBACK(onColorChanged), this);
 }
 
 QGtk3ColorDialogHelper::~QGtk3ColorDialogHelper()
@@ -216,7 +226,6 @@ QColor QGtk3ColorDialogHelper::currentColor() const
 void QGtk3ColorDialogHelper::onAccepted()
 {
     emit accept();
-    emit colorSelected(currentColor());
 }
 
 void QGtk3ColorDialogHelper::onColorChanged(QGtk3ColorDialogHelper *dialog)
@@ -236,13 +245,16 @@ QGtk3FileDialogHelper::QGtk3FileDialogHelper()
 {
     d.reset(new QGtk3Dialog(gtk_file_chooser_dialog_new("", 0,
                                                         GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                        GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-                                                        GTK_STOCK_OK, GTK_RESPONSE_OK, NULL)));
+                                                        standardButtonText(QPlatformDialogHelper::Cancel), GTK_RESPONSE_CANCEL,
+                                                        standardButtonText(QPlatformDialogHelper::Ok), GTK_RESPONSE_OK,
+                                                        NULL)));
+
     connect(d.data(), SIGNAL(accept()), this, SLOT(onAccepted()));
     connect(d.data(), SIGNAL(reject()), this, SIGNAL(reject()));
 
     g_signal_connect(GTK_FILE_CHOOSER(d->gtkDialog()), "selection-changed", G_CALLBACK(onSelectionChanged), this);
     g_signal_connect_swapped(GTK_FILE_CHOOSER(d->gtkDialog()), "current-folder-changed", G_CALLBACK(onCurrentFolderChanged), this);
+    g_signal_connect_swapped(GTK_FILE_CHOOSER(d->gtkDialog()), "notify::filter", G_CALLBACK(onFilterChanged), this);
 }
 
 QGtk3FileDialogHelper::~QGtk3FileDialogHelper()
@@ -354,15 +366,6 @@ QString QGtk3FileDialogHelper::selectedNameFilter() const
 void QGtk3FileDialogHelper::onAccepted()
 {
     emit accept();
-
-    QString filter = selectedNameFilter();
-    if (filter.isEmpty())
-        emit filterSelected(filter);
-
-    QList<QUrl> files = selectedFiles();
-    emit filesSelected(files);
-    if (files.count() == 1)
-        emit fileSelected(files.first());
 }
 
 void QGtk3FileDialogHelper::onSelectionChanged(GtkDialog *gtkDialog, QGtk3FileDialogHelper *helper)
@@ -379,6 +382,11 @@ void QGtk3FileDialogHelper::onSelectionChanged(GtkDialog *gtkDialog, QGtk3FileDi
 void QGtk3FileDialogHelper::onCurrentFolderChanged(QGtk3FileDialogHelper *dialog)
 {
     emit dialog->directoryEntered(dialog->directory());
+}
+
+void QGtk3FileDialogHelper::onFilterChanged(QGtk3FileDialogHelper *dialog)
+{
+    emit dialog->filterSelected(dialog->selectedNameFilter());
 }
 
 static GtkFileChooserAction gtkFileChooserAction(const QSharedPointer<QFileDialogOptions> &options)
@@ -418,6 +426,9 @@ void QGtk3FileDialogHelper::applyOptions()
     const bool confirmOverwrite = !opts->testOption(QFileDialogOptions::DontConfirmOverwrite);
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(gtkDialog), confirmOverwrite);
 
+    const bool readOnly = opts->testOption(QFileDialogOptions::ReadOnly);
+    gtk_file_chooser_set_create_folders(GTK_FILE_CHOOSER(gtkDialog), !readOnly);
+
     const QStringList nameFilters = opts->nameFilters();
     if (!nameFilters.isEmpty())
         setNameFilters(nameFilters);
@@ -437,9 +448,9 @@ void QGtk3FileDialogHelper::applyOptions()
         if (opts->isLabelExplicitlySet(QFileDialogOptions::Accept))
             gtk_button_set_label(GTK_BUTTON(acceptButton), opts->labelText(QFileDialogOptions::Accept).toUtf8());
         else if (opts->acceptMode() == QFileDialogOptions::AcceptOpen)
-            gtk_button_set_label(GTK_BUTTON(acceptButton), GTK_STOCK_OPEN);
+            gtk_button_set_label(GTK_BUTTON(acceptButton), standardButtonText(QPlatformDialogHelper::Open));
         else
-            gtk_button_set_label(GTK_BUTTON(acceptButton), GTK_STOCK_SAVE);
+            gtk_button_set_label(GTK_BUTTON(acceptButton), standardButtonText(QPlatformDialogHelper::Save));
     }
 
     GtkWidget *rejectButton = gtk_dialog_get_widget_for_response(gtkDialog, GTK_RESPONSE_CANCEL);
@@ -447,7 +458,7 @@ void QGtk3FileDialogHelper::applyOptions()
         if (opts->isLabelExplicitlySet(QFileDialogOptions::Reject))
             gtk_button_set_label(GTK_BUTTON(rejectButton), opts->labelText(QFileDialogOptions::Reject).toUtf8());
         else
-            gtk_button_set_label(GTK_BUTTON(rejectButton), GTK_STOCK_CANCEL);
+            gtk_button_set_label(GTK_BUTTON(rejectButton), standardButtonText(QPlatformDialogHelper::Cancel));
     }
 }
 
@@ -462,10 +473,10 @@ void QGtk3FileDialogHelper::setNameFilters(const QStringList &filters)
 
     foreach (const QString &filter, filters) {
         GtkFileFilter *gtkFilter = gtk_file_filter_new();
-        const QString name = filter.left(filter.indexOf(QLatin1Char('(')));
+        const QStringRef name = filter.leftRef(filter.indexOf(QLatin1Char('(')));
         const QStringList extensions = cleanFilterList(filter);
 
-        gtk_file_filter_set_name(gtkFilter, name.isEmpty() ? extensions.join(QStringLiteral(", ")).toUtf8() : name.toUtf8());
+        gtk_file_filter_set_name(gtkFilter, name.isEmpty() ? extensions.join(QLatin1String(", ")).toUtf8() : name.toUtf8());
         foreach (const QString &ext, extensions)
             gtk_file_filter_add_pattern(gtkFilter, ext.toUtf8());
 
@@ -481,6 +492,8 @@ QGtk3FontDialogHelper::QGtk3FontDialogHelper()
     d.reset(new QGtk3Dialog(gtk_font_chooser_dialog_new("", 0)));
     connect(d.data(), SIGNAL(accept()), this, SLOT(onAccepted()));
     connect(d.data(), SIGNAL(reject()), this, SIGNAL(reject()));
+
+    g_signal_connect_swapped(d->gtkDialog(), "notify::font", G_CALLBACK(onFontChanged), this);
 }
 
 QGtk3FontDialogHelper::~QGtk3FontDialogHelper()
@@ -586,9 +599,12 @@ QFont QGtk3FontDialogHelper::currentFont() const
 
 void QGtk3FontDialogHelper::onAccepted()
 {
-    emit currentFontChanged(currentFont());
     emit accept();
-    emit fontSelected(currentFont());
+}
+
+void QGtk3FontDialogHelper::onFontChanged(QGtk3FontDialogHelper *dialog)
+{
+    emit dialog->currentFontChanged(dialog->currentFont());
 }
 
 void QGtk3FontDialogHelper::applyOptions()

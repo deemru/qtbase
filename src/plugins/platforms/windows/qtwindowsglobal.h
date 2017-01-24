@@ -41,10 +41,19 @@
 #ifndef QTWINDOWSGLOBAL_H
 #define QTWINDOWSGLOBAL_H
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 #include <QtCore/qnamespace.h>
-#ifdef Q_OS_WINCE
-#  include "qplatformfunctions_wince.h"
+
+#ifndef WM_DWMCOMPOSITIONCHANGED // MinGW.
+#    define WM_DWMCOMPOSITIONCHANGED 0x31E
+#endif
+
+#ifndef WM_TOUCH
+#  define WM_TOUCH 0x0240
+#endif
+
+#ifndef WM_GESTURE
+#  define WM_GESTURE 0x0119
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -158,10 +167,8 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
     case WM_MOUSEWHEEL:
     case WM_MOUSEHWHEEL:
         return QtWindows::MouseWheelEvent;
-#ifndef Q_OS_WINCE
     case WM_WINDOWPOSCHANGING:
         return QtWindows::GeometryChangingEvent;
-#endif
     case WM_MOVE:
         return QtWindows::MoveEvent;
     case WM_SHOWWINDOW:
@@ -172,10 +179,8 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::ResizeEvent;
     case WM_NCCALCSIZE:
         return QtWindows::CalculateSize;
-#ifndef Q_OS_WINCE
     case WM_NCHITTEST:
         return QtWindows::NonClientHitTest;
-#endif // !Q_OS_WINCE
     case WM_GETMINMAXINFO:
         return QtWindows::QuerySizeHints;
     case WM_KEYDOWN:                        // keyboard event
@@ -243,12 +248,10 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::ContextMenu;
 #endif
     case WM_SYSCOMMAND:
-#ifndef Q_OS_WINCE
         if ((wParamIn & 0xfff0) == SC_CONTEXTHELP)
             return QtWindows::WhatsThisEvent;
-#endif
         break;
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_SESSIONMANAGER)
+#if !defined(QT_NO_SESSIONMANAGER)
     case WM_QUERYENDSESSION:
         return QtWindows::QueryEndSessionApplicationEvent;
     case WM_ENDSESSION:

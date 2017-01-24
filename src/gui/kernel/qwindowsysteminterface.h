@@ -48,6 +48,7 @@
 // source and binary incompatible with future versions of Qt.
 //
 
+#include <QtGui/qtguiglobal.h>
 #include <QtCore/QTime>
 #include <QtGui/qwindowdefs.h>
 #include <QtCore/QEvent>
@@ -71,9 +72,15 @@ class QPlatformDropQtResponse;
 class Q_GUI_EXPORT QWindowSystemInterface
 {
 public:
+    struct SynchronousDelivery {};
+    struct AsynchronousDelivery {};
+    struct DefaultDelivery {};
+
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleMouseEvent(QWindow *w, const QPointF & local, const QPointF & global, Qt::MouseButtons b,
                                  Qt::KeyboardModifiers mods = Qt::NoModifier,
                                  Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleMouseEvent(QWindow *w, ulong timestamp, const QPointF & local, const QPointF & global, Qt::MouseButtons b,
                                  Qt::KeyboardModifiers mods = Qt::NoModifier,
                                  Qt::MouseEventSource source = Qt::MouseEventNotSynthesized);
@@ -87,7 +94,9 @@ public:
     static bool handleShortcutEvent(QWindow *w, ulong timestamp, int k, Qt::KeyboardModifiers mods, quint32 nativeScanCode,
                                       quint32 nativeVirtualKey, quint32 nativeModifiers, const QString & text = QString(), bool autorep = false, ushort count = 1);
 
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static bool handleKeyEvent(QWindow *w, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static bool handleKeyEvent(QWindow *w, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
 
     static bool handleExtendedKeyEvent(QWindow *w, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
@@ -117,11 +126,14 @@ public:
     static void handleWheelEvent(QWindow *w, ulong timestamp, const QPointF & local, const QPointF & global, int d, Qt::Orientation o, Qt::KeyboardModifiers mods = Qt::NoModifier);
 
     struct TouchPoint {
-        TouchPoint() : id(0), pressure(0), state(Qt::TouchPointStationary), flags(0) { }
+        TouchPoint() : id(0), uniqueId(-1), pressure(0), rotation(0), state(Qt::TouchPointStationary) { }
         int id;                 // for application use
+        qint64 uniqueId;        // for TUIO: object/token ID; otherwise empty
+                                // TODO for TUIO 2.0: add registerPointerUniqueID(QPointingDeviceUniqueId)
         QPointF normalPosition; // touch device coordinates, (0 to 1, 0 to 1)
         QRectF area;            // the touched area, centered at position in screen coordinates
         qreal pressure;         // 0 to 1
+        qreal rotation;         // 0 means pointing straight up; 0 if unknown (like QTabletEvent::rotation)
         Qt::TouchPointState state; //Qt::TouchPoint{Pressed|Moved|Stationary|Released}
         QVector2D velocity;     // in screen coordinate system, pixels / seconds
         QTouchEvent::TouchPoint::InfoFlags flags;
@@ -130,28 +142,41 @@ public:
 
     static void registerTouchDevice(const QTouchDevice *device);
     static void unregisterTouchDevice(const QTouchDevice *device);
+    static bool isTouchDeviceRegistered(const QTouchDevice *device);
+
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleTouchEvent(QWindow *w, QTouchDevice *device,
                                  const QList<struct TouchPoint> &points, Qt::KeyboardModifiers mods = Qt::NoModifier);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleTouchEvent(QWindow *w, ulong timestamp, QTouchDevice *device,
                                  const QList<struct TouchPoint> &points, Qt::KeyboardModifiers mods = Qt::NoModifier);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleTouchCancelEvent(QWindow *w, QTouchDevice *device, Qt::KeyboardModifiers mods = Qt::NoModifier);
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleTouchCancelEvent(QWindow *w, ulong timestamp, QTouchDevice *device, Qt::KeyboardModifiers mods = Qt::NoModifier);
 
     // rect is relative to parent
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleGeometryChange(QWindow *w, const QRect &newRect, const QRect &oldRect = QRect());
-    static void handleCloseEvent(QWindow *w, bool *accepted = 0);
+
+    // region is in local coordinates, do not confuse with geometry which is parent-relative
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
+    static void handleExposeEvent(QWindow *tlw, const QRegion &region);
+
+    static void handleCloseEvent(QWindow *w, bool *accepted = Q_NULLPTR);
+
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleEnterEvent(QWindow *w, const QPointF &local = QPointF(), const QPointF& global = QPointF());
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleLeaveEvent(QWindow *w);
     static void handleEnterLeaveEvent(QWindow *enter, QWindow *leave, const QPointF &local = QPointF(), const QPointF& global = QPointF());
+    template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
     static void handleWindowActivated(QWindow *w, Qt::FocusReason r = Qt::OtherFocusReason);
 
     static void handleWindowStateChanged(QWindow *w, Qt::WindowState newState);
     static void handleWindowScreenChanged(QWindow *w, QScreen *newScreen);
 
     static void handleApplicationStateChanged(Qt::ApplicationState newState, bool forcePropagate = false);
-
-    // region is in local coordinates, do not confuse with geometry which is parent-relative
-    static void handleExposeEvent(QWindow *tlw, const QRegion &region);
 
 #ifndef QT_NO_DRAGANDDROP
     // Drag and drop. These events are sent immediately.

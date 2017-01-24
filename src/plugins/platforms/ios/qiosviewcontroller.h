@@ -38,20 +38,27 @@
 ****************************************************************************/
 
 #import <UIKit/UIKit.h>
+#include <QtCore/QtGlobal>
+
+QT_BEGIN_NAMESPACE
 
 class QIOSScreen;
 
+QT_END_NAMESPACE
+
 @interface QIOSViewController : UIViewController
 
-- (id)initWithQIOSScreen:(QIOSScreen *)screen;
+- (id)initWithQIOSScreen:(QT_PREPEND_NAMESPACE(QIOSScreen) *)screen;
 - (void)updateProperties;
 
+#ifndef Q_OS_TVOS
 @property (nonatomic, assign) UIInterfaceOrientation lockedOrientation;
 
 // UIViewController
 @property (nonatomic, assign) BOOL prefersStatusBarHidden;
 @property (nonatomic, assign) UIStatusBarAnimation preferredStatusBarUpdateAnimation;
 @property (nonatomic, assign) UIStatusBarStyle preferredStatusBarStyle;
+#endif
 
 @end
 

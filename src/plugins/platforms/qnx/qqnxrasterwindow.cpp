@@ -178,7 +178,7 @@ void QQnxRasterWindow::adjustBufferSize()
 {
     // When having a raster window we don't need any buffers, since
     // Qt will draw to the parent TLW backing store.
-    const QSize windowSize = window()->parent() ? QSize(1,1) : window()->size();
+    const QSize windowSize = window()->parent() ? QSize(0,0) : window()->size();
     if (windowSize != bufferSize())
         setBufferSize(windowSize);
 }
@@ -194,6 +194,13 @@ void QQnxRasterWindow::resetBuffers()
     m_currentBufferIndex = -1;
     m_previousDirty = QRegion();
     m_scrolled = QRegion();
+    if (window()->parent() && bufferSize() == QSize(1,1)) {
+        // If we have a parent then we're not really rendering.  But if we don't render we'll
+        // be invisible and any children won't show up.  This should be harmless since we're
+        // rendering into a 1x1 window that has transparency set to discard.
+        renderBuffer();
+        post(QRegion(0,0,1,1));
+    }
 }
 
 void QQnxRasterWindow::blitPreviousToCurrent(const QRegion &region, int dx, int dy, bool flush)
@@ -208,10 +215,9 @@ void QQnxRasterWindow::blitPreviousToCurrent(const QRegion &region, int dx, int 
     QQnxBuffer &previousBuffer = m_buffers[m_previousBufferIndex];
 
     // Break down region into non-overlapping rectangles
-    const QVector<QRect> rects = region.rects();
-    for (int i = rects.size() - 1; i >= 0; i--) {
+    for (auto rit = region.rbegin(), rend = region.rend(); rit != rend; ++rit) {
         // Clip rectangle to bounds of target
-        const QRect rect = rects[i].intersected(currentBuffer.rect());
+        const QRect rect = rit->intersected(currentBuffer.rect());
 
         if (rect.isEmpty())
             continue;

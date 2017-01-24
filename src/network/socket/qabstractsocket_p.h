@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "QtNetwork/qabstractsocket.h"
 #include "QtCore/qbytearray.h"
 #include "QtCore/qlist.h"
@@ -85,7 +86,7 @@ public:
 
     virtual bool bind(const QHostAddress &address, quint16 port, QAbstractSocket::BindMode mode);
 
-    bool canReadNotification();
+    virtual bool canReadNotification();
     bool canWriteNotification();
     void canCloseNotification();
 
@@ -128,22 +129,23 @@ public:
     inline void resolveProxy(quint16 port) { resolveProxy(QString(), port); }
 
     void resetSocketLayer();
-    bool flush();
+    virtual bool flush();
 
     bool initSocketLayer(QAbstractSocket::NetworkLayerProtocol protocol);
     virtual void configureCreatedSocket();
     void startConnectingByName(const QString &host);
     void fetchConnectionParameters();
-    void setupSocketNotifiers();
     bool readFromSocket();
-    bool writeToSocket();
-    void emitReadyRead();
+    virtual bool writeToSocket();
+    void emitReadyRead(int channel = 0);
+    void emitBytesWritten(qint64 bytes, int channel = 0);
 
     void setError(QAbstractSocket::SocketError errorCode, const QString &errorString);
     void setErrorAndEmit(QAbstractSocket::SocketError errorCode, const QString &errorString);
 
     qint64 readBufferMaxSize;
     bool isBuffered;
+    bool hasPendingData;
 
     QTimer *connectTimer;
     QTimer *disconnectTimer;

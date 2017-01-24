@@ -28,7 +28,6 @@
 
 #include "msvc_nmake.h"
 #include "option.h"
-#include "cesdkhandler.h"
 
 #include <qregexp.h>
 #include <qdir.h>
@@ -72,38 +71,7 @@ NmakeMakefileGenerator::writeMakefile(QTextStream &t)
             return MakefileGenerator::writeStubMakefile(t);
 #endif
         if (!project->isHostBuild()) {
-            const ProValueMap &variables = project->variables();
-            if (project->isActiveConfig("wince")) {
-                CeSdkHandler sdkhandler;
-                sdkhandler.retrieveAvailableSDKs();
-                const QString sdkName = variables["CE_SDK"].join(' ')
-                                        + " (" + variables["CE_ARCH"].join(' ') + ")";
-                const QList<CeSdkInfo> sdkList = sdkhandler.listAll();
-                CeSdkInfo sdk;
-                for (const CeSdkInfo &info : sdkList) {
-                    if (info.name().compare(sdkName, Qt::CaseInsensitive ) == 0) {
-                        sdk = info;
-                        break;
-                    }
-                }
-                if (sdk.isValid()) {
-                    t << "\nINCLUDE = " << sdk.includePath();
-                    t << "\nLIB = " << sdk.libPath();
-                    t << "\nPATH = " << sdk.binPath() << "\n";
-                } else {
-                    QStringList sdkStringList;
-                    sdkStringList.reserve(sdkList.size());
-                    for (const CeSdkInfo &info : sdkList)
-                        sdkStringList << info.name();
-
-                    fprintf(stderr, "Failed to find Windows CE SDK matching %s, found: %s\n"
-                                    "SDK needs to be specified in mkspec (using: %s/qmake.conf)\n"
-                                    "SDK name needs to match the following format: CE_SDK (CE_ARCH)\n",
-                            qPrintable(sdkName), qPrintable(sdkStringList.join(", ")),
-                            qPrintable(variables["QMAKESPEC"].first().toQString()));
-                    return false;
-                }
-            } else if (project->isActiveConfig(QStringLiteral("winrt"))) {
+            if (project->isActiveConfig(QStringLiteral("winrt"))) {
                 QString arch = project->first("VCPROJ_ARCH").toQString().toLower();
                 QString compiler;
                 QString compilerArch;
@@ -406,11 +374,21 @@ void NmakeMakefileGenerator::init()
         project->values("QMAKE_DISTCLEAN").append(tgt + ".lib");
     }
     if (project->isActiveConfig("debug_info")) {
-        QString pdbfile = tgt + ".pdb";
+        QString pdbfile;
+        QString distPdbFile = tgt + ".pdb";
+        if (project->isActiveConfig("staticlib")) {
+            // For static libraries, the compiler's pdb file and the dist pdb file are the same.
+            pdbfile = distPdbFile;
+        } else {
+            // Use $${TARGET}.vc.pdb in the OBJECTS_DIR for the compiler and
+            // $${TARGET}.pdb (the default) for the linker.
+            pdbfile = var("OBJECTS_DIR") + project->first("TARGET") + ".vc.pdb";
+        }
         QString escapedPdbFile = escapeFilePath(pdbfile);
         project->values("QMAKE_CFLAGS").append("/Fd" + escapedPdbFile);
         project->values("QMAKE_CXXFLAGS").append("/Fd" + escapedPdbFile);
-        project->values("QMAKE_DISTCLEAN").append(pdbfile);
+        project->values("QMAKE_CLEAN").append(pdbfile);
+        project->values("QMAKE_DISTCLEAN").append(distPdbFile);
     }
     if (project->isActiveConfig("debug")) {
         project->values("QMAKE_CLEAN").append(tgt + ".ilk");
@@ -419,6 +397,12 @@ void NmakeMakefileGenerator::init()
         ProStringList &defines = project->values("DEFINES");
         if (!defines.contains("NDEBUG"))
             defines.append("NDEBUG");
+    }
+
+    if (project->values("QMAKE_APP_FLAG").isEmpty() && project->isActiveConfig("dll")) {
+        ProStringList &defines = project->values("DEFINES");
+        if (!defines.contains("_WINDLL"))
+            defines.append("_WINDLL");
     }
 }
 
@@ -535,6 +519,10 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     t << "all: " << escapeDependencyPath(fileFixify(Option::output.fileName()))
       << ' ' << depVar("ALL_DEPS") << " $(DESTDIR_TARGET)\n\n";
     t << "$(DESTDIR_TARGET): " << depVar("PRE_TARGETDEPS") << " $(OBJECTS) " << depVar("POST_TARGETDEPS");
+    if (templateName == "aux") {
+        t << "\n\n";
+        return;
+    }
 
     if(!project->isEmpty("QMAKE_PRE_LINK"))
         t << "\n\t" <<var("QMAKE_PRE_LINK");
@@ -542,7 +530,7 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
         t << "\n\t$(LIBAPP) $(LIBFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) @<<\n\t  "
           << "$(OBJECTS)"
           << "\n<<";
-    } else if (templateName != "aux") {
+    } else {
         const bool embedManifest = ((templateName == "app" && project->isActiveConfig("embed_manifest_exe"))
                                     || (templateName == "lib" && project->isActiveConfig("embed_manifest_dll")
                                         && !(project->isActiveConfig("plugin") && project->isActiveConfig("no_plugin_manifest"))
@@ -613,12 +601,6 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
             t << "\n\t";
             writeLinkCommand(t);
         }
-    }
-    QString signature = !project->isEmpty("SIGNATURE_FILE") ? var("SIGNATURE_FILE") : var("DEFAULT_SIGNATURE");
-    bool useSignature = !signature.isEmpty() && !project->isActiveConfig("staticlib") &&
-                        !project->isEmpty("CE_SDK") && !project->isEmpty("CE_ARCH");
-    if(useSignature) {
-        t << "\n\tsigntool sign /F " << escapeFilePath(signature) << " $(DESTDIR_TARGET)";
     }
     if(!project->isEmpty("QMAKE_POST_LINK")) {
         t << "\n\t" << var("QMAKE_POST_LINK");

@@ -609,16 +609,12 @@ HKEY QWinSettingsPrivate::writeHandle() const
 QWinSettingsPrivate::~QWinSettingsPrivate()
 {
     if (deleteWriteHandleOnExit && writeHandle() != 0) {
-#if defined(Q_OS_WINCE)
-        remove(regList.at(0).key());
-#else
         QString emptyKey;
         DWORD res = RegDeleteKey(writeHandle(), reinterpret_cast<const wchar_t *>(emptyKey.utf16()));
         if (res != ERROR_SUCCESS) {
             qWarning("QSettings: Failed to delete key \"%s\": %s",
                     regList.at(0).key().toLatin1().data(), errorCodeToString(res).toLatin1().data());
         }
-#endif
     }
 
     for (int i = 0; i < regList.size(); ++i)
@@ -660,10 +656,6 @@ void QWinSettingsPrivate::remove(const QString &uKey)
                 }
             }
         } else {
-#if defined(Q_OS_WINCE)
-            // For WinCE always Close the handle first.
-            RegCloseKey(handle);
-#endif
             res = RegDeleteKey(writeHandle(), reinterpret_cast<const wchar_t *>(rKey.utf16()));
 
             if (res != ERROR_SUCCESS) {
@@ -673,15 +665,6 @@ void QWinSettingsPrivate::remove(const QString &uKey)
         }
         RegCloseKey(handle);
     }
-}
-
-static bool stringContainsNullChar(const QString &s)
-{
-    for (int i = 0; i < s.length(); ++i) {
-        if (s.at(i).unicode() == 0)
-            return true;
-    }
-    return false;
 }
 
 void QWinSettingsPrivate::set(const QString &uKey, const QVariant &value)
@@ -712,7 +695,7 @@ void QWinSettingsPrivate::set(const QString &uKey, const QVariant &value)
             QStringList l = variantListToStringList(value.toList());
             QStringList::const_iterator it = l.constBegin();
             for (; it != l.constEnd(); ++it) {
-                if ((*it).length() == 0 || stringContainsNullChar(*it)) {
+                if ((*it).length() == 0 || it->contains(QChar::Null)) {
                     type = REG_BINARY;
                     break;
                 }
@@ -750,13 +733,13 @@ void QWinSettingsPrivate::set(const QString &uKey, const QVariant &value)
         }
 
         case QVariant::ByteArray:
-            // fallthrough intended
+            Q_FALLTHROUGH();
 
         default: {
             // If the string does not contain '\0', we can use REG_SZ, the native registry
             // string type. Otherwise we use REG_BINARY.
             QString s = variantToString(value);
-            type = stringContainsNullChar(s) ? REG_BINARY : REG_SZ;
+            type = s.contains(QChar::Null) ? REG_BINARY : REG_SZ;
             if (type == REG_BINARY) {
                 regValueBuff = QByteArray((const char*)s.utf16(), s.length() * 2);
             } else {

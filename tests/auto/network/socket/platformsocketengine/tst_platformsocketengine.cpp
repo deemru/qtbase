@@ -111,6 +111,7 @@ void tst_PlatformSocketEngine::construction()
     QCOMPARE(socketDevice.peerAddress(), QHostAddress());
     QCOMPARE(socketDevice.peerPort(), quint16(0));
     QCOMPARE(socketDevice.error(), QAbstractSocket::UnknownSocketError);
+    QCOMPARE(socketDevice.option(QNativeSocketEngine::NonBlockingSocketOption), -1);
 
     QTest::ignoreMessage(QtWarningMsg, PLATFORMSOCKETENGINESTRING "::bytesAvailable() was called in QAbstractSocket::UnconnectedState");
     QCOMPARE(socketDevice.bytesAvailable(), -1);
@@ -494,9 +495,6 @@ void tst_PlatformSocketEngine::readWriteBufferSize()
     qint64 bufferSize = device.receiveBufferSize();
     QVERIFY(bufferSize != -1);
     device.setReceiveBufferSize(bufferSize + 1);
-#if defined(Q_OS_WINCE)
-    QEXPECT_FAIL(0, "Not supported by default on WinCE", Continue);
-#endif
     QVERIFY(device.receiveBufferSize() > bufferSize);
 
     bufferSize = device.sendBufferSize();
@@ -606,8 +604,8 @@ void tst_PlatformSocketEngine::invalidSend()
     PLATFORMSOCKETENGINE socket;
     QVERIFY(socket.initialize(QAbstractSocket::TcpSocket));
 
-    QTest::ignoreMessage(QtWarningMsg, PLATFORMSOCKETENGINESTRING "::writeDatagram() was"
-                               " called by a socket other than QAbstractSocket::UdpSocket");
+    QTest::ignoreMessage(QtWarningMsg, PLATFORMSOCKETENGINESTRING "::writeDatagram() was called"
+                         " not in QAbstractSocket::BoundState or QAbstractSocket::ConnectedState");
     QCOMPARE(socket.writeDatagram("hei", 3, QIpPacketHeader(QHostAddress::LocalHost, 143)),
             (qlonglong) -1);
 }
@@ -649,7 +647,7 @@ void tst_PlatformSocketEngine::receiveUrgentData()
     QByteArray response;
 
     // Native OOB data test doesn't work on HP-UX or WinCE
-#if !defined(Q_OS_HPUX) && !defined(Q_OS_WINCE)
+#if !defined(Q_OS_HPUX)
     // The server sends an urgent message
     msg = 'Q';
     QCOMPARE(int(::send(socketDescriptor, &msg, sizeof(msg), MSG_OOB)), 1);

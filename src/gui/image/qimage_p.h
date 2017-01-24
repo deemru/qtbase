@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtGui/private/qtguiglobal_p.h>
 
 #include <QMap>
 #include <QVector>
@@ -211,6 +211,9 @@ inline QImage::Format qt_alphaVersionForPainting(QImage::Format format)
 #endif
     return toFormat;
 }
+
+Q_GUI_EXPORT QMap<QString, QString> qt_getImageText(const QImage &image, const QString &description);
+Q_GUI_EXPORT QMap<QString, QString> qt_getImageTextFromDescription(const QString &description);
 
 QT_END_NAMESPACE
 

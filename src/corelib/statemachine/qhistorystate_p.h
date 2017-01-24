@@ -52,10 +52,11 @@
 //
 
 #include "private/qabstractstate_p.h"
-
 #include <QtCore/qabstracttransition.h>
 #include <QtCore/qhistorystate.h>
 #include <QtCore/qlist.h>
+
+QT_REQUIRE_CONFIG(statemachine);
 
 QT_BEGIN_NAMESPACE
 
@@ -87,10 +88,10 @@ protected:
     // state, it will handle this transition as a special case. The history state itself is never
     // entered either: either the stored configuration will be used, or the target(s) of this
     // transition are used.
-    virtual bool eventTest(QEvent *event) { Q_UNUSED(event); return false; }
-    virtual void onTransition(QEvent *event) { Q_UNUSED(event); }
+    bool eventTest(QEvent *event)  override { Q_UNUSED(event); return false; }
+    void onTransition(QEvent *event) override { Q_UNUSED(event); }
 };
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QHISTORYSTATE_P_H

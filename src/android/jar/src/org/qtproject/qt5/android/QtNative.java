@@ -93,6 +93,7 @@ public class QtNative
     private static final int m_moveThreshold = 0;
     private static ClipboardManager m_clipboardManager = null;
     private static Method m_checkSelfPermissionMethod = null;
+    private static Boolean m_tabletEventSupported = null;
     private static final Runnable runPendingCppRunnablesRunnable = new Runnable() {
         @Override
         public void run() {
@@ -385,6 +386,9 @@ public class QtNative
     {
         int pointerType = 0;
 
+        if (m_tabletEventSupported == null)
+            m_tabletEventSupported = isTabletEventSupported();
+
         switch (event.getToolType(0)) {
         case MotionEvent.TOOL_TYPE_STYLUS:
             pointerType = 1; // QTabletEvent::Pen
@@ -395,7 +399,7 @@ public class QtNative
         // TODO TOOL_TYPE_MOUSE
         }
 
-        if (pointerType != 0) {
+        if (m_tabletEventSupported && pointerType != 0) {
             tabletEvent(id, event.getDeviceId(), event.getEventTime(), event.getAction(), pointerType,
                 event.getButtonState(), event.getX(), event.getY(), event.getPressure());
         } else {
@@ -451,20 +455,25 @@ public class QtNative
         }
     }
 
-    public static int checkSelfPermission(final String permission)
+    public static Context getContext() {
+        if (m_activity != null)
+            return m_activity;
+        return m_service;
+    }
+
+    public static int checkSelfPermission(String permission)
     {
         int perm = PackageManager.PERMISSION_DENIED;
         synchronized (m_mainActivityMutex) {
-            if (m_activity == null)
-                return perm;
+            Context context = getContext();
             try {
                 if (Build.VERSION.SDK_INT >= 23) {
                     if (m_checkSelfPermissionMethod == null)
                         m_checkSelfPermissionMethod = Context.class.getMethod("checkSelfPermission", String.class);
-                    perm = (Integer)m_checkSelfPermissionMethod.invoke(m_activity, permission);
+                    perm = (Integer)m_checkSelfPermissionMethod.invoke(context, permission);
                 } else {
-                    final PackageManager pm = m_activity.getPackageManager();
-                    perm = pm.checkPermission(permission, m_activity.getPackageName());
+                    final PackageManager pm = context.getPackageManager();
+                    perm = pm.checkPermission(permission, context.getApplicationContext().getPackageName());
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -484,6 +493,20 @@ public class QtNative
             public void run() {
                 if (m_activityDelegate != null)
                     m_activityDelegate.updateSelection(selStart, selEnd, candidatesStart, candidatesEnd);
+            }
+        });
+    }
+
+    private static void updateHandles(final int mode,
+                                      final int x1,
+                                      final int y1,
+                                      final int x2,
+                                      final int y2)
+    {
+        runAction(new Runnable() {
+            @Override
+            public void run() {
+                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2);
             }
         });
     }
@@ -565,7 +588,7 @@ public class QtNative
             m_clipboardManager.setText(text);
     }
 
-    private static boolean hasClipboardText()
+    public static boolean hasClipboardText()
     {
         if (m_clipboardManager != null)
             return m_clipboardManager.hasText();
@@ -762,6 +785,7 @@ public class QtNative
     // pointer methods
 
     // tablet methods
+    public static native boolean isTabletEventSupported();
     public static native void tabletEvent(int winId, int deviceId, long time, int action, int pointerType, int buttonState, float x, float y, float pressure);
     // tablet methods
 
@@ -771,6 +795,13 @@ public class QtNative
     public static native void keyboardVisibilityChanged(boolean visibility);
     public static native void keyboardGeometryChanged(int x, int y, int width, int height);
     // keyboard methods
+
+    // handle methods
+    public static final int IdCursorHandle = 1;
+    public static final int IdLeftHandle = 2;
+    public static final int IdRightHandle = 3;
+    public static native void handleLocationChanged(int id, int x, int y);
+    // handle methods
 
     // dispatch events methods
     public static native boolean dispatchGenericMotionEvent(MotionEvent ev);
@@ -804,6 +835,8 @@ public class QtNative
     public static native void onNewIntent(Intent data);
 
     public static native void runPendingCppRunnables();
+
+    public static native void sendRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults);
 
     private static native void setNativeActivity(Activity activity);
     private static native void setNativeService(Service service);

@@ -28,9 +28,6 @@
 
 
 #include <QtTest/QtTest>
-#if defined(Q_OS_WINCE)
-#include <ceconfig.h>
-#endif
 
 #include <QtGui>
 #include <QtWidgets>
@@ -41,7 +38,7 @@
 #include "../../../shared/platforminputcontext.h"
 #include <private/qinputmethod_p.h>
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 #include <windows.h>
 #define Q_CHECK_PAINTEVENTS \
     if (::SwitchDesktop(::GetThreadDesktop(::GetCurrentThreadId())) == 0) \
@@ -170,7 +167,6 @@ class tst_QGraphicsScene : public QObject
 {
     Q_OBJECT
 public slots:
-    void initTestCase();
     void cleanup();
 
 private slots:
@@ -271,14 +267,8 @@ private slots:
     void taskQT_3674_doNotCrash();
     void taskQTBUG_15977_renderWithDeviceCoordinateCache();
     void taskQTBUG_16401_focusItem();
+    void taskQTBUG_42915_focusNextPrevChild();
 };
-
-void tst_QGraphicsScene::initTestCase()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QGraphicsScene::cleanup()
 {
@@ -1250,7 +1240,7 @@ void tst_QGraphicsScene::addText()
 
 void tst_QGraphicsScene::removeItem()
 {
-#if (defined(Q_OS_WINCE) && !defined(GWES_ICONCURS)) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID)
     QSKIP("No mouse cursor support");
 #endif
     QGraphicsScene scene;
@@ -1587,11 +1577,7 @@ void tst_QGraphicsScene::hoverEvents_siblings()
 
     QGraphicsView view(&scene);
     view.setRenderHint(QPainter::Antialiasing, true);
-#if defined(Q_OS_WINCE)
-    view.setMinimumSize(230, 200);
-#else
     view.setMinimumSize(400, 300);
-#endif
     view.rotate(10);
     view.scale(1.7, 1.7);
     view.show();
@@ -1660,11 +1646,7 @@ void tst_QGraphicsScene::hoverEvents_parentChild()
 
     QGraphicsView view(&scene);
     view.setRenderHint(QPainter::Antialiasing, true);
-#if defined(Q_OS_WINCE)
-    view.setMinimumSize(230, 200);
-#else
     view.setMinimumSize(400, 300);
-#endif
     view.rotate(10);
     view.scale(1.7, 1.7);
     view.show();
@@ -4832,6 +4814,30 @@ void tst_QGraphicsScene::taskQTBUG_16401_focusItem()
     QVERIFY(!scene.focusItem());
     QApplication::sendEvent(&view, &focusIn);
     QVERIFY(!scene.focusItem());
+}
+
+void tst_QGraphicsScene::taskQTBUG_42915_focusNextPrevChild()
+{
+    QGraphicsScene scene;
+    QGraphicsView view(&scene);
+    scene.setSceneRect(1, 1, 198, 198);
+    view.setFocus();
+
+    QGraphicsWidget *widget1 = new QGraphicsWidget();
+    QGraphicsRectItem *rect1 = new QGraphicsRectItem(-50, -50, 100, 100, widget1);
+    rect1->setBrush(Qt::blue);
+    scene.addItem(widget1);
+    widget1->setPos(100, 100);
+    widget1->setFlags(QGraphicsItem::ItemIsPanel);
+
+    QGraphicsWidget *widget2 = new QGraphicsWidget(widget1);
+    widget2->setFocusPolicy(Qt::NoFocus);
+
+    view.show();
+    QApplication::setActiveWindow(&view);
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+
+    QTest::keyEvent(QTest::Click, &view, Qt::Key_Tab);
 }
 
 QTEST_MAIN(tst_QGraphicsScene)

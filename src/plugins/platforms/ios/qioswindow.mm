@@ -54,6 +54,8 @@
 
 #include <QtDebug>
 
+QT_BEGIN_NAMESPACE
+
 QIOSWindow::QIOSWindow(QWindow *window)
     : QPlatformWindow(window)
     , m_view([[QUIView alloc] initWithQIOSWindow:this])
@@ -91,7 +93,7 @@ QIOSWindow::~QIOSWindow()
     // practice this doesn't seem to happen when removing the view from its superview. To ensure that
     // Qt's internal state for touch and mouse handling is kept consistent, we therefor have to force
     // cancellation of all touch events.
-    [m_view touchesCancelled:0 withEvent:0];
+    [m_view touchesCancelled:[NSSet set] withEvent:0];
 
     clearAccessibleCache();
     m_view->m_qioswindow = 0;
@@ -211,7 +213,7 @@ void QIOSWindow::applyGeometry(const QRect &rect)
     // The baseclass takes care of persisting this for us.
     QPlatformWindow::setGeometry(rect);
 
-    m_view.frame = toCGRect(rect);
+    m_view.frame = rect.toCGRect();
 
     // iOS will automatically trigger -[layoutSubviews:] for resize,
     // but not for move, so we force it just in case.
@@ -223,26 +225,7 @@ void QIOSWindow::applyGeometry(const QRect &rect)
 
 bool QIOSWindow::isExposed() const
 {
-    // Note: At startup of an iOS app it will enter UIApplicationStateInactive
-    // while showing the launch screen, and once the application returns from
-    // applicationDidFinishLaunching it will hide the launch screen and enter
-    // UIApplicationStateActive. Technically, a window is not exposed until
-    // it's actually visible on screen, and Apple also documents that "Apps
-    // that use OpenGL ES for drawing must not use didFinishLaunching to
-    // prepare their drawing environment. Instead, defer any OpenGL ES
-    // drawing calls to applicationDidBecomeActive". Unfortunately, if we
-    // wait until the applicationState reaches ApplicationActive to signal
-    // that the window is exposed, we get a lag between hiding the launch
-    // screen and blitting the first pixels of the application, as Qt
-    // spends some time drawing those pixels in response to the expose.
-    // In practice there doesn't seem to be any issues starting GL setup
-    // and drawing from within applicationDidFinishLaunching, and this is
-    // also the recommended approach for other 3rd party GL toolkits on iOS,
-    // so we 'cheat', and report that a window is exposed even if the app
-    // is in UIApplicationStateInactive, so that the startup transition
-    // between the launch screen and the application content is smooth.
-
-    return qApp->applicationState() > Qt::ApplicationHidden
+    return qApp->applicationState() >= Qt::ApplicationActive
         && window()->isVisible() && !window()->geometry().isEmpty();
 }
 
@@ -375,6 +358,17 @@ qreal QIOSWindow::devicePixelRatio() const
 void QIOSWindow::clearAccessibleCache()
 {
     [m_view clearAccessibleCache];
+}
+
+void QIOSWindow::requestUpdate()
+{
+    static_cast<QIOSScreen *>(screen())->setUpdatesPaused(false);
+}
+
+CAEAGLLayer *QIOSWindow::eaglLayer() const
+{
+    Q_ASSERT([m_view.layer isKindOfClass:[CAEAGLLayer class]]);
+    return static_cast<CAEAGLLayer *>(m_view.layer);
 }
 
 #include "moc_qioswindow.cpp"

@@ -61,7 +61,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
-#include "qglobal.h"
+#include "private/qglobal_p.h"
 
 #ifdef __OBJC__
 #include <Foundation/Foundation.h>
@@ -126,12 +126,6 @@ public:
     inline QCFString(const QCFType<CFStringRef> &other) : QCFType<CFStringRef>(other) {}
     operator QString() const;
     operator CFStringRef() const;
-    static QString toQString(CFStringRef cfstr);
-    static CFStringRef toCFStringRef(const QString &str);
-#ifdef __OBJC__
-    static QString toQString(const NSString *nsstr);
-    static  NSString *toNSString(const QString &string);
-#endif
 
 private:
     QString string;

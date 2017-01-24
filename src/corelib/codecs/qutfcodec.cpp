@@ -52,6 +52,19 @@ enum { Endian = 0, Data = 1 };
 
 static const uchar utf8bom[] = { 0xef, 0xbb, 0xbf };
 
+#if (defined(__SSE2__) && defined(QT_COMPILER_SUPPORTS_SSE2)) \
+    || (defined(__ARM_NEON__) && defined(Q_PROCESSOR_ARM_64))
+static Q_ALWAYS_INLINE uint qBitScanReverse(unsigned v) Q_DECL_NOTHROW
+{
+    uint result = qCountLeadingZeroBits(v);
+    // Now Invert the result: clz will count *down* from the msb to the lsb, so the msb index is 31
+    // and the lsb index is 0. The result for _bit_scan_reverse is expected to be the index when
+    // counting up: msb index is 0 (because it starts there), and the lsb index is 31.
+    result ^= sizeof(unsigned) * 8 - 1;
+    return result;
+}
+#endif
+
 #if defined(__SSE2__) && defined(QT_COMPILER_SUPPORTS_SSE2)
 static inline bool simdEncodeAscii(uchar *&dst, const ushort *&nextAscii, const ushort *&src, const ushort *end)
 {
@@ -81,9 +94,9 @@ static inline bool simdEncodeAscii(uchar *&dst, const ushort *&nextAscii, const 
             // find the next probable ASCII character
             // we don't want to load 32 bytes again in this loop if we know there are non-ASCII
             // characters still coming
-            nextAscii = src + _bit_scan_reverse(n) + 1;
+            nextAscii = src + qBitScanReverse(n) + 1;
 
-            n = _bit_scan_forward(n);
+            n = qCountTrailingZeroBits(n);
             dst += n;
             src += n;
             return false;
@@ -132,8 +145,76 @@ static inline bool simdDecodeAscii(ushort *&dst, const uchar *&nextAscii, const 
         // find the next probable ASCII character
         // we don't want to load 16 bytes again in this loop if we know there are non-ASCII
         // characters still coming
-        n = _bit_scan_reverse(n);
+        n = qBitScanReverse(n);
         nextAscii = src + (n / BitSpacing) + 1;
+        return false;
+
+    }
+    return src == end;
+}
+#elif defined(__ARM_NEON__) && defined(Q_PROCESSOR_ARM_64) // vaddv is only available on Aarch64
+static inline bool simdEncodeAscii(uchar *&dst, const ushort *&nextAscii, const ushort *&src, const ushort *end)
+{
+    uint16x8_t maxAscii = vdupq_n_u16(0x7f);
+    uint16x8_t mask1 = { 1,      1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10, 1 << 12, 1 << 14 };
+    uint16x8_t mask2 = vshlq_n_u16(mask1, 1);
+
+    // do sixteen characters at a time
+    for ( ; end - src >= 16; src += 16, dst += 16) {
+        // load 2 lanes (or: "load interleaved")
+        uint16x8x2_t in = vld2q_u16(src);
+
+        // check if any of the elements > 0x7f, select 1 bit per element (element 0 -> bit 0, element 1 -> bit 1, etc),
+        // add those together into a scalar, and merge the scalars.
+        uint16_t nonAscii = vaddvq_u16(vandq_u16(vcgtq_u16(in.val[0], maxAscii), mask1))
+                          | vaddvq_u16(vandq_u16(vcgtq_u16(in.val[1], maxAscii), mask2));
+
+        // merge the two lanes by shifting the values of the second by 8 and inserting them
+        uint16x8_t out = vsliq_n_u16(in.val[0], in.val[1], 8);
+
+        // store, even if there are non-ASCII characters here
+        vst1q_u8(dst, vreinterpretq_u8_u16(out));
+
+        if (nonAscii) {
+            // find the next probable ASCII character
+            // we don't want to load 32 bytes again in this loop if we know there are non-ASCII
+            // characters still coming
+            nextAscii = src + qBitScanReverse(nonAscii) + 1;
+
+            nonAscii = qCountTrailingZeroBits(nonAscii);
+            dst += nonAscii;
+            src += nonAscii;
+            return false;
+        }
+    }
+    return src == end;
+}
+
+static inline bool simdDecodeAscii(ushort *&dst, const uchar *&nextAscii, const uchar *&src, const uchar *end)
+{
+    // do eight characters at a time
+    uint8x8_t msb_mask = vdup_n_u8(0x80);
+    uint8x8_t add_mask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
+    for ( ; end - src >= 8; src += 8, dst += 8) {
+        uint8x8_t c = vld1_u8(src);
+        uint8_t n = vaddv_u8(vand_u8(vcge_u8(c, msb_mask), add_mask));
+        if (!n) {
+            // store
+            vst1q_u16(dst, vmovl_u8(c));
+            continue;
+        }
+
+        // copy the front part that is still ASCII
+        while (!(n & 1)) {
+            *dst++ = *src++;
+            n >>= 1;
+        }
+
+        // find the next probable ASCII character
+        // we don't want to load 16 bytes again in this loop if we know there are non-ASCII
+        // characters still coming
+        n = qBitScanReverse(n);
+        nextAscii = src + n + 1;
         return false;
 
     }

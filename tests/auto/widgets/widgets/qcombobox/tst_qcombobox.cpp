@@ -62,6 +62,7 @@
 #include <qstyleditemdelegate.h>
 #include <qstandarditemmodel.h>
 #include <qproxystyle.h>
+#include <qfont.h>
 
 static inline void setFrameless(QWidget *w)
 {
@@ -77,9 +78,6 @@ class tst_QComboBox : public QObject
 
 public:
     tst_QComboBox() {}
-
-public slots:
-    void init();
 
 private slots:
     void getSetCheck();
@@ -156,12 +154,14 @@ private slots:
     void itemData();
     void task_QTBUG_31146_popupCompletion();
     void task_QTBUG_41288_completerChangesCurrentIndex();
+    void task_QTBUG_54191_slotOnEditTextChangedSetsComboBoxToReadOnly();
     void keyboardSelection();
     void setCustomModelAndView();
     void updateDelegateOnEditableChange();
     void respectChangedOwnershipOfItemView();
     void task_QTBUG_39088_inputMethodHints();
     void task_QTBUG_49831_scrollerNotActivated();
+    void task_QTBUG_56693_itemFontFromModel();
 };
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -394,13 +394,6 @@ private:
 
 
 };
-
-void tst_QComboBox::init()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QComboBox::setEditable()
 {
@@ -2752,7 +2745,7 @@ void tst_QComboBox::keyBoardNavigationWithMouse()
     QCOMPARE(combo.currentText(), QLatin1String("0"));
 
     // When calling cursor function, Windows CE responds with: This function is not supported on this system.
-#if !defined Q_OS_WINCE && !defined Q_OS_QNX
+#if !defined Q_OS_QNX
     // Force cursor movement to prevent QCursor::setPos() from returning prematurely on QPA:
     centerCursor(combo.view());
     QTest::qWait(200);
@@ -3121,6 +3114,30 @@ void tst_QComboBox::task_QTBUG_41288_completerChangesCurrentIndex()
     }
 }
 
+namespace {
+    struct SetReadOnly {
+        QComboBox *cb;
+        explicit SetReadOnly(QComboBox *cb) : cb(cb) {}
+        void operator()() const
+        { cb->setEditable(false); }
+    };
+}
+
+void tst_QComboBox::task_QTBUG_54191_slotOnEditTextChangedSetsComboBoxToReadOnly()
+{
+    QComboBox cb;
+    cb.addItems(QStringList() << "one" << "two");
+    cb.setEditable(true);
+    cb.setCurrentIndex(0);
+
+    connect(&cb, &QComboBox::editTextChanged,
+            SetReadOnly(&cb));
+
+    cb.setCurrentIndex(1);
+    // the real test is that it didn't crash...
+    QCOMPARE(cb.currentIndex(), 1);
+}
+
 void tst_QComboBox::keyboardSelection()
 {
     QComboBox comboBox;
@@ -3233,6 +3250,78 @@ void tst_QComboBox::task_QTBUG_49831_scrollerNotActivated()
             }
         }
     }
+}
+
+class QTBUG_56693_Model : public QStandardItemModel
+{
+public:
+    QTBUG_56693_Model(QObject *parent = Q_NULLPTR)
+        : QStandardItemModel(parent)
+    { }
+
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
+    {
+        if (role == Qt::FontRole) {
+            if (index.row() < 5) {
+                QFont font = QApplication::font();
+                font.setItalic(true);
+                return font;
+            } else {
+                return QApplication::font();
+            }
+        }
+        return QStandardItemModel::data(index, role);
+    }
+};
+
+class QTBUG_56693_ProxyStyle : public QProxyStyle
+{
+public:
+    QTBUG_56693_ProxyStyle(QStyle *style)
+        : QProxyStyle(style), italicItemsNo(0)
+    {
+
+    }
+
+    void drawControl(ControlElement element, const QStyleOption *opt, QPainter *p, const QWidget *w = Q_NULLPTR) const override
+    {
+        if (element == CE_MenuItem)
+            if (const QStyleOptionMenuItem *menuItem = qstyleoption_cast<const QStyleOptionMenuItem *>(opt))
+                if (menuItem->font.italic())
+                    italicItemsNo++;
+
+        baseStyle()->drawControl(element, opt, p, w);
+    }
+
+    mutable int italicItemsNo;
+};
+
+void tst_QComboBox::task_QTBUG_56693_itemFontFromModel()
+{
+    QComboBox box;
+    if (!qobject_cast<QComboMenuDelegate *>(box.itemDelegate()))
+        QSKIP("Only for combo boxes using QComboMenuDelegate");
+
+    QTBUG_56693_Model model;
+    box.setModel(&model);
+
+    QTBUG_56693_ProxyStyle *proxyStyle = new QTBUG_56693_ProxyStyle(box.style());
+    box.setStyle(proxyStyle);
+    box.setFont(QApplication::font());
+
+    for (int i = 0; i < 10; i++)
+        box.addItem(QLatin1String("Item ") + QString::number(i));
+
+    box.show();
+    QTest::qWaitForWindowExposed(&box);
+    box.showPopup();
+    QFrame *container = box.findChild<QComboBoxPrivateContainer *>();
+    QVERIFY(container);
+    QTest::qWaitForWindowExposed(container);
+
+    QCOMPARE(proxyStyle->italicItemsNo, 5);
+
+    box.hidePopup();
 }
 
 QTEST_MAIN(tst_QComboBox)

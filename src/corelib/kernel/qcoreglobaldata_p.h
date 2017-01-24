@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtCore/private/qglobal_p.h>
 #include "QtCore/qmap.h"
 #include "QtCore/qstringlist.h"
 #include "QtCore/qreadwritelock.h"
@@ -70,9 +71,11 @@ struct QCoreGlobalData {
     QMap<QString, QStringList> dirSearchPaths;
     QReadWriteLock dirSearchPathsLock;
 
+#if QT_CONFIG(textcodec)
     QList<QTextCodec*> allCodecs;
     QAtomicPointer<QTextCodec> codecForLocale;
     QTextCodecCache codecCache;
+#endif
 
     static QCoreGlobalData *instance();
 };

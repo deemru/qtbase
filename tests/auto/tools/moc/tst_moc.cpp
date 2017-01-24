@@ -69,9 +69,83 @@
 
 #include "non-gadget-parent-class.h"
 #include "grand-parent-gadget-class.h"
+#include "namespace.h"
+
+#ifdef Q_MOC_RUN
+// check that moc can parse these constructs, they are being used in Windows winsock2.h header
+#define STRING_HASH_HASH(x) ("foo" ## x ## "bar")
+const char *string_hash_hash = STRING_HASH_HASH("baz");
+#endif
 
 Q_DECLARE_METATYPE(const QMetaObject*);
 
+namespace TestNonQNamespace {
+
+struct TestGadget {
+    Q_GADGET
+    Q_CLASSINFO("key", "value")
+public:
+    enum class TestGEnum1 {
+        Key1 = 11,
+        Key2
+    };
+    Q_ENUM(TestGEnum1)
+
+    enum class TestGEnum2 {
+        Key1 = 17,
+        Key2
+    };
+    Q_ENUM(TestGEnum2)
+};
+
+}
+
+namespace TestQNamespace {
+    Q_NAMESPACE
+    enum class TestEnum1 {
+        Key1 = 11,
+        Key2
+    };
+    Q_ENUM_NS(TestEnum1)
+
+    enum class TestEnum2 {
+        Key1 = 17,
+        Key2
+    };
+    Q_ENUM_NS(TestEnum2)
+
+    // try to dizzy moc by adding a struct in between
+    struct TestGadget {
+        Q_GADGET
+    public:
+        enum class TestGEnum1 {
+            Key1 = 13,
+            Key2
+        };
+        enum class TestGEnum2 {
+            Key1 = 23,
+            Key2
+        };
+        Q_ENUM(TestGEnum1)
+        Q_ENUM(TestGEnum2)
+    };
+
+    enum class TestFlag1 {
+        None = 0,
+        Flag1 = 1,
+        Flag2 = 2,
+        Any = Flag1 | Flag2
+    };
+    Q_FLAG_NS(TestFlag1)
+
+    enum class TestFlag2 {
+        None = 0,
+        Flag1 = 4,
+        Flag2 = 8,
+        Any = Flag1 | Flag2
+    };
+    Q_FLAG_NS(TestFlag2)
+}
 
 QT_USE_NAMESPACE
 
@@ -489,13 +563,6 @@ public:
     Q_ENUMS(EnumSourceClass::TestEnum)
 };
 
-#if defined(Q_MOC_RUN)
-// Task #119503
-#define _TASK_119503
-#if !_TASK_119503
-#endif
-#endif
-
 class CtorTestClass : public QObject
 {
     Q_OBJECT
@@ -576,6 +643,10 @@ private slots:
     void frameworkSearchPath();
     void cstyleEnums();
     void defineMacroViaCmdline();
+    void defineMacroViaForcedInclude();
+    void defineMacroViaForcedIncludeRelative();
+    void environmentIncludePaths_data();
+    void environmentIncludePaths();
     void specifyMetaTagsFromCmdline();
     void invokable();
     void singleFunctionKeywordSignalAndSlot();
@@ -624,6 +695,7 @@ private slots:
     void gadgetHierarchy();
     void optionsFileError_data();
     void optionsFileError();
+    void testQNamespace();
 
 signals:
     void sigWithUnsignedArg(unsigned foo);
@@ -1243,6 +1315,92 @@ void tst_Moc::defineMacroViaCmdline()
     args << "-DFOO";
     args << m_sourceDirectory + QStringLiteral("/macro-on-cmdline.h");
 
+    proc.start(m_moc, args);
+    QVERIFY(proc.waitForFinished());
+    QCOMPARE(proc.exitCode(), 0);
+    QCOMPARE(proc.readAllStandardError(), QByteArray());
+    QByteArray mocOut = proc.readAllStandardOutput();
+    QVERIFY(!mocOut.isEmpty());
+#else
+    QSKIP("Only tested on linux/gcc");
+#endif
+}
+
+void tst_Moc::defineMacroViaForcedInclude()
+{
+#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+    QProcess proc;
+
+    QStringList args;
+    args << "--include" << m_sourceDirectory + QLatin1String("/subdir/extradefines.h");
+    args << m_sourceDirectory + QStringLiteral("/macro-on-cmdline.h");
+
+    proc.start(m_moc, args);
+    QVERIFY(proc.waitForFinished());
+    QCOMPARE(proc.exitCode(), 0);
+    QCOMPARE(proc.readAllStandardError(), QByteArray());
+    QByteArray mocOut = proc.readAllStandardOutput();
+    QVERIFY(!mocOut.isEmpty());
+#else
+    QSKIP("Only tested on linux/gcc");
+#endif
+}
+
+void tst_Moc::defineMacroViaForcedIncludeRelative()
+{
+#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+    QProcess proc;
+
+    QStringList args;
+    args << "--include" << QStringLiteral("extradefines.h") << "-I" + m_sourceDirectory + "/subdir";
+    args << m_sourceDirectory + QStringLiteral("/macro-on-cmdline.h");
+
+    proc.start(m_moc, args);
+    QVERIFY(proc.waitForFinished());
+    QCOMPARE(proc.exitCode(), 0);
+    QCOMPARE(proc.readAllStandardError(), QByteArray());
+    QByteArray mocOut = proc.readAllStandardOutput();
+    QVERIFY(!mocOut.isEmpty());
+#else
+    QSKIP("Only tested on linux/gcc");
+#endif
+}
+
+
+void tst_Moc::environmentIncludePaths_data()
+{
+#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+    QTest::addColumn<QString>("cmdline");
+    QTest::addColumn<QString>("varname");
+
+    QTest::newRow("INCLUDE") << "--compiler-flavor=msvc" << "INCLUDE";
+    QTest::newRow("CPATH1") << QString() << "CPATH";
+    QTest::newRow("CPATH2") << "--compiler-flavor=unix" << "CPATH";
+    QTest::newRow("CPLUS_INCLUDE_PATH1") << QString() << "CPLUS_INCLUDE_PATH";
+    QTest::newRow("CPLUS_INCLUDE_PATH2") << "--compiler-flavor=unix" << "CPLUS_INCLUDE_PATH";
+#endif
+}
+
+void tst_Moc::environmentIncludePaths()
+{
+#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(QT_NO_PROCESS)
+    QFETCH(QString, cmdline);
+    QFETCH(QString, varname);
+
+    QStringList args;
+    if (!cmdline.isEmpty())
+        args << cmdline;
+    args << "--include" << QStringLiteral("extradefines.h")
+         << m_sourceDirectory + QStringLiteral("/macro-on-cmdline.h");
+
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove("INCLUDE");
+    env.remove("CPATH");
+    env.remove("CPLUS_INCLUDE_PATH");
+    env.insert(varname, m_sourceDirectory + "/subdir");
+
+    QProcess proc;
+    proc.setProcessEnvironment(env);
     proc.start(m_moc, args);
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
@@ -1918,6 +2076,41 @@ void tst_Moc::warnings_data()
         << QString()
         << QString("standard input:5: Error: Class declaration lacks Q_OBJECT macro.");
 
+    QTest::newRow("Namespace declaration lacks Q_NAMESPACE macro.")
+        << QByteArray("namespace X {\nQ_CLASSINFO(\"key\",\"value\")\nenum class MyEnum {Key1 = 1}\nQ_ENUMS(MyEnum)\n}\n")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:1: Error: Namespace declaration lacks Q_NAMESPACE macro.");
+
+    QTest::newRow("Wrong Q_ENUM context.")
+        << QByteArray("namespace X {\nQ_NAMESPACE\n\nenum class MyEnum {Key1 = 1}\nQ_ENUM(MyEnum)\n}\n")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:5: Error: Q_ENUM can't be used in a Q_NAMESPACE, use Q_ENUM_NS instead");
+
+    QTest::newRow("Wrong Q_FLAG context.")
+        << QByteArray("namespace X {\nQ_NAMESPACE\n\nenum class MyEnum {Key1 = 1}\nQ_FLAG(MyEnum)\n}\n")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:5: Error: Q_FLAG can't be used in a Q_NAMESPACE, use Q_FLAG_NS instead");
+
+    QTest::newRow("Wrong Q_ENUM_NS context.")
+        << QByteArray("class X {\nQ_GADGET\n\nenum class MyEnum {Key1 = 1}\nQ_ENUM_NS(MyEnum)\n};\n")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:5: Error: Q_ENUM_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_ENUM instead");
+
+    QTest::newRow("Wrong Q_FLAG_NS context.")
+        << QByteArray("class X {\nQ_GADGET\n\nenum class MyEnum {Key1 = 1}\nQ_FLAG_NS(MyEnum)\n};\n")
+        << QStringList()
+        << 1
+        << QString()
+        << QString("standard input:5: Error: Q_FLAG_NS can't be used in a Q_OBJECT/Q_GADGET, use Q_FLAG instead");
+
     QTest::newRow("Invalid macro definition")
         << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c #d\n Foo(45, 42, 39);")
         << QStringList()
@@ -1931,6 +2124,27 @@ void tst_Moc::warnings_data()
         << 1
         << QString("IGNORE_ALL_STDOUT")
         << QString(":2: Error: Macro invoked with too few parameters for a use of '#'");
+
+    QTest::newRow("QTBUG-54609: crash on invalid input")
+        << QByteArray::fromBase64("EAkJCQkJbGFzcyBjbGFzcyBiYWkcV2kgTUEKcGYjZGVmaW5lIE1BKFEs/4D/FoQ=")
+        << QStringList()
+        << 1
+        << QString("IGNORE_ALL_STDOUT")
+        << QString(":-1: Error: Unexpected character in macro argument list.");
+
+    QTest::newRow("Missing header warning")
+        << QByteArray("class X : public QObject { Q_OBJECT };")
+        << (QStringList() << QStringLiteral("--include") << QStringLiteral("doesnotexist.h"))
+        << 0
+        << QString("IGNORE_ALL_STDOUT")
+        << QStringLiteral("Warning: Failed to resolve include \"doesnotexist.h\" for moc file <standard input>");
+
+    QTest::newRow("QTBUG-54815: Crash on invalid input")
+        << QByteArray("class M{(})F<{}d000000000000000#0")
+        << QStringList()
+        << 0
+        << QString()
+        << QString("standard input:1: Note: No relevant classes found. No output generated.");
 }
 
 void tst_Moc::warnings()
@@ -1946,7 +2160,7 @@ void tst_Moc::warnings()
 
 #ifdef Q_CC_MSVC
     // for some reasons, moc compiled with MSVC uses a different output format
-    QRegExp lineNumberRe(":(\\d+):");
+    QRegExp lineNumberRe(":(-?\\d+):");
     lineNumberRe.setMinimal(true);
     expectedStdErr.replace(lineNumberRe, "(\\1):");
 #endif
@@ -1998,18 +2212,19 @@ void tst_Moc::cxx11Enums_data()
     QTest::addColumn<const QMetaObject *>("meta");
     QTest::addColumn<QByteArray>("enumName");
     QTest::addColumn<char>("prefix");
+    QTest::addColumn<bool>("isScoped");
 
     const QMetaObject *meta1 = &CXX11Enums::staticMetaObject;
     const QMetaObject *meta2 = &CXX11Enums2::staticMetaObject;
 
-    QTest::newRow("EnumClass") << meta1 << QByteArray("EnumClass") << 'A';
-    QTest::newRow("EnumClass 2") << meta2 << QByteArray("EnumClass") << 'A';
-    QTest::newRow("TypedEnum") << meta1 << QByteArray("TypedEnum") << 'B';
-    QTest::newRow("TypedEnum 2") << meta2 << QByteArray("TypedEnum") << 'B';
-    QTest::newRow("TypedEnumClass") << meta1 << QByteArray("TypedEnumClass") << 'C';
-    QTest::newRow("TypedEnumClass 2") << meta2 << QByteArray("TypedEnumClass") << 'C';
-    QTest::newRow("NormalEnum") << meta1 << QByteArray("NormalEnum") << 'D';
-    QTest::newRow("NormalEnum 2") << meta2 << QByteArray("NormalEnum") << 'D';
+    QTest::newRow("EnumClass") << meta1 << QByteArray("EnumClass") << 'A' << true;
+    QTest::newRow("EnumClass 2") << meta2 << QByteArray("EnumClass") << 'A' << true;
+    QTest::newRow("TypedEnum") << meta1 << QByteArray("TypedEnum") << 'B' << false;
+    QTest::newRow("TypedEnum 2") << meta2 << QByteArray("TypedEnum") << 'B' << false;
+    QTest::newRow("TypedEnumClass") << meta1 << QByteArray("TypedEnumClass") << 'C' << true;
+    QTest::newRow("TypedEnumClass 2") << meta2 << QByteArray("TypedEnumClass") << 'C' << true;
+    QTest::newRow("NormalEnum") << meta1 << QByteArray("NormalEnum") << 'D' << false;
+    QTest::newRow("NormalEnum 2") << meta2 << QByteArray("NormalEnum") << 'D' << false;
 }
 
 void tst_Moc::cxx11Enums()
@@ -2019,6 +2234,7 @@ void tst_Moc::cxx11Enums()
 
     QFETCH(QByteArray, enumName);
     QFETCH(char, prefix);
+    QFETCH(bool, isScoped);
 
     int idx;
     idx = meta->indexOfEnumerator(enumName);
@@ -2032,6 +2248,7 @@ void tst_Moc::cxx11Enums()
         QCOMPARE(meta->enumerator(idx).keyToValue(v), i);
         QCOMPARE(meta->enumerator(idx).valueToKey(i), v.constData());
     }
+    QCOMPARE(meta->enumerator(idx).isScoped(), isScoped);
 }
 
 void tst_Moc::returnRefs()
@@ -3180,6 +3397,9 @@ void tst_Moc::parseDefines()
 
     index = mo->indexOfSignal("cmdlineSignal(QMap<int,int>)");
     QVERIFY(index != -1);
+
+    index = mo->indexOfSignal("signalQTBUG55853()");
+    QVERIFY(index != -1);
 }
 
 void tst_Moc::preprocessorOnly()
@@ -3522,6 +3742,45 @@ void tst_Moc::optionsFileError()
     QVERIFY(err.contains("moc: "));
     QVERIFY(!err.contains("QCommandLineParser"));
 #endif
+}
+
+static void checkEnum(const QMetaEnum &enumerator, const QByteArray &name, const QVector<QPair<QByteArray, int >> &keys)
+{
+    QCOMPARE(name, QByteArray{enumerator.name()});
+    QCOMPARE(keys.size(), enumerator.keyCount());
+    for (int i = 0; i < enumerator.keyCount(); ++i) {
+        QCOMPARE(keys[i].first, QByteArray{enumerator.key(i)});
+        QCOMPARE(keys[i].second, enumerator.value(i));
+    }
+}
+
+void tst_Moc::testQNamespace()
+{
+    QCOMPARE(TestQNamespace::staticMetaObject.enumeratorCount(), 4);
+    checkEnum(TestQNamespace::staticMetaObject.enumerator(0), "TestEnum1",
+                {{"Key1", 11}, {"Key2", 12}});
+    checkEnum(TestQNamespace::staticMetaObject.enumerator(1), "TestEnum2",
+                {{"Key1", 17}, {"Key2", 18}});
+    checkEnum(TestQNamespace::staticMetaObject.enumerator(2), "TestFlag1",
+                {{"None", 0}, {"Flag1", 1}, {"Flag2", 2}, {"Any", 1 | 2}});
+    checkEnum(TestQNamespace::staticMetaObject.enumerator(3), "TestFlag2",
+                {{"None", 0}, {"Flag1", 4}, {"Flag2", 8}, {"Any", 4 | 8}});
+
+    QCOMPARE(TestQNamespace::TestGadget::staticMetaObject.enumeratorCount(), 2);
+    checkEnum(TestQNamespace::TestGadget::staticMetaObject.enumerator(0), "TestGEnum1",
+                {{"Key1", 13}, {"Key2", 14}});
+    checkEnum(TestQNamespace::TestGadget::staticMetaObject.enumerator(1), "TestGEnum2",
+                {{"Key1", 23}, {"Key2", 24}});
+
+    QMetaEnum meta = QMetaEnum::fromType<TestQNamespace::TestEnum1>();
+    QVERIFY(meta.isValid());
+    QCOMPARE(meta.name(), "TestEnum1");
+    QCOMPARE(meta.enclosingMetaObject(), &TestQNamespace::staticMetaObject);
+    QCOMPARE(meta.keyCount(), 2);
+
+    QCOMPARE(FooNamespace::staticMetaObject.enumeratorCount(), 1);
+    QCOMPARE(FooNamespace::FooNestedNamespace::staticMetaObject.enumeratorCount(), 2);
+    QCOMPARE(FooNamespace::FooNestedNamespace::FooMoreNestedNamespace::staticMetaObject.enumeratorCount(), 1);
 }
 
 QTEST_MAIN(tst_Moc)

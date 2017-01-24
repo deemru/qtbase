@@ -55,18 +55,13 @@
 
 #include <xcb/xcb.h>
 
-#include <QtPlatformSupport/private/qgenericunixeventdispatcher_p.h>
-#include <QtPlatformSupport/private/qgenericunixfontdatabase_p.h>
-#include <QtPlatformSupport/private/qgenericunixservices_p.h>
+#include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
+#include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
+#include <QtServiceSupport/private/qgenericunixservices_p.h>
 
 #include <stdio.h>
 
-//this has to be included before egl, since egl pulls in X headers
 #include <QtGui/private/qguiapplication_p.h>
-
-#ifdef XCB_USE_EGL
-#include <EGL/egl.h>
-#endif
 
 #ifdef XCB_USE_XLIB
 #include <X11/Xlib.h>
@@ -82,7 +77,7 @@
 #ifndef QT_NO_ACCESSIBILITY
 #include <qpa/qplatformaccessibility.h>
 #ifndef QT_NO_ACCESSIBILITY_ATSPI_BRIDGE
-#include "../../../platformsupport/linuxaccessibility/bridge_p.h"
+#include <QtLinuxAccessibilitySupport/private/bridge_p.h>
 #endif
 #endif
 
@@ -267,8 +262,13 @@ bool QXcbIntegration::hasCapability(QPlatformIntegration::Capability cap) const
     case ForeignWindows:
     case SyncState:
     case RasterGLSurface:
-    case SwitchableWidgetComposition:
         return true;
+
+    case SwitchableWidgetComposition:
+    {
+        return m_connections.at(0)->glIntegration()
+            && m_connections.at(0)->glIntegration()->supportsSwitchableWidgetComposition();
+    }
 
     default: return QPlatformIntegration::hasCapability(cap);
     }

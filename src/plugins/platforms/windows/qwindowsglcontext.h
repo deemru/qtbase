@@ -40,7 +40,7 @@
 #ifndef QWINDOWSGLCONTEXT_H
 #define QWINDOWSGLCONTEXT_H
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 #include "qwindowsopenglcontext.h"
 
 #include <QtGui/QOpenGLContext>
@@ -122,7 +122,7 @@ struct QWindowsOpengl32DLL
     void (APIENTRY * glGetIntegerv)(GLenum pname, GLint* params);
     const GLubyte * (APIENTRY * glGetString)(GLenum name);
 
-    void *resolve(const char *name);
+    FARPROC resolve(const char *name);
 private:
     HMODULE m_lib;
     bool m_nonOpengl32;

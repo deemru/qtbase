@@ -144,10 +144,9 @@ void QConnmanManagerInterface::servicesReply(QDBusPendingCallWatcher *call)
         qDebug() << serv_reply.error().message();
     } else {
         servicesList.clear(); //connman list changes order
-        ConnmanMap connmanobj;
-        Q_FOREACH (connmanobj, serv_reply.value()) {
+        const ConnmanMapList connmanobjs = serv_reply.value();
+        for (const ConnmanMap &connmanobj : connmanobjs)
             servicesList << connmanobj.objectPath.path();
-        }
         Q_EMIT servicesReady(servicesList);
     }
     call->deleteLater();
@@ -181,7 +180,7 @@ void QConnmanManagerInterface::connectNotify(const QMetaMethod &signal)
 void QConnmanManagerInterface::onServicesChanged(const ConnmanMapList &changed, const QList<QDBusObjectPath> &removed)
 {
     servicesList.clear(); //connman list changes order
-    Q_FOREACH (const ConnmanMap &connmanobj, changed) {
+    for (const ConnmanMap &connmanobj : changed) {
         const QString svcPath(connmanobj.objectPath.path());
         servicesList << svcPath;
     }
@@ -225,7 +224,8 @@ QStringList QConnmanManagerInterface::getTechnologies()
         QDBusPendingReply<ConnmanMapList> reply = call(QLatin1String("GetTechnologies"));
         reply.waitForFinished();
         if (!reply.isError()) {
-            Q_FOREACH (const ConnmanMap &map, reply.value()) {
+            const ConnmanMapList maps = reply.value();
+            for (const ConnmanMap &map : maps) {
                 if (!technologiesMap.contains(map.objectPath.path())) {
                     technologyAdded(map.objectPath, map.propertyMap);
                 }
@@ -241,21 +241,26 @@ QStringList QConnmanManagerInterface::getServices()
         QDBusPendingReply<ConnmanMapList> reply = call(QLatin1String("GetServices"));
         reply.waitForFinished();
         if (!reply.isError()) {
-            Q_FOREACH (const ConnmanMap &map, reply.value()) {
+            const ConnmanMapList maps = reply.value();
+            for (const ConnmanMap &map : maps)
                 servicesList << map.objectPath.path();
-            }
         }
     }
     return servicesList;
 }
 
-void QConnmanManagerInterface::requestScan(const QString &type)
+bool QConnmanManagerInterface::requestScan(const QString &type)
 {
+    bool scanned = false;
+    if (technologiesMap.isEmpty())
+        getTechnologies();
     Q_FOREACH (QConnmanTechnologyInterface *tech, technologiesMap) {
         if (tech->type() == type) {
             tech->scan();
+            scanned = true;
         }
     }
+    return scanned;
 }
 
 void QConnmanManagerInterface::technologyAdded(const QDBusObjectPath &path, const QVariantMap &)
@@ -265,7 +270,7 @@ void QConnmanManagerInterface::technologyAdded(const QDBusObjectPath &path, cons
         QConnmanTechnologyInterface *tech;
         tech = new QConnmanTechnologyInterface(path.path(),this);
         technologiesMap.insert(path.path(),tech);
-        connect(tech,SIGNAL(scanFinished()),this,SIGNAL(scanFinished()));
+        connect(tech,SIGNAL(scanFinished(bool)),this,SIGNAL(scanFinished(bool)));
     }
 }
 
@@ -501,7 +506,11 @@ void QConnmanTechnologyInterface::scan()
 
 void QConnmanTechnologyInterface::scanReply(QDBusPendingCallWatcher *call)
 {
-    Q_EMIT scanFinished();
+    QDBusPendingReply<QVariantMap> props_reply = *call;
+    if (props_reply.isError()) {
+        qDebug() << props_reply.error().message();
+    }
+    Q_EMIT scanFinished(props_reply.isError());
     call->deleteLater();
 }
 

@@ -322,7 +322,7 @@ QT_END_INCLUDE_NAMESPACE
 QProcessEnvironment QProcessEnvironment::systemEnvironment()
 {
     QProcessEnvironment env;
-#if !defined(Q_OS_IOS)
+#if !defined(QT_PLATFORM_UIKIT)
     const char *entry;
     for (int count = 0; (entry = environ[count]); ++count) {
         const char *equal = strchr(entry, '=');
@@ -418,7 +418,7 @@ void QProcessPrivate::startProcess()
         }
         if (url) {
             const QCFString str = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
-            encodedProgramName += (QDir::separator() + QDir(program).relativeFilePath(QCFString::toQString(str))).toUtf8();
+            encodedProgramName += (QDir::separator() + QDir(program).relativeFilePath(QString::fromCFString(str))).toUtf8();
         }
     }
 #endif

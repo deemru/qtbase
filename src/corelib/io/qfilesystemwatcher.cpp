@@ -58,7 +58,7 @@
 #  include "qfilesystemwatcher_win_p.h"
 #elif defined(USE_INOTIFY)
 #  include "qfilesystemwatcher_inotify_p.h"
-#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_IOS)
+#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_OPENBSD) || defined(QT_PLATFORM_UIKIT)
 #  include "qfilesystemwatcher_kqueue_p.h"
 #elif defined(Q_OS_OSX)
 #  include "qfilesystemwatcher_fsevents_p.h"
@@ -74,7 +74,7 @@ QFileSystemWatcherEngine *QFileSystemWatcherPrivate::createNativeEngine(QObject 
     // there is a chance that inotify may fail on Linux pre-2.6.13 (August
     // 2005), so we can't just new inotify directly.
     return QInotifyFileSystemWatcherEngine::create(parent);
-#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_IOS)
+#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_OPENBSD) || defined(QT_PLATFORM_UIKIT)
     return QKqueueFileSystemWatcherEngine::create(parent);
 #elif defined(Q_OS_OSX)
     return QFseventsFileSystemWatcherEngine::create(parent);
@@ -174,26 +174,27 @@ void QFileSystemWatcherPrivate::_q_directoryChanged(const QString &path, bool re
     they have been renamed or removed from disk, and directories once
     they have been removed from disk.
 
-    \note On systems running a Linux kernel without inotify support,
-    file systems that contain watched paths cannot be unmounted.
+    \list
+    \li \b Notes:
+    \list
+        \li On systems running a Linux kernel without inotify support,
+        file systems that contain watched paths cannot be unmounted.
 
-    \note Windows CE does not support directory monitoring by
-    default as this depends on the file system driver installed.
-
-    \note The act of monitoring files and directories for
-    modifications consumes system resources. This implies there is a
-    limit to the number of files and directories your process can
-    monitor simultaneously. On all BSD variants, for
-    example, an open file descriptor is required for each monitored
-    file. Some system limits the number of open file descriptors to 256
-    by default. This means that addPath() and addPaths() will fail if
-    your process tries to add more than 256 files or directories to
-    the file system monitor. Also note that your process may have
-    other file descriptors open in addition to the ones for files
-    being monitored, and these other open descriptors also count in
-    the total. OS X uses a different backend and does not
-    suffer from this issue.
-
+         \li The act of monitoring files and directories for
+         modifications consumes system resources. This implies there is a
+         limit to the number of files and directories your process can
+         monitor simultaneously. On all BSD variants, for
+         example, an open file descriptor is required for each monitored
+         file. Some system limits the number of open file descriptors to 256
+         by default. This means that addPath() and addPaths() will fail if
+         your process tries to add more than 256 files or directories to
+         the file system monitor. Also note that your process may have
+         other file descriptors open in addition to the ones for files
+         being monitored, and these other open descriptors also count in
+         the total. \macos uses a different backend and does not
+         suffer from this issue.
+    \endlist
+    \endlist
 
     \sa QFile, QDir
 */

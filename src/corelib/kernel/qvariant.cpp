@@ -203,7 +203,7 @@ static qlonglong qConvertToNumber(const QVariant::Private *d, bool *ok)
     case QMetaType::QJsonValue:
         if (!v_cast<QJsonValue>(d)->isDouble())
             break;
-        // no break
+        Q_FALLTHROUGH();
 #endif
     case QVariant::Double:
     case QVariant::Int:
@@ -278,7 +278,7 @@ static qulonglong qConvertToUnsignedNumber(const QVariant::Private *d, bool *ok)
     case QMetaType::QJsonValue:
         if (!v_cast<QJsonValue>(d)->isDouble())
             break;
-        // no break
+        Q_FALLTHROUGH();
 #endif
     case QVariant::Double:
     case QVariant::Int:
@@ -2722,7 +2722,7 @@ qlonglong QVariant::toLongLong(bool *ok) const
 }
 
 /*!
-    Returns the variant as as an unsigned long long int if the
+    Returns the variant as an unsigned long long int if the
     variant has type() \l QMetaType::ULongLong, \l QMetaType::Bool,
     \l QMetaType::QByteArray, \l QMetaType::QChar, \l QMetaType::Double,
     \l QMetaType::Int, \l QMetaType::LongLong, \l QMetaType::QString, or
@@ -3085,6 +3085,7 @@ bool QVariant::canConvert(int targetTypeId) const
 
     if (currentType == QMetaType::QJsonValue) {
         switch (targetTypeId) {
+        case QMetaType::Nullptr:
         case QMetaType::QString:
         case QMetaType::Bool:
         case QMetaType::Int:
@@ -3119,7 +3120,7 @@ bool QVariant::canConvert(int targetTypeId) const
         case QVariant::Int:
             if (currentType == QVariant::KeySequence)
                 return true;
-            // fall through
+            Q_FALLTHROUGH();
         case QVariant::UInt:
         case QVariant::LongLong:
         case QVariant::ULongLong:
@@ -3560,6 +3561,8 @@ int QVariant::compare(const QVariant &v) const
         return v1.toTime() < v2.toTime() ? -1 : 1;
     case QVariant::DateTime:
         return v1.toDateTime() < v2.toDateTime() ? -1 : 1;
+    case QVariant::StringList:
+        return v1.toStringList() < v2.toStringList() ? -1 : 1;
     }
     int r = v1.toString().compare(v2.toString(), Qt::CaseInsensitive);
     if (r == 0) {

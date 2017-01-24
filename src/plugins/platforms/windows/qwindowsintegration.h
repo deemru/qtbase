@@ -43,6 +43,7 @@
 
 #include <qpa/qplatformintegration.h>
 #include <QtCore/QScopedPointer>
+#include <QtFontDatabaseSupport/private/qwindowsfontdatabase_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -60,7 +61,10 @@ public:
         DisableArb = 0x4,
         NoNativeDialogs = 0x8,
         XpNativeDialogs = 0x10,
-        DontPassOsMouseEventsSynthesizedFromTouch = 0x20 // Do not pass OS-generated mouse events from touch.
+        DontPassOsMouseEventsSynthesizedFromTouch = 0x20, // Do not pass OS-generated mouse events from touch.
+        // Keep in sync with QWindowsFontDatabase::FontOptions
+        DontUseDirectWriteFonts = QWindowsFontDatabase::DontUseDirectWriteFonts,
+        DontUseColorFonts = QWindowsFontDatabase::DontUseColorFonts
     };
 
     explicit QWindowsIntegration(const QStringList &paramList);
@@ -104,7 +108,7 @@ public:
 
     void beep() const Q_DECL_OVERRIDE;
 
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_SESSIONMANAGER)
+#if !defined(QT_NO_SESSIONMANAGER)
     QPlatformSessionManager *createPlatformSessionManager(const QString &id, const QString &key) const Q_DECL_OVERRIDE;
 #endif
 

@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QtGui/qtextdocument.h>
 #include <QtGui/qtextoption.h>
 #include <QtGui/qtextcursor.h>
@@ -171,6 +172,8 @@ public:
 
     bool isWordSelectionEnabled() const;
     void setWordSelectionEnabled(bool enabled);
+
+    bool isPreediting();
 
     void print(QPagedPaintDevice *printer) const;
 

@@ -50,7 +50,6 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/qmap.h>
 #include <QtCore/qpair.h>
-#include <QtCore/qsettings.h>
 #include <QtGui/qaccessible.h>
 #include <QtGui/qguiapplication.h>
 #include <qpa/qplatformnativeinterface.h>
@@ -67,7 +66,7 @@
 #endif
 
 
-#include "../qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 
 QT_BEGIN_NAMESPACE

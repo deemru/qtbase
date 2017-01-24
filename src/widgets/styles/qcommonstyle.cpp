@@ -3724,6 +3724,8 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
             btnOpt.state &= ~State_MouseOver;
             int bsx = 0;
             int bsy = 0;
+            const int buttonIconMetric = proxy()->pixelMetric(PM_TitleBarButtonIconSize, &btnOpt, widget);
+            const QSize buttonIconSize(buttonIconMetric, buttonIconMetric);
             if (opt->subControls & QStyle::SC_MdiCloseButton) {
                 if (opt->activeSubControls & QStyle::SC_MdiCloseButton && (opt->state & State_Sunken)) {
                     btnOpt.state |= State_Sunken;
@@ -3738,7 +3740,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiCloseButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarCloseButton).pixmap(qt_getWindow(widget), QSize(16, 16));
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarCloseButton).pixmap(qt_getWindow(widget), buttonIconSize);
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
             if (opt->subControls & QStyle::SC_MdiNormalButton) {
@@ -3755,7 +3757,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiNormalButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarNormalButton).pixmap(qt_getWindow(widget), QSize(16, 16));
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarNormalButton).pixmap(qt_getWindow(widget), buttonIconSize);
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
             if (opt->subControls & QStyle::SC_MdiMinButton) {
@@ -3772,7 +3774,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiMinButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarMinButton).pixmap(qt_getWindow(widget), QSize(16, 16));
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarMinButton).pixmap(qt_getWindow(widget), buttonIconSize);
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
         }
@@ -4230,7 +4232,6 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
         if (const QStyleOptionGroupBox *groupBox = qstyleoption_cast<const QStyleOptionGroupBox *>(opt)) {
             switch (sc) {
             case SC_GroupBoxFrame:
-                // FALL THROUGH
             case SC_GroupBoxContents: {
                 int topMargin = 0;
                 int topHeight = 0;
@@ -4259,7 +4260,6 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
                 break;
             }
             case SC_GroupBoxCheckBox:
-                // FALL THROUGH
             case SC_GroupBoxLabel: {
                 QFontMetrics fontMetrics = groupBox->fontMetrics;
                 int h = fontMetrics.height();
@@ -4325,7 +4325,7 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
             if (numSubControls == 1)
                 break;
             offset += buttonWidth + 2;
-            //FALL THROUGH
+            Q_FALLTHROUGH();
         case SC_MdiNormalButton:
             // No offset needed if
             // 1) There's only one sub control
@@ -4393,6 +4393,13 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
         }
 
         break; }
+    case PM_TitleBarButtonSize:
+        ret = int(QStyleHelper::dpiScaled(16.));
+        break;
+    case PM_TitleBarButtonIconSize:
+        ret = int(QStyleHelper::dpiScaled(16.));
+        break;
+
     case PM_ScrollBarSliderMin:
         ret = int(QStyleHelper::dpiScaled(9.));
         break;
@@ -4845,16 +4852,18 @@ QSize QCommonStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
 #endif // QT_NO_GROUPBOX
     case CT_MdiControls:
         if (const QStyleOptionComplex *styleOpt = qstyleoption_cast<const QStyleOptionComplex *>(opt)) {
+            const int buttonSize = proxy()->pixelMetric(PM_TitleBarButtonSize, styleOpt, widget);
             int width = 1;
             if (styleOpt->subControls & SC_MdiMinButton)
-                width += 16 + 1;
+                width += buttonSize + 1;
             if (styleOpt->subControls & SC_MdiNormalButton)
-                width += 16 + 1;
+                width += buttonSize + 1;
             if (styleOpt->subControls & SC_MdiCloseButton)
-                width += 16 + 1;
-            sz = QSize(width, 16);
+                width += buttonSize + 1;
+            sz = QSize(width, buttonSize);
         } else {
-            sz = QSize(52, 16);
+            const int buttonSize = proxy()->pixelMetric(PM_TitleBarButtonSize, opt, widget);
+            sz = QSize(1 + 3 * (buttonSize + 1), buttonSize);
         }
         break;
 #ifndef QT_NO_ITEMVIEWS
@@ -4884,7 +4893,7 @@ QSize QCommonStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
     case CT_ProgressBar:
     case CT_TabBarTab:
         // just return the contentsSize for now
-        // fall through intended
+        Q_FALLTHROUGH();
     default:
         break;
     }
@@ -5237,6 +5246,15 @@ static QPixmap cachedPixmapFromXPM(const char * const *xpm)
     return result;
 }
 
+static inline QPixmap titleBarMenuCachedPixmapFromXPM() { return cachedPixmapFromXPM(qt_menu_xpm); }
+
+#ifndef QT_NO_IMAGEFORMAT_PNG
+static inline QString clearText16IconPath()
+{
+    return QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-16.png");
+}
+#endif // !QT_NO_IMAGEFORMAT_PNG
+
 static QIcon clearTextIcon(bool rtl)
 {
     const QString directionalThemeName = rtl
@@ -5249,7 +5267,7 @@ static QIcon clearTextIcon(bool rtl)
 
     QIcon icon;
 #ifndef QT_NO_IMAGEFORMAT_PNG
-    QPixmap clearText16(QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-16.png"));
+    QPixmap clearText16(clearText16IconPath());
     Q_ASSERT(!clearText16.size().isEmpty());
     icon.addPixmap(clearText16);
     QPixmap clearText32(QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-32.png"));
@@ -5564,6 +5582,8 @@ QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *opti
         return QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/media-volume-16.png"));
     case SP_MediaVolumeMuted:
         return QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/media-volume-muted-16.png"));
+    case SP_LineEditClearButton:
+        return QPixmap(clearText16IconPath());
 #endif // QT_NO_IMAGEFORMAT_PNG
     default:
         break;
@@ -5572,7 +5592,7 @@ QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *opti
 #ifndef QT_NO_IMAGEFORMAT_XPM
     switch (sp) {
     case SP_TitleBarMenuButton:
-        return cachedPixmapFromXPM(qt_menu_xpm);
+        return titleBarMenuCachedPixmapFromXPM();
     case SP_TitleBarShadeButton:
         return cachedPixmapFromXPM(qt_shade_xpm);
     case SP_TitleBarUnshadeButton:
@@ -5893,14 +5913,14 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
             if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
                 QPlatformTheme::StandardPixmap sp = static_cast<QPlatformTheme::StandardPixmap>(standardIcon);
                 QIcon retIcon;
-                QList<int> sizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<int> >();
-                Q_FOREACH (int size, sizes) {
+                const QList<QSize> sizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<QSize> >();
+                for (const QSize &size : sizes) {
                     QPixmap mainIcon;
-                    const QString cacheKey = QLatin1String("qt_mac_constructQIconFromIconRef") + QString::number(standardIcon) + QString::number(size);
+                    const QString cacheKey = QLatin1String("qt_mac_constructQIconFromIconRef") + QString::number(standardIcon) + QString::number(size.width());
                     if (standardIcon >= QStyle::SP_CustomBase) {
-                        mainIcon = theme->standardPixmap(sp, QSizeF(size, size));
+                        mainIcon = theme->standardPixmap(sp, QSizeF(size));
                     } else if (QPixmapCache::find(cacheKey, mainIcon) == false) {
-                        mainIcon = theme->standardPixmap(sp, QSizeF(size, size));
+                        mainIcon = theme->standardPixmap(sp, QSizeF(size));
                         QPixmapCache::insert(cacheKey, mainIcon);
                     }
 
@@ -6111,6 +6131,12 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
         break;
     case SP_MediaVolumeMuted:
         icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/media-volume-muted-16.png"), QSize(16, 16));
+        break;
+    case SP_TitleBarMenuButton:
+#  ifndef QT_NO_IMAGEFORMAT_XPM
+        icon.addPixmap(titleBarMenuCachedPixmapFromXPM());
+#  endif
+        icon.addFile(QLatin1String(":/qt-project.org/qmessagebox/images/qtlogo-64.png"));
         break;
 #endif // QT_NO_IMAGEFORMAT_PNG
     default:

@@ -824,13 +824,13 @@ QString QAccessibleTextWidget::attributes(int offset, int *startOffset, int *end
     AttributeFormatter attrs;
     QString family = charFormatFont.family();
     if (!family.isEmpty()) {
-        family = family.replace('\\',QStringLiteral("\\\\"));
-        family = family.replace(':',QStringLiteral("\\:"));
-        family = family.replace(',',QStringLiteral("\\,"));
-        family = family.replace('=',QStringLiteral("\\="));
-        family = family.replace(';',QStringLiteral("\\;"));
-        family = family.replace('\"',QStringLiteral("\\\""));
-        attrs["font-family"] = QString::fromLatin1("\"%1\"").arg(family);
+        family = family.replace('\\', QLatin1String("\\\\"));
+        family = family.replace(':', QLatin1String("\\:"));
+        family = family.replace(',', QLatin1String("\\,"));
+        family = family.replace('=', QLatin1String("\\="));
+        family = family.replace(';', QLatin1String("\\;"));
+        family = family.replace('\"', QLatin1String("\\\""));
+        attrs["font-family"] = QLatin1Char('"') + family + QLatin1Char('"');
     }
 
     int fontSize = int(charFormatFont.pointSize());

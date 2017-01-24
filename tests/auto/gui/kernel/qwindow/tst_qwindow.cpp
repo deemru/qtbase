@@ -40,7 +40,7 @@
 
 #if defined(Q_OS_QNX)
 #include <QOpenGLContext>
-#elif defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#elif defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 #  include <QtCore/qt_windows.h>
 #endif
 
@@ -58,6 +58,7 @@ private slots:
     void setVisible();
     void eventOrderOnShow();
     void resizeEventAfterResize();
+    void exposeEventOnShrink_QTBUG54040();
     void mapGlobal();
     void positioning_data();
     void positioning();
@@ -105,7 +106,7 @@ private slots:
 private:
     QPoint m_availableTopLeft;
     QSize m_testWindowSize;
-    QTouchDevice *touchDevice;
+    QTouchDevice *touchDevice = QTest::createTouchDevice();
 };
 
 void tst_QWindow::initTestCase()
@@ -119,9 +120,6 @@ void tst_QWindow::initTestCase()
     if (screenWidth > 2000)
         width = 100 * ((screenWidth + 500) / 1000);
     m_testWindowSize = QSize(width, width);
-    touchDevice = new QTouchDevice;
-    touchDevice->setType(QTouchDevice::TouchScreen);
-    QWindowSystemInterface::registerTouchDevice(touchDevice);
 }
 
 void tst_QWindow::cleanup()
@@ -371,6 +369,24 @@ void tst_QWindow::resizeEventAfterResize()
     window.resize(m_testWindowSize);
 
     QTRY_COMPARE(window.received(QEvent::Resize), 2);
+}
+
+void tst_QWindow::exposeEventOnShrink_QTBUG54040()
+{
+    Window window;
+    window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
+    window.setTitle(QTest::currentTestFunction());
+    window.showNormal();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    const int initialExposeCount = window.received(QEvent::Expose);
+    window.resize(window.width(), window.height() - 5);
+    QTRY_COMPARE(window.received(QEvent::Expose), initialExposeCount + 1);
+    window.resize(window.width() - 5, window.height());
+    QTRY_COMPARE(window.received(QEvent::Expose), initialExposeCount + 2);
+    window.resize(window.width() - 5, window.height() - 5);
+    QTRY_COMPARE(window.received(QEvent::Expose), initialExposeCount + 3);
 }
 
 void tst_QWindow::positioning_data()
@@ -763,6 +779,24 @@ void tst_QWindow::isActive()
     // child has focus
     QVERIFY(window.isActive());
 
+    // test focus back to parent and then back to child (QTBUG-39362)
+    // also verify the cumulative FocusOut and FocusIn counts
+    // activate parent
+    window.requestActivate();
+    QTRY_COMPARE(QGuiApplication::focusWindow(), &window);
+    QVERIFY(window.isActive());
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(child.received(QEvent::FocusOut), 1);
+    QTRY_COMPARE(window.received(QEvent::FocusIn), 2);
+
+    // activate child again
+    child.requestActivate();
+    QTRY_COMPARE(QGuiApplication::focusWindow(), &child);
+    QVERIFY(child.isActive());
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(window.received(QEvent::FocusOut), 2);
+    QTRY_COMPARE(child.received(QEvent::FocusIn), 2);
+
     Window dialog;
     dialog.setTransientParent(&window);
     dialog.setGeometry(QRect(m_availableTopLeft + QPoint(110, 100), m_testWindowSize));
@@ -787,7 +821,7 @@ void tst_QWindow::isActive()
     QTRY_COMPARE(QGuiApplication::focusWindow(), &window);
     QCoreApplication::processEvents();
     QTRY_COMPARE(dialog.received(QEvent::FocusOut), 1);
-    QTRY_COMPARE(window.received(QEvent::FocusIn), 2);
+    QTRY_COMPARE(window.received(QEvent::FocusIn), 3);
 
     QVERIFY(window.isActive());
 
@@ -2079,7 +2113,7 @@ void tst_QWindow::modalWindowEnterEventOnHide_QTBUG35109()
 
 static bool isNativeWindowVisible(const QWindow *window)
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     return IsWindowVisible(reinterpret_cast<HWND>(window->winId()));
 #else
     Q_UNIMPLEMENTED();

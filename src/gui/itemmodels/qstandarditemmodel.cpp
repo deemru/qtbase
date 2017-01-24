@@ -705,20 +705,16 @@ void QStandardItemModelPrivate::columnsRemoved(QStandardItem *parent,
     Constructs an item.
 */
 QStandardItem::QStandardItem()
-    : d_ptr(new QStandardItemPrivate)
+    : QStandardItem(*new QStandardItemPrivate)
 {
-    Q_D(QStandardItem);
-    d->q_ptr = this;
 }
 
 /*!
     Constructs an item with the given \a text.
 */
 QStandardItem::QStandardItem(const QString &text)
-    : d_ptr(new QStandardItemPrivate)
+    : QStandardItem(*new QStandardItemPrivate)
 {
-    Q_D(QStandardItem);
-    d->q_ptr = this;
     setText(text);
 }
 
@@ -726,22 +722,17 @@ QStandardItem::QStandardItem(const QString &text)
     Constructs an item with the given \a icon and \a text.
 */
 QStandardItem::QStandardItem(const QIcon &icon, const QString &text)
-    : d_ptr(new QStandardItemPrivate)
+    : QStandardItem(text)
 {
-    Q_D(QStandardItem);
-    d->q_ptr = this;
     setIcon(icon);
-    setText(text);
 }
 
 /*!
    Constructs an item with \a rows rows and \a columns columns of child items.
 */
 QStandardItem::QStandardItem(int rows, int columns)
-    : d_ptr(new QStandardItemPrivate)
+    : QStandardItem(*new QStandardItemPrivate)
 {
-    Q_D(QStandardItem);
-    d->q_ptr = this;
     setRowCount(rows);
     setColumnCount(columns);
 }
@@ -1805,11 +1796,12 @@ QStandardItem *QStandardItem::takeChild(int row, int column)
 QList<QStandardItem*> QStandardItem::takeRow(int row)
 {
     Q_D(QStandardItem);
+    QList<QStandardItem*> items;
     if ((row < 0) || (row >= rowCount()))
-        return QList<QStandardItem*>();
+        return items;
     if (d->model)
         d->model->d_func()->rowsAboutToBeRemoved(this, row, row);
-    QList<QStandardItem*> items;
+
     int index = d->childIndex(row, 0);  // Will return -1 if there are no columns
     if (index != -1) {
         int col_count = d->columnCount();
@@ -1838,13 +1830,15 @@ QList<QStandardItem*> QStandardItem::takeRow(int row)
 QList<QStandardItem*> QStandardItem::takeColumn(int column)
 {
     Q_D(QStandardItem);
+    QList<QStandardItem*> items;
     if ((column < 0) || (column >= columnCount()))
-        return QList<QStandardItem*>();
+        return items;
     if (d->model)
         d->model->d_func()->columnsAboutToBeRemoved(this, column, column);
-    QList<QStandardItem*> items;
 
-    for (int row = d->rowCount() - 1; row >= 0; --row) {
+    const int rowCount = d->rowCount();
+    items.reserve(rowCount);
+    for (int row = rowCount - 1; row >= 0; --row) {
         int index = d->childIndex(row, column);
         QStandardItem *ch = d->children.at(index);
         if (ch)
@@ -1874,36 +1868,7 @@ bool QStandardItem::operator<(const QStandardItem &other) const
 {
     const int role = model() ? model()->sortRole() : Qt::DisplayRole;
     const QVariant l = data(role), r = other.data(role);
-    // this code is copied from QSortFilterProxyModel::lessThan()
-    if (l.userType() == QVariant::Invalid)
-        return false;
-    if (r.userType() == QVariant::Invalid)
-        return true;
-    switch (l.userType()) {
-    case QVariant::Int:
-        return l.toInt() < r.toInt();
-    case QVariant::UInt:
-        return l.toUInt() < r.toUInt();
-    case QVariant::LongLong:
-        return l.toLongLong() < r.toLongLong();
-    case QVariant::ULongLong:
-        return l.toULongLong() < r.toULongLong();
-    case QMetaType::Float:
-        return l.toFloat() < r.toFloat();
-    case QVariant::Double:
-        return l.toDouble() < r.toDouble();
-    case QVariant::Char:
-        return l.toChar() < r.toChar();
-    case QVariant::Date:
-        return l.toDate() < r.toDate();
-    case QVariant::Time:
-        return l.toTime() < r.toTime();
-    case QVariant::DateTime:
-        return l.toDateTime() < r.toDateTime();
-    case QVariant::String:
-    default:
-        return l.toString().compare(r.toString()) < 0;
-    }
+    return QAbstractItemModelPrivate::isVariantLessThan(l, r);
 }
 
 /*!
@@ -3027,10 +2992,7 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
             for (int i = 0; i < childList.count(); ++i) {
                 QStandardItem *chi = childList.at(i);
                 if (chi) {
-                    QSet<QStandardItem *>::iterator it = itemsSet.find(chi);
-                    if (it != itemsSet.end()) {
-                        itemsSet.erase(it);
-                    }
+                    itemsSet.erase(itemsSet.constFind(chi));
                     stack.push(chi);
                 }
             }
@@ -3139,13 +3101,13 @@ bool QStandardItemModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
     for (int i = 0; i < rows.count(); ++i)
         rowsToInsert[rows.at(i)] = 1;
     for (int i = 0; i < rowsToInsert.count(); ++i) {
-        if (rowsToInsert[i] == 1){
+        if (rowsToInsert.at(i) == 1){
             rowsToInsert[i] = dragRowCount;
             ++dragRowCount;
         }
     }
     for (int i = 0; i < rows.count(); ++i)
-        rows[i] = top + rowsToInsert[rows[i]];
+        rows[i] = top + rowsToInsert.at(rows.at(i));
 
     QBitArray isWrittenTo(dragRowCount * dragColumnCount);
 

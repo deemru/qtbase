@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/QtGlobal>
+#include <QtGui/private/qtguiglobal_p.h>
 #include "private/qkeysequence_p.h"
 
 QT_BEGIN_NAMESPACE
@@ -67,8 +67,10 @@ public:
 
     void initializeSystemPalette();
 
+#ifndef QT_NO_SHORTCUT
     static const QKeyBinding keyBindings[];
     static const uint numberOfKeyBindings;
+#endif
 
     static unsigned currentKeyPlatforms();
 

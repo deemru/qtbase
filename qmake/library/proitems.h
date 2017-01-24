@@ -100,6 +100,7 @@ public:
     bool operator!=(const QString &other) const { return !(*this == other); }
     bool operator!=(QLatin1String other) const { return !(*this == other); }
     bool operator!=(const char *other) const { return !(*this == other); }
+    bool operator<(const ProString &other) const { return toQStringRef() < other.toQStringRef(); }
     bool isNull() const { return m_string.isNull(); }
     bool isEmpty() const { return !m_length; }
     int length() const { return m_length; }
@@ -207,9 +208,13 @@ inline QString operator+(const QString &one, const ProString &two)
     { return ProString(one) + two; }
 
 inline QString operator+(const ProString &one, const char *two)
-    { return one + ProString(two); } // XXX optimize
+    { QString ret = one.toQStringRef() + QLatin1String(two); ret.detach(); return ret; }
 inline QString operator+(const char *one, const ProString &two)
-    { return ProString(one) + two; } // XXX optimize
+    { QString ret = QLatin1String(one) + two.toQStringRef(); ret.detach(); return ret;  }
+inline QString operator+(const ProString &one, QChar two)
+    { return one.toQStringRef() + two; }
+inline QString operator+(QChar one, const ProString &two)
+    { return one + two.toQStringRef(); }
 
 inline QString &operator+=(QString &that, const ProString &other)
     { return that += other.toQStringRef(); }
@@ -233,6 +238,7 @@ public:
 
     int length() const { return size(); }
 
+    QString join(const ProString &sep) const;
     QString join(const QString &sep) const;
     QString join(QChar sep) const;
 
@@ -246,6 +252,7 @@ public:
     void removeDuplicates();
 
     bool contains(const ProString &str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    bool contains(const QStringRef &str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
     bool contains(const QString &str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
         { return contains(ProString(str), cs); }
     bool contains(const char *str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;

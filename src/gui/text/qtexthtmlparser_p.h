@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qvector.h"
 #include "QtGui/qbrush.h"
 #include "QtGui/qcolor.h"
@@ -144,7 +145,7 @@ enum QTextHTMLElements {
 
 struct QTextHtmlElement
 {
-    const char *name;
+    const char name[11];
     QTextHTMLElements id;
     enum DisplayMode { DisplayBlock, DisplayInline, DisplayTable, DisplayNone } displayMode;
 };

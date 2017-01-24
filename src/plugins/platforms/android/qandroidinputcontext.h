@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -79,21 +80,22 @@ public:
     QAndroidInputContext();
     ~QAndroidInputContext();
     static QAndroidInputContext * androidInputContext();
-    bool isValid() const { return true; }
+    bool isValid() const override { return true; }
 
-    void reset();
-    void commit();
-    void update(Qt::InputMethodQueries queries);
-    void invokeAction(QInputMethod::Action action, int cursorPosition);
-    QRectF keyboardRect() const;
-    bool isAnimating() const;
-    void showInputPanel();
-    void hideInputPanel();
-    bool isInputPanelVisible() const;
+    void reset() override;
+    void commit() override;
+    void update(Qt::InputMethodQueries queries) override;
+    void invokeAction(QInputMethod::Action action, int cursorPosition) override;
+    QRectF keyboardRect() const override;
+    bool isAnimating() const override;
+    void showInputPanel() override;
+    void hideInputPanel() override;
+    bool isInputPanelVisible() const override;
 
     bool isComposing() const;
     void clear();
-    void setFocusObject(QObject *object);
+    void setFocusObject(QObject *object) override;
+    void sendShortcut(const QKeySequence &);
 
     //---------------//
     jboolean beginBatchEdit();
@@ -117,6 +119,11 @@ public:
 
 public slots:
     void updateCursorPosition();
+    void updateSelectionHandles();
+    void handleLocationChanged(int handleId, int x, int y);
+    void touchDown(int x, int y);
+    void longPress(int x, int y);
+    void keyDown();
 
 private slots:
     void showInputPanelLater(Qt::ApplicationState);
@@ -138,7 +145,14 @@ private:
     int m_composingCursor;
     QMetaObject::Connection m_updateCursorPosConnection;
     bool m_blockUpdateSelection;
-    int m_batchEditNestingLevel;
+    enum CursorHandleShowMode {
+        CursorHandleNotShown,
+        CursorHandleShowNormal = 1,
+        CursorHandleShowSelection = 2,
+        CursorHandleShowPopup = 3
+    };
+    CursorHandleShowMode m_cursorHandleShown;
+    QAtomicInt m_batchEditNestingLevel;
     QObject *m_focusObject;
 };
 

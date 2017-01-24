@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtCore/private/qglobal_p.h>
 #include "qstorageinfo.h"
 
 QT_BEGIN_NAMESPACE
@@ -70,7 +71,7 @@ public:
     static QStorageInfo root();
 
 protected:
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     void retrieveVolumeInfo();
     void retrieveDiskFreeSpace();
 #elif defined(Q_OS_MAC)

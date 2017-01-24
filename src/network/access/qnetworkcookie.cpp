@@ -644,7 +644,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
             switch (end - 1) {
             case 4:
                 minutes = atoi(dateString.mid(at + 3, 2).constData());
-                // fall through
+                Q_FALLTHROUGH();
             case 2:
                 hours = atoi(dateString.mid(at + 1, 2).constData());
                 break;
@@ -970,7 +970,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
                     if (ok) {
                         if (secs <= 0) {
                             //earliest representable time (RFC6265 section 5.2.2)
-                            cookie.setExpirationDate(QDateTime::fromTime_t(0));
+                            cookie.setExpirationDate(QDateTime::fromSecsSinceEpoch(0));
                         } else {
                             cookie.setExpirationDate(now.addSecs(secs));
                         }

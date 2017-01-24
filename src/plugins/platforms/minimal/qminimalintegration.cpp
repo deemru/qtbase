@@ -45,15 +45,15 @@
 #include <qpa/qplatformwindow.h>
 
 #if defined(Q_OS_WIN)
-#include <QtPlatformSupport/private/qbasicfontdatabase_p.h>
-#elif defined(QT_NO_FONTCONFIG)
-#include <qpa/qplatformfontdatabase.h>
+#include <QtFontDatabaseSupport/private/qbasicfontdatabase_p.h>
+#elif QT_CONFIG(fontconfig)
+#include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
 #else
-#include <QtPlatformSupport/private/qgenericunixfontdatabase_p.h>
+#include <qpa/qplatformfontdatabase.h>
 #endif
 
 #if !defined(Q_OS_WIN)
-#include <QtPlatformSupport/private/qgenericunixeventdispatcher_p.h>
+#include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
 #elif defined(Q_OS_WINRT)
 #include <QtCore/private/qeventdispatcher_winrt_p.h>
 #else
@@ -67,7 +67,7 @@ static const char debugBackingStoreEnvironmentVariable[] = "QT_DEBUG_BACKINGSTOR
 static inline unsigned parseOptions(const QStringList &paramList)
 {
     unsigned options = 0;
-    foreach (const QString &param, paramList) {
+    for (const QString &param : paramList) {
         if (param == QLatin1String("enable_fonts"))
             options |= QMinimalIntegration::EnableFonts;
     }
@@ -118,7 +118,7 @@ public:
 QPlatformFontDatabase *QMinimalIntegration::fontDatabase() const
 {
     if (m_options & EnableFonts) {
-#ifndef QT_NO_FONTCONFIG
+#if QT_CONFIG(fontconfig)
         if (!m_fontDatabase)
             m_fontDatabase = new QGenericUnixFontDatabase;
 #else

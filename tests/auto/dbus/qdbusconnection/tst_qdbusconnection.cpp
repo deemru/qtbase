@@ -35,6 +35,11 @@
 #include <QtTest/QtTest>
 #include <QtDBus/QtDBus>
 
+#ifdef Q_OS_UNIX
+#  include <sys/types.h>
+#  include <signal.h>
+#endif
+
 void MyObject::method(const QDBusMessage &msg)
 {
     path = msg.path();
@@ -1052,6 +1057,48 @@ void tst_QDBusConnection::multipleInterfacesInQObject()
     QVERIFY_HOOKCALLED();
 }
 
+void tst_QDBusConnection::connectSignal()
+{
+    if (!QCoreApplication::instance())
+        QSKIP("Test requires a QCoreApplication");
+
+    QDBusConnection con = QDBusConnection::sessionBus();
+
+    QDBusMessage signal = QDBusMessage::createSignal("/", "org.qtproject.TestCase",
+                                                     "oneSignal");
+    signal << "one parameter";
+
+    SignalReceiver recv;
+    QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // disconnect and try with a signature
+    recv.argumentReceived.clear();
+    recv.signalsReceived = 0;
+    QVERIFY(con.disconnect(con.baseService(), signal.path(), signal.interface(),
+                           signal.member(), &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), "s", &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // confirm that we are, indeed, a unique connection
+    recv.argumentReceived.clear();
+    recv.signalsReceived = 0;
+    QVERIFY(!con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), "s", &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
+}
+
 void tst_QDBusConnection::slotsWithLessParameters()
 {
     if (!QCoreApplication::instance())
@@ -1063,25 +1110,36 @@ void tst_QDBusConnection::slotsWithLessParameters()
                                                      "oneSignal");
     signal << "one parameter";
 
-    signalsReceived = 0;
+    SignalReceiver recv;
     QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
-                        signal.member(), this, SLOT(oneSlot())));
+                        signal.member(), &recv, SLOT(oneSlot())));
     QVERIFY(con.send(signal));
     QTest::qWait(100);
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
 
     // disconnect and try with a signature
-    signalsReceived = 0;
+    recv.signalsReceived = 0;
     QVERIFY(con.disconnect(con.baseService(), signal.path(), signal.interface(),
-                           signal.member(), this, SLOT(oneSlot())));
+                           signal.member(), &recv, SLOT(oneSlot())));
     QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
-                        signal.member(), "s", this, SLOT(oneSlot())));
+                        signal.member(), "s", &recv, SLOT(oneSlot())));
     QVERIFY(con.send(signal));
     QTest::qWait(100);
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // confirm that we are, indeed, a unique connection
+    recv.signalsReceived = 0;
+    QVERIFY(!con.connect(con.baseService(), signal.path(), signal.interface(),
+                         signal.member(), "s", &recv, SLOT(oneSlot())));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
 }
 
-void tst_QDBusConnection::secondCallWithCallback()
+void SignalReceiver::secondCallWithCallback()
 {
     QDBusConnection con = QDBusConnection::sessionBus();
     QDBusMessage msg = QDBusMessage::createMethodCall(con.baseService(), "/test", QString(),
@@ -1101,12 +1159,12 @@ void tst_QDBusConnection::nestedCallWithCallback()
 
     QDBusMessage msg = QDBusMessage::createMethodCall(connection.baseService(), "/test", QString(),
                                                       "ThisFunctionDoesntExist");
-    signalsReceived = 0;
 
-    connection.callWithCallback(msg, this, SLOT(exitLoop()), SLOT(secondCallWithCallback()), 10);
+    SignalReceiver recv;
+    connection.callWithCallback(msg, &recv, SLOT(exitLoop()), SLOT(secondCallWithCallback()), 10);
     QTestEventLoop::instance().enterLoop(15);
     QVERIFY(!QTestEventLoop::instance().timeout());
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.signalsReceived, 1);
     QCOMPARE_HOOKCOUNT(2);
 }
 
@@ -1352,23 +1410,39 @@ void tst_QDBusConnection::callVirtualObjectLocal()
 
 void tst_QDBusConnection::pendingCallWhenDisconnected()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("Test requires QProcess");
+#else
     if (!QCoreApplication::instance())
         QSKIP("Test requires a QCoreApplication");
 
-    QDBusServer *server = new QDBusServer;
-    QDBusConnection con = QDBusConnection::connectToPeer(server->address(), "disconnect");
-    QTestEventLoop::instance().enterLoop(2);
-    QVERIFY(con.isConnected());
-    QDBusMessage message = QDBusMessage::createMethodCall("", "/", QString(), "method");
+    QProcess daemon;
+    daemon.start("dbus-daemon", QStringList() << "--session" << "--nofork" << "--print-address");
+    QVERIFY2(daemon.waitForReadyRead(2000),
+             "Daemon didn't print its address in time; error: \"" + daemon.errorString().toLocal8Bit() +
+             "\"; stderr:\n" + daemon.readAllStandardError());
+
+    QString address = QString::fromLocal8Bit(daemon.readAll().trimmed());
+    QDBusConnection con = QDBusConnection::connectToBus(address, "disconnect");
+    QVERIFY2(con.isConnected(), (con.lastError().name() + ": " + con.lastError().message()).toLocal8Bit());
+
+    // confirm we're connected and we're alone in this bus
+    QCOMPARE(con.baseService(), QString(":1.0"));
+
+    // kill the bus
+    daemon.terminate();
+    daemon.waitForFinished();
+
+    // send something, which we should get an error with
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.DBus", "/", QString(), "ListNames");
     QDBusPendingCall reply = con.asyncCall(message);
 
-    delete server;
-
-    QTestEventLoop::instance().enterLoop(2);
+    reply.waitForFinished();
     QVERIFY(!con.isConnected());
     QVERIFY(reply.isFinished());
     QVERIFY(reply.isError());
-    QVERIFY(reply.error().type() == QDBusError::Disconnected);
+    QCOMPARE(reply.error().type(), QDBusError::Disconnected);
+#endif
 }
 
 QString MyObject::path;

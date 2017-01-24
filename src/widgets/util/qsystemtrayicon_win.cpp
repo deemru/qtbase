@@ -200,7 +200,7 @@ QSystemTrayIconSys::QSystemTrayIconSys(HWND hwnd, QSystemTrayIcon *object)
         MYWM_TASKBARCREATED = RegisterWindowMessage(L"TaskbarCreated");
     }
 
-    // Allow the WM_TASKBARCREATED message through the UIPI filter on Windows Vista and higher
+    // Allow the WM_TASKBARCREATED message through the UIPI filter on Windows 7 and higher
     static PtrChangeWindowMessageFilterEx pChangeWindowMessageFilterEx =
         (PtrChangeWindowMessageFilterEx)QSystemLibrary::resolve(QLatin1String("user32"), "ChangeWindowMessageFilterEx");
 
@@ -208,13 +208,14 @@ QSystemTrayIconSys::QSystemTrayIconSys(HWND hwnd, QSystemTrayIcon *object)
         // Call the safer ChangeWindowMessageFilterEx API if available (Windows 7 onwards)
         pChangeWindowMessageFilterEx(m_hwnd, MYWM_TASKBARCREATED, Q_MSGFLT_ALLOW, 0);
     } else {
+        // Call the deprecated ChangeWindowMessageFilter API otherwise (Vista onwards)
+        // May 2016: Still resolved at runtime since the definition is not present in MinGW 4.9.
+        // TODO: Replace by direct invocation when upgrading MinGW.
         static PtrChangeWindowMessageFilter pChangeWindowMessageFilter =
             (PtrChangeWindowMessageFilter)QSystemLibrary::resolve(QLatin1String("user32"), "ChangeWindowMessageFilter");
 
-        if (pChangeWindowMessageFilter) {
-            // Call the deprecated ChangeWindowMessageFilter API otherwise
+        if (pChangeWindowMessageFilter)
             pChangeWindowMessageFilter(MYWM_TASKBARCREATED, Q_MSGFLT_ALLOW);
-        }
     }
 }
 
@@ -236,22 +237,9 @@ void QSystemTrayIconSys::setIconContents(NOTIFYICONDATA &tnd)
         qStringToLimitedWCharArray(tip, tnd.szTip, sizeof(tnd.szTip)/sizeof(wchar_t));
 }
 
-static int iconFlag( QSystemTrayIcon::MessageIcon icon )
-{
-    switch (icon) {
-        case QSystemTrayIcon::Information:
-            return NIIF_INFO;
-        case QSystemTrayIcon::Warning:
-            return NIIF_WARNING;
-        case QSystemTrayIcon::Critical:
-            return NIIF_ERROR;
-        case QSystemTrayIcon::NoIcon:
-            return NIIF_NONE;
-        default:
-            Q_ASSERT_X(false, "QSystemTrayIconSys::showMessage", "Invalid QSystemTrayIcon::MessageIcon value");
-            return NIIF_NONE;
-    }
-}
+#ifndef NIIF_LARGE_ICON
+#  define NIIF_LARGE_ICON 0x00000020
+#endif
 
 bool QSystemTrayIconSys::showMessage(const QString &title, const QString &message, QSystemTrayIcon::MessageIcon type, uint uSecs)
 {
@@ -261,7 +249,22 @@ bool QSystemTrayIconSys::showMessage(const QString &title, const QString &messag
     qStringToLimitedWCharArray(title, tnd.szInfoTitle, 64);
 
     tnd.uID = q_uNOTIFYICONID;
-    tnd.dwInfoFlags = iconFlag(type);
+    switch (type) {
+    case QSystemTrayIcon::Information:
+        tnd.dwInfoFlags = NIIF_INFO;
+        break;
+    case QSystemTrayIcon::Warning:
+        tnd.dwInfoFlags = NIIF_WARNING;
+        break;
+    case QSystemTrayIcon::Critical:
+        tnd.dwInfoFlags = NIIF_ERROR;
+        break;
+    case QSystemTrayIcon::NoIcon:
+        tnd.dwInfoFlags = hIcon ? NIIF_USER : NIIF_NONE;
+        break;
+    }
+    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
+        tnd.dwInfoFlags |= NIIF_LARGE_ICON;
     tnd.cbSize = notifyIconSize;
     tnd.hWnd = m_hwnd;
     tnd.uTimeout = uSecs;
@@ -302,9 +305,10 @@ HICON QSystemTrayIconSys::createIcon()
     const QIcon icon = q->icon();
     if (icon.isNull())
         return oldIcon;
-    const int iconSizeX = GetSystemMetrics(SM_CXSMICON);
-    const int iconSizeY = GetSystemMetrics(SM_CYSMICON);
-    const QSize size = icon.actualSize(QSize(iconSizeX, iconSizeY));
+    const QSize requestedSize = QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA
+        ? QSize(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON))
+        : QSize(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+    const QSize size = icon.actualSize(requestedSize);
     const QPixmap pm = icon.pixmap(size);
     if (pm.isNull())
         return oldIcon;
@@ -413,6 +417,7 @@ QRect QSystemTrayIconSys::findIconGeometry(UINT iconId)
         UINT uID;
     };
 
+    // Windows 7 onwards.
     static PtrShell_NotifyIconGetRect Shell_NotifyIconGetRect =
         (PtrShell_NotifyIconGetRect)QSystemLibrary::resolve(QLatin1String("shell32"),
                                                             "Shell_NotifyIconGetRect");

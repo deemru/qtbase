@@ -52,14 +52,8 @@
 #include <QtWidgets/private/qapplication_p.h>
 #include <QtWidgets/QStyle>
 
-#ifdef Q_OS_WINCE
-#include <windows.h>
-#endif
-
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qhighdpiscaling_p.h>
-
-#include "../../../qtest-config.h"
 
 QT_BEGIN_NAMESPACE
 static QWindowSystemInterface::TouchPoint touchPoint(const QTouchEvent::TouchPoint& pt)
@@ -235,10 +229,6 @@ static  char *argv0;
 tst_QApplication::tst_QApplication()
     : quitApplicationTriggered(false)
 {
-#ifdef Q_OS_WINCE
-    // Clean up environment previously to launching test
-    qputenv("QT_PLUGIN_PATH", QByteArray());
-#endif
 }
 
 void tst_QApplication::cleanup()
@@ -897,19 +887,8 @@ bool isPathListIncluded(const QStringList &l, const QStringList &r)
 #define QT_TST_QAPP_DEBUG
 void tst_QApplication::libraryPaths()
 {
-#ifndef Q_OS_WINCE
         const QString testDir = QFileInfo(QFINDTESTDATA("test/test.pro")).absolutePath();
         QVERIFY(!testDir.isEmpty());
-#else // !Q_OS_WINCE
-        // On Windows CE we need QApplication object to have valid
-        // current Path. Therefore we need to identify it ourselves
-        // here for the test.
-        QFileInfo filePath;
-        wchar_t module_name[MAX_PATH];
-        GetModuleFileName(0, module_name, MAX_PATH);
-        filePath = QString::fromWCharArray(module_name);
-        const QString testDir = filePath.path() + "/test";
-#endif // Q_OS_WINCE
     {
         QApplication::setLibraryPaths(QStringList() << testDir);
         QCOMPARE(QApplication::libraryPaths(), (QStringList() << testDir));
@@ -1000,11 +979,7 @@ void tst_QApplication::libraryPaths()
         QString appDirPath = app.applicationDirPath();
 
         app.addLibraryPath(appDirPath);
-#ifdef Q_OS_WINCE
-        app.addLibraryPath(appDirPath + "/../..");
-#else
         app.addLibraryPath(appDirPath + "/..");
-#endif
 #ifdef QT_TST_QAPP_DEBUG
         qDebug() << "appDirPath" << appDirPath;
         qDebug() << "After adding appDirPath && appDirPath + /..:" << app.libraryPaths();
@@ -1044,15 +1019,9 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
     QByteArray nonExistentPath = "/nonexistent";
     QByteArray pluginPath = validPath + ':' + nonExistentPath;
 #elif defined(Q_OS_WIN)
-# ifdef Q_OS_WINCE
-    QByteArray validPath = "/Temp";
-    QByteArray nonExistentPath = "/nonexistent";
-    QByteArray pluginPath = validPath + ';' + nonExistentPath;
-# else
     QByteArray validPath = "C:\\windows";
     QByteArray nonExistentPath = "Z:\\nonexistent";
     QByteArray pluginPath = validPath + ';' + nonExistentPath;
-# endif
 #endif
 
     {
@@ -1069,9 +1038,7 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
             << QLibraryInfo::location(QLibraryInfo::PluginsPath)
             << QDir(app.applicationDirPath()).canonicalPath()
             << QDir(QDir::fromNativeSeparators(QString::fromLatin1(validPath))).canonicalPath();
-# ifdef Q_OS_WINCE
-        expected = QSet<QString>::fromList(expected).toList();
-# endif
+
         QVERIFY2(isPathListIncluded(app.libraryPaths(), expected),
                  qPrintable("actual:\n - " + app.libraryPaths().join("\n - ") +
                             "\nexpected:\n - " + expected.join("\n - ")));
@@ -1091,9 +1058,6 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
             QStringList()
             << QLibraryInfo::location(QLibraryInfo::PluginsPath)
             << app.applicationDirPath();
-# ifdef Q_OS_WINCE
-        expected = QSet<QString>::fromList(expected).toList();
-# endif
         QVERIFY(isPathListIncluded(app.libraryPaths(), expected));
 
         qputenv("QT_PLUGIN_PATH", QByteArray());
@@ -1479,10 +1443,6 @@ void tst_QApplication::desktopSettingsAware()
     }
     QVERIFY2(!path.isEmpty(), "Cannot locate desktopsettingsaware helper application");
     path += "desktopsettingsaware";
-#ifdef Q_OS_WINCE
-    int argc = 0;
-    QApplication tmpApp(argc, 0);
-#endif
     QProcess testProcess;
     testProcess.start(path);
     QVERIFY2(testProcess.waitForStarted(),
@@ -1755,25 +1715,6 @@ void tst_QApplication::focusOut()
     QTest::qWait(2000);
 }
 
-class SpontaneousEvent
-{
-    Q_GADGET
-    QDOC_PROPERTY(bool accepted READ isAccepted WRITE setAccepted)
-    Q_ENUMS(Type)
-public:
-    enum Type {
-        Void
-    };
-
-    virtual ~SpontaneousEvent() {}
-
-    QEventPrivate *d;
-    ushort t;
-
-    ushort posted : 1;
-    ushort spont : 1;
-};
-
 void tst_QApplication::focusMouseClick()
 {
     int argc = 1;
@@ -1791,14 +1732,14 @@ void tst_QApplication::focusMouseClick()
     // now send a mouse button press event and check what happens with the focus
     // it should be given to the parent widget
     QMouseEvent ev(QEvent::MouseButtonPress, QPointF(), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QCOMPARE(QApplication::focusWidget(), &w);
 
     // then we give the inner widget strong focus -> it should get focus
     w2.setFocusPolicy(Qt::StrongFocus);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QTRY_COMPARE(QApplication::focusWidget(), &w2);
@@ -1806,7 +1747,7 @@ void tst_QApplication::focusMouseClick()
     // now back to tab focus and click again (it already had focus) -> focus should stay
     // (focus was revoked as of QTBUG-34042)
     w2.setFocusPolicy(Qt::TabFocus);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QCOMPARE(QApplication::focusWidget(), &w2);
@@ -1974,9 +1915,7 @@ void tst_QApplication::touchEventPropagation()
     release.setState(Qt::TouchPointReleased);
     releasedTouchPoints << release;
 
-    QTouchDevice *device = new QTouchDevice;
-    device->setType(QTouchDevice::TouchScreen);
-    QWindowSystemInterface::registerTouchDevice(device);
+    QTouchDevice *device = QTest::createTouchDevice();
 
     {
         // touch event behavior on a window
@@ -2216,8 +2155,8 @@ void tst_QApplication::noQuitOnHide()
 {
     int argc = 0;
     QApplication app(argc, 0);
-    QWidget *window1 = new NoQuitOnHideWidget;
-    window1->show();
+    NoQuitOnHideWidget window1;
+    window1.show();
     QCOMPARE(app.exec(), 1);
 }
 
@@ -2251,12 +2190,12 @@ void tst_QApplication::abortQuitOnShow()
 {
     int argc = 0;
     QApplication app(argc, 0);
-    QWidget *window1 = new ShowCloseShowWidget(false);
-    window1->show();
+    ShowCloseShowWidget window1(false);
+    window1.show();
     QCOMPARE(app.exec(), 0);
 
-    QWidget *window2 = new ShowCloseShowWidget(true);
-    window2->show();
+    ShowCloseShowWidget window2(true);
+    window2.show();
     QCOMPARE(app.exec(), 1);
 }
 
@@ -2331,7 +2270,7 @@ Q_GLOBAL_STATIC(QPixmap, tst_qapp_pixmap);
 Q_GLOBAL_STATIC(QFont, tst_qapp_font);
 Q_GLOBAL_STATIC(QRegion, tst_qapp_region);
 Q_GLOBAL_STATIC(QFontDatabase, tst_qapp_fontDatabase);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 Q_GLOBAL_STATIC(QCursor, tst_qapp_cursor);
 #endif
 
@@ -2356,7 +2295,7 @@ void tst_QApplication::globalStaticObjectDestruction()
     QVERIFY(tst_qapp_font());
     QVERIFY(tst_qapp_region());
     QVERIFY(tst_qapp_fontDatabase());
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     QVERIFY(tst_qapp_cursor());
 #endif
 }

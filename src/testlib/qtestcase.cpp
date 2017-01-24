@@ -72,6 +72,9 @@
 #if defined(HAVE_XCTEST)
 #include <QtTest/private/qxctestlogger_p.h>
 #endif
+#if defined Q_OS_MACOS
+#include <QtTest/private/qtestutil_macos_p.h>
+#endif
 
 #include <numeric>
 #include <algorithm>
@@ -87,11 +90,9 @@
 #endif
 
 #ifdef Q_OS_WIN
-#ifndef Q_OS_WINCE
 # if !defined(Q_CC_MINGW) || (defined(Q_CC_MINGW) && defined(__MINGW64_VERSION_MAJOR))
 #  include <crtdbg.h>
 # endif
-#endif
 #include <windows.h> // for Sleep
 #endif
 #ifdef Q_OS_UNIX
@@ -111,6 +112,36 @@ QT_BEGIN_NAMESPACE
 using QtMiscUtils::toHexUpper;
 using QtMiscUtils::fromHex;
 
+static bool debuggerPresent()
+{
+#if defined(Q_OS_LINUX)
+    int fd = open("/proc/self/status", O_RDONLY);
+    if (fd == -1)
+        return false;
+    char buffer[2048];
+    ssize_t size = read(fd, buffer, sizeof(buffer) - 1);
+    if (size == -1) {
+        close(fd);
+        return false;
+    }
+    buffer[size] = 0;
+    const char tracerPidToken[] = "\nTracerPid:";
+    char *tracerPid = strstr(buffer, tracerPidToken);
+    if (!tracerPid) {
+        close(fd);
+        return false;
+    }
+    tracerPid += sizeof(tracerPidToken);
+    long int pid = strtol(tracerPid, &tracerPid, 10);
+    close(fd);
+    return pid != 0;
+#elif defined(Q_OS_WIN)
+    return IsDebuggerPresent();
+#else
+    // TODO
+    return false;
+#endif
+}
 
 static void stackTrace()
 {
@@ -118,6 +149,10 @@ static void stackTrace()
     const int disableStackDump = qEnvironmentVariableIntValue("QTEST_DISABLE_STACK_DUMP", &ok);
     if (ok && disableStackDump == 1)
         return;
+
+    if (debuggerPresent())
+        return;
+
 #ifdef Q_OS_LINUX
     fprintf(stderr, "\n========= Received signal, dumping stack ==============\n");
     char cmd[512];
@@ -453,7 +488,7 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
          " -mousedelay ms      : Set default delay for mouse simulation to ms milliseconds\n"
          " -maxwarnings n      : Sets the maximum amount of messages to output.\n"
          "                       0 means unlimited, default: 2000\n"
-         " -nocrashhandler     : Disables the crash handler\n"
+         " -nocrashhandler     : Disables the crash handler. Useful for debugging crashes.\n"
          "\n"
          " Benchmarking options:\n"
 #ifdef QTESTLIB_USE_VALGRIND
@@ -926,7 +961,7 @@ bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) co
     QBenchmarkTestMethodData::current = &benchmarkData;
 
     const QByteArray &name = m_methods[index].name();
-    QBenchmarkGlobalData::current->context.slotName = QLatin1String(name) + QStringLiteral("()");
+    QBenchmarkGlobalData::current->context.slotName = QLatin1String(name) + QLatin1String("()");
 
     char member[512];
     QTestTable table;
@@ -1251,37 +1286,6 @@ char *toPrettyUnicode(const ushort *p, int length)
     return buffer.take();
 }
 
-static bool debuggerPresent()
-{
-#if defined(Q_OS_LINUX)
-    int fd = open("/proc/self/status", O_RDONLY);
-    if (fd == -1)
-        return false;
-    char buffer[2048];
-    ssize_t size = read(fd, buffer, sizeof(buffer));
-    if (size == -1) {
-        close(fd);
-        return false;
-    }
-    buffer[size] = 0;
-    const char tracerPidToken[] = "\nTracerPid:";
-    char *tracerPid = strstr(buffer, tracerPidToken);
-    if (!tracerPid) {
-        close(fd);
-        return false;
-    }
-    tracerPid += sizeof(tracerPidToken);
-    long int pid = strtol(tracerPid, &tracerPid, 10);
-    close(fd);
-    return pid != 0;
-#elif defined(Q_OS_WIN)
-    return IsDebuggerPresent();
-#else
-    // TODO
-    return false;
-#endif
-}
-
 void TestMethods::invokeTests(QObject *testObject) const
 {
     const QMetaObject *metaObject = testObject->metaObject();
@@ -1293,8 +1297,13 @@ void TestMethods::invokeTests(QObject *testObject) const
         m_initTestCaseDataMethod.invoke(testObject, Qt::DirectConnection);
 
     QScopedPointer<WatchDog> watchDog;
-    if (!debuggerPresent())
+    if (!debuggerPresent()
+#ifdef QTESTLIB_USE_VALGRIND
+        && QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindChildProcess
+#endif
+       ) {
         watchDog.reset(new WatchDog);
+    }
 
     if (!QTestResult::skipCurrentTest() && !QTest::currentTestFailed()) {
         if (m_initTestCaseMethod.isValid())
@@ -1380,7 +1389,9 @@ FatalSignalHandler::FatalSignalHandler()
     act.sa_flags = SA_RESETHAND;
 #endif
 
-#ifdef SA_ONSTACK
+// tvOS/watchOS both define SA_ONSTACK (in sys/signal.h) but mark sigaltstack() as
+// unavailable (__WATCHOS_PROHIBITED __TVOS_PROHIBITED in signal.h)
+#if defined(SA_ONSTACK) && !defined(Q_OS_TVOS) && !defined(Q_OS_WATCHOS)
     // Let the signal handlers use an alternate stack
     // This is necessary if SIGSEGV is to catch a stack overflow
 #  if defined(Q_CC_GNU) && defined(Q_OF_ELF)
@@ -1446,7 +1457,7 @@ FatalSignalHandler::~FatalSignalHandler()
 
 } // namespace
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 
 // Helper class for resolving symbol names by dynamically loading "dbghelp.dll".
 class DebugSymbolResolver
@@ -1584,7 +1595,7 @@ static LONG WINAPI windowsFaultHandler(struct _EXCEPTION_POINTERS *exInfo)
 
     return EXCEPTION_EXECUTE_HANDLER;
 }
-#endif // Q_OS_WIN) && !Q_OS_WINCE && !Q_OS_WINRT
+#endif // Q_OS_WIN) && !Q_OS_WINRT
 
 static void initEnvironment()
 {
@@ -1643,6 +1654,9 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
 #if defined(Q_OS_MACX)
     bool macNeedsActivate = qApp && (qstrcmp(qApp->metaObject()->className(), "QApplication") == 0);
     IOPMAssertionID powerID;
+
+    // Don't restore saved window state for auto tests.
+    QTestPrivate::disableWindowRestore();
 #endif
 #ifndef QT_NO_EXCEPTIONS
     try {
@@ -1676,7 +1690,7 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
 
     qtest_qParseArgs(argc, argv, false);
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     if (!noCrashHandler) {
 # ifndef Q_CC_MINGW
         _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_DEBUG);
@@ -1686,7 +1700,7 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
         SetUnhandledExceptionFilter(windowsFaultHandler);
 # endif
     } // !noCrashHandler
-#endif // Q_OS_WIN) && !Q_OS_WINCE && !Q_OS_WINRT
+#endif // Q_OS_WIN
 
 #ifdef QTESTLIB_USE_VALGRIND
     if (QBenchmarkGlobalData::current->mode() == QBenchmarkGlobalData::CallgrindParentProcess) {
@@ -2418,6 +2432,14 @@ bool QTest::compare_string_helper(const char *t1, const char *t2, const char *ac
 */
 
 /*! \fn bool QTest::qCompare(const T *t1, const T *t2, const char *actual, const char *expected, const char *file, int line)
+    \internal
+*/
+
+/*! \fn bool QTest::qCompare(T *t, std::nullptr_t, const char *actual, const char *expected, const char *file, int line)
+    \internal
+*/
+
+/*! \fn bool QTest::qCompare(std::nullptr_t, T *t, const char *actual, const char *expected, const char *file, int line)
     \internal
 */
 

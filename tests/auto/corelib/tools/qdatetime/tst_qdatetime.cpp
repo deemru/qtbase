@@ -28,10 +28,7 @@
 ****************************************************************************/
 
 #include <QtTest/QtTest>
-#ifndef Q_OS_WINCE
 #include <time.h>
-#endif
-
 #include <qdatetime.h>
 #include <private/qdatetime_p.h>
 
@@ -62,8 +59,8 @@ private slots:
     void date();
     void time();
     void timeSpec();
-    void toTime_t_data();
-    void toTime_t();
+    void toSecsSinceEpoch_data();
+    void toSecsSinceEpoch();
     void daylightSavingsTimeChange_data();
     void daylightSavingsTimeChange();
     void springForward_data();
@@ -73,7 +70,7 @@ private slots:
     void setTime();
     void setTimeSpec_data();
     void setTimeSpec();
-    void setTime_t();
+    void setSecsSinceEpoch();
     void setMSecsSinceEpoch_data();
     void setMSecsSinceEpoch();
     void fromMSecsSinceEpoch_data();
@@ -108,10 +105,8 @@ private slots:
     void msecsTo();
     void operator_eqeq_data();
     void operator_eqeq();
-#ifndef Q_OS_WINCE
     void operator_insert_extract_data();
     void operator_insert_extract();
-#endif
     void currentDateTime();
     void currentDateTimeUtc();
     void currentDateTimeUtc2();
@@ -180,22 +175,22 @@ tst_QDateTime::tst_QDateTime()
       differently, so don't probe them here.
     */
     const uint day = 24 * 3600; // in seconds
-    zoneIsCET = (QDateTime(QDate(2038, 1, 19), QTime(4, 14, 7)).toTime_t() == 0x7fffffff
+    zoneIsCET = (QDateTime(QDate(2038, 1, 19), QTime(4, 14, 7)).toSecsSinceEpoch() == 0x7fffffff
                  // Entries a year apart robustly differ by multiples of day.
-                 && QDateTime(QDate(2015, 7, 1), QTime()).toTime_t() == 1435701600
-                 && QDateTime(QDate(2015, 1, 1), QTime()).toTime_t() == 1420066800
-                 && QDateTime(QDate(2013, 7, 1), QTime()).toTime_t() == 1372629600
-                 && QDateTime(QDate(2013, 1, 1), QTime()).toTime_t() == 1356994800
-                 && QDateTime(QDate(2012, 7, 1), QTime()).toTime_t() == 1341093600
-                 && QDateTime(QDate(2012, 1, 1), QTime()).toTime_t() == 1325372400
-                 && QDateTime(QDate(2008, 7, 1), QTime()).toTime_t() == 1214863200
-                 && QDateTime(QDate(2004, 1, 1), QTime()).toTime_t() == 1072911600
-                 && QDateTime(QDate(2000, 1, 1), QTime()).toTime_t() == 946681200
-                 && QDateTime(QDate(1990, 7, 1), QTime()).toTime_t() == 646783200
-                 && QDateTime(QDate(1990, 1, 1), QTime()).toTime_t() == 631148400
-                 && QDateTime(QDate(1979, 1, 1), QTime()).toTime_t() == 283993200
-                 // .toTime_t() returns -1 for everything before this:
-                 && QDateTime(QDate(1970, 1, 1), QTime(1, 0, 0)).toTime_t() == 0);
+                 && QDateTime(QDate(2015, 7, 1), QTime()).toSecsSinceEpoch() == 1435701600
+                 && QDateTime(QDate(2015, 1, 1), QTime()).toSecsSinceEpoch() == 1420066800
+                 && QDateTime(QDate(2013, 7, 1), QTime()).toSecsSinceEpoch() == 1372629600
+                 && QDateTime(QDate(2013, 1, 1), QTime()).toSecsSinceEpoch() == 1356994800
+                 && QDateTime(QDate(2012, 7, 1), QTime()).toSecsSinceEpoch() == 1341093600
+                 && QDateTime(QDate(2012, 1, 1), QTime()).toSecsSinceEpoch() == 1325372400
+                 && QDateTime(QDate(2008, 7, 1), QTime()).toSecsSinceEpoch() == 1214863200
+                 && QDateTime(QDate(2004, 1, 1), QTime()).toSecsSinceEpoch() == 1072911600
+                 && QDateTime(QDate(2000, 1, 1), QTime()).toSecsSinceEpoch() == 946681200
+                 && QDateTime(QDate(1990, 7, 1), QTime()).toSecsSinceEpoch() == 646783200
+                 && QDateTime(QDate(1990, 1, 1), QTime()).toSecsSinceEpoch() == 631148400
+                 && QDateTime(QDate(1979, 1, 1), QTime()).toSecsSinceEpoch() == 283993200
+                 // .toSecsSinceEpoch() returns -1 for everything before this:
+                 && QDateTime(QDate(1970, 1, 1), QTime(1, 0, 0)).toSecsSinceEpoch() == 0);
     // Use .toMSecsSinceEpoch() if you really need to test anything earlier.
 
     /*
@@ -207,12 +202,12 @@ tst_QDateTime::tst_QDateTime()
     */
     const int sampled = 3;
     // UTC starts of months in 2004, 2038 and 1970:
-    uint jans[sampled] = { 12418 * day, 24837 * day, 0 };
-    uint juls[sampled] = { 12600 * day, 25018 * day, 181 * day };
+    qint64 jans[sampled] = { 12418 * day, 24837 * day, 0 };
+    qint64 juls[sampled] = { 12600 * day, 25018 * day, 181 * day };
     localTimeType = LocalTimeIsUtc;
     for (int i = sampled; i-- > 0; ) {
-        QDateTime jan = QDateTime::fromTime_t(jans[i]);
-        QDateTime jul = QDateTime::fromTime_t(juls[i]);
+        QDateTime jan = QDateTime::fromSecsSinceEpoch(jans[i]);
+        QDateTime jul = QDateTime::fromSecsSinceEpoch(juls[i]);
         if (jan.date().year() < 1970 || jul.date().month() < 7) {
             localTimeType = LocalTimeBehindUtc;
             break;
@@ -259,9 +254,7 @@ void tst_QDateTime::initTestCase()
 
 void tst_QDateTime::init()
 {
-#if defined(Q_OS_WINCE)
-    SetUserDefaultLCID(MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT));
-#elif defined(Q_OS_WIN32)
+#if defined(Q_OS_WIN32)
     SetThreadLocale(MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT));
 #endif
 }
@@ -523,52 +516,52 @@ void tst_QDateTime::setTimeSpec()
         QCOMPARE(dateTime.timeSpec(), newTimeSpec);
 }
 
-void tst_QDateTime::setTime_t()
+void tst_QDateTime::setSecsSinceEpoch()
 {
     QDateTime dt1;
-    dt1.setTime_t(0);
+    dt1.setSecsSinceEpoch(0);
     QCOMPARE(dt1.toUTC(), QDateTime(QDate(1970, 1, 1), QTime(), Qt::UTC));
     QCOMPARE(dt1.timeSpec(), Qt::LocalTime);
 
     dt1.setTimeSpec(Qt::UTC);
-    dt1.setTime_t(0);
+    dt1.setSecsSinceEpoch(0);
     QCOMPARE(dt1, QDateTime(QDate(1970, 1, 1), QTime(), Qt::UTC));
     QCOMPARE(dt1.timeSpec(), Qt::UTC);
 
-    dt1.setTime_t(123456);
+    dt1.setSecsSinceEpoch(123456);
     QCOMPARE(dt1, QDateTime(QDate(1970, 1, 2), QTime(10, 17, 36), Qt::UTC));
     if (zoneIsCET) {
         QDateTime dt2;
-        dt2.setTime_t(123456);
+        dt2.setSecsSinceEpoch(123456);
         QCOMPARE(dt2, QDateTime(QDate(1970, 1, 2), QTime(11, 17, 36), Qt::LocalTime));
     }
 
-    dt1.setTime_t((uint)(quint32)-123456);
+    dt1.setSecsSinceEpoch((uint)(quint32)-123456);
     QCOMPARE(dt1, QDateTime(QDate(2106, 2, 5), QTime(20, 10, 40), Qt::UTC));
     if (zoneIsCET) {
         QDateTime dt2;
-        dt2.setTime_t((uint)(quint32)-123456);
+        dt2.setSecsSinceEpoch((uint)(quint32)-123456);
         QCOMPARE(dt2, QDateTime(QDate(2106, 2, 5), QTime(21, 10, 40), Qt::LocalTime));
     }
 
-    dt1.setTime_t(1214567890);
+    dt1.setSecsSinceEpoch(1214567890);
     QCOMPARE(dt1, QDateTime(QDate(2008, 6, 27), QTime(11, 58, 10), Qt::UTC));
     if (zoneIsCET) {
         QDateTime dt2;
-        dt2.setTime_t(1214567890);
+        dt2.setSecsSinceEpoch(1214567890);
         QCOMPARE(dt2, QDateTime(QDate(2008, 6, 27), QTime(13, 58, 10), Qt::LocalTime));
     }
 
-    dt1.setTime_t(0x7FFFFFFF);
+    dt1.setSecsSinceEpoch(0x7FFFFFFF);
     QCOMPARE(dt1, QDateTime(QDate(2038, 1, 19), QTime(3, 14, 7), Qt::UTC));
     if (zoneIsCET) {
         QDateTime dt2;
-        dt2.setTime_t(0x7FFFFFFF);
+        dt2.setSecsSinceEpoch(0x7FFFFFFF);
         QCOMPARE(dt2, QDateTime(QDate(2038, 1, 19), QTime(4, 14, 7), Qt::LocalTime));
     }
 
     dt1 = QDateTime(QDate(2013, 1, 1), QTime(0, 0, 0), Qt::OffsetFromUTC, 60 * 60);
-    dt1.setTime_t(123456);
+    dt1.setSecsSinceEpoch(123456);
     QCOMPARE(dt1, QDateTime(QDate(1970, 1, 2), QTime(10, 17, 36), Qt::UTC));
     QCOMPARE(dt1.timeSpec(), Qt::OffsetFromUTC);
     QCOMPARE(dt1.offsetFromUtc(), 60 * 60);
@@ -672,7 +665,7 @@ void tst_QDateTime::setMSecsSinceEpoch()
     QCOMPARE(dt.toMSecsSinceEpoch(), msecs);
 
     if (quint64(msecs / 1000) < 0xFFFFFFFF) {
-        QCOMPARE(qint64(dt.toTime_t()), msecs / 1000);
+        QCOMPARE(qint64(dt.toSecsSinceEpoch()), msecs / 1000);
     }
 
     QDateTime reference(QDate(1970, 1, 1), QTime(), Qt::UTC);
@@ -723,9 +716,9 @@ void tst_QDateTime::fromMSecsSinceEpoch()
     QCOMPARE(dtOffset.toMSecsSinceEpoch(), msecs);
 
     if (quint64(msecs / 1000) < 0xFFFFFFFF) {
-        QCOMPARE(qint64(dtLocal.toTime_t()), msecs / 1000);
-        QCOMPARE(qint64(dtUtc.toTime_t()), msecs / 1000);
-        QCOMPARE(qint64(dtOffset.toTime_t()), msecs / 1000);
+        QCOMPARE(qint64(dtLocal.toSecsSinceEpoch()), msecs / 1000);
+        QCOMPARE(qint64(dtUtc.toSecsSinceEpoch()), msecs / 1000);
+        QCOMPARE(qint64(dtOffset.toSecsSinceEpoch()), msecs / 1000);
     }
 
     QDateTime reference(QDate(1970, 1, 1), QTime(), Qt::UTC);
@@ -739,46 +732,56 @@ void tst_QDateTime::fromMSecsSinceEpoch()
 void tst_QDateTime::toString_isoDate_data()
 {
     QTest::addColumn<QDateTime>("datetime");
+    QTest::addColumn<Qt::DateFormat>("format");
     QTest::addColumn<QString>("expected");
 
     QTest::newRow("localtime")
             << QDateTime(QDate(1978, 11, 9), QTime(13, 28, 34))
-            << QString("1978-11-09T13:28:34");
+            << Qt::ISODate << QString("1978-11-09T13:28:34");
     QTest::newRow("UTC")
             << QDateTime(QDate(1978, 11, 9), QTime(13, 28, 34), Qt::UTC)
-            << QString("1978-11-09T13:28:34Z");
+            << Qt::ISODate << QString("1978-11-09T13:28:34Z");
     QDateTime dt(QDate(1978, 11, 9), QTime(13, 28, 34));
     dt.setOffsetFromUtc(19800);
     QTest::newRow("positive OffsetFromUTC")
-            << dt
+            << dt << Qt::ISODate
             << QString("1978-11-09T13:28:34+05:30");
     dt.setUtcOffset(-7200);
     QTest::newRow("negative OffsetFromUTC")
-            << dt
+            << dt << Qt::ISODate
             << QString("1978-11-09T13:28:34-02:00");
     dt.setUtcOffset(-900);
     QTest::newRow("negative non-integral OffsetFromUTC")
-            << dt
+            << dt << Qt::ISODate
             << QString("1978-11-09T13:28:34-00:15");
     QTest::newRow("invalid")
             << QDateTime(QDate(-1, 11, 9), QTime(13, 28, 34), Qt::UTC)
-            << QString();
+            << Qt::ISODate << QString();
+    QTest::newRow("without-ms")
+            << QDateTime(QDate(1978, 11, 9), QTime(13, 28, 34, 20))
+            << Qt::ISODate << QString("1978-11-09T13:28:34");
+    QTest::newRow("with-ms")
+            << QDateTime(QDate(1978, 11, 9), QTime(13, 28, 34, 20))
+            << Qt::ISODateWithMs << QString("1978-11-09T13:28:34.020");
 }
 
 void tst_QDateTime::toString_isoDate()
 {
     QFETCH(QDateTime, datetime);
+    QFETCH(Qt::DateFormat, format);
     QFETCH(QString, expected);
 
     QLocale oldLocale;
     QLocale::setDefault(QLocale("en_US"));
 
-    QString result = datetime.toString(Qt::ISODate);
+    QString result = datetime.toString(format);
     QCOMPARE(result, expected);
 
-    QDateTime resultDatetime = QDateTime::fromString(result, Qt::ISODate);
+    QDateTime resultDatetime = QDateTime::fromString(result, format);
     // If expecting invalid result the datetime may still be valid, i.e. year < 0 or > 9999
     if (!expected.isEmpty()) {
+        QEXPECT_FAIL("without-ms", "Qt::ISODate truncates milliseconds (QTBUG-56552)", Abort);
+
         QCOMPARE(resultDatetime, datetime);
         QCOMPARE(resultDatetime.date(), datetime.date());
         QCOMPARE(resultDatetime.time(), datetime.time());
@@ -1429,27 +1432,19 @@ void tst_QDateTime::msecsTo()
 
 void tst_QDateTime::currentDateTime()
 {
-#if defined(Q_OS_WINCE)
-    __time64_t buf1, buf2;
-    ::_time64(&buf1);
-#else
     time_t buf1, buf2;
     ::time(&buf1);
-#endif
     QDateTime lowerBound;
-    lowerBound.setTime_t(buf1);
+    lowerBound.setSecsSinceEpoch(buf1);
 
     QDateTime dt1 = QDateTime::currentDateTime();
     QDateTime dt2 = QDateTime::currentDateTime().toLocalTime();
     QDateTime dt3 = QDateTime::currentDateTime().toUTC();
 
-#if defined(Q_OS_WINCE)
-    ::_time64(&buf2);
-#else
     ::time(&buf2);
-#endif
+
     QDateTime upperBound;
-    upperBound.setTime_t(buf2);
+    upperBound.setSecsSinceEpoch(buf2);
     // Note we must add 2 seconds here because time() may return up to
     // 1 second difference from the more accurate method used by QDateTime::currentDateTime()
     upperBound = upperBound.addSecs(2);
@@ -1460,11 +1455,11 @@ void tst_QDateTime::currentDateTime()
         "dt2:        %3\n"
         "dt3:        %4\n"
         "upperBound: %5\n")
-        .arg(lowerBound.toTime_t())
-        .arg(dt1.toTime_t())
-        .arg(dt2.toTime_t())
-        .arg(dt3.toTime_t())
-        .arg(upperBound.toTime_t());
+        .arg(lowerBound.toSecsSinceEpoch())
+        .arg(dt1.toSecsSinceEpoch())
+        .arg(dt2.toSecsSinceEpoch())
+        .arg(dt3.toSecsSinceEpoch())
+        .arg(upperBound.toSecsSinceEpoch());
 
     QVERIFY2(lowerBound < upperBound, qPrintable(details));
 
@@ -1482,27 +1477,20 @@ void tst_QDateTime::currentDateTime()
 
 void tst_QDateTime::currentDateTimeUtc()
 {
-#if defined(Q_OS_WINCE)
-    __time64_t buf1, buf2;
-    ::_time64(&buf1);
-#else
     time_t buf1, buf2;
     ::time(&buf1);
-#endif
+
     QDateTime lowerBound;
-    lowerBound.setTime_t(buf1);
+    lowerBound.setSecsSinceEpoch(buf1);
 
     QDateTime dt1 = QDateTime::currentDateTimeUtc();
     QDateTime dt2 = QDateTime::currentDateTimeUtc().toLocalTime();
     QDateTime dt3 = QDateTime::currentDateTimeUtc().toUTC();
 
-#if defined(Q_OS_WINCE)
-    ::_time64(&buf2);
-#else
     ::time(&buf2);
-#endif
+
     QDateTime upperBound;
-    upperBound.setTime_t(buf2);
+    upperBound.setSecsSinceEpoch(buf2);
     // Note we must add 2 seconds here because time() may return up to
     // 1 second difference from the more accurate method used by QDateTime::currentDateTime()
     upperBound = upperBound.addSecs(2);
@@ -1513,11 +1501,11 @@ void tst_QDateTime::currentDateTimeUtc()
         "dt2:        %3\n"
         "dt3:        %4\n"
         "upperBound: %5\n")
-        .arg(lowerBound.toTime_t())
-        .arg(dt1.toTime_t())
-        .arg(dt2.toTime_t())
-        .arg(dt3.toTime_t())
-        .arg(upperBound.toTime_t());
+        .arg(lowerBound.toSecsSinceEpoch())
+        .arg(dt1.toSecsSinceEpoch())
+        .arg(dt2.toSecsSinceEpoch())
+        .arg(dt3.toSecsSinceEpoch())
+        .arg(upperBound.toSecsSinceEpoch());
 
     QVERIFY2(lowerBound < upperBound, qPrintable(details));
 
@@ -1562,14 +1550,14 @@ void tst_QDateTime::currentDateTimeUtc2()
     QCOMPARE(local.toUTC(), utc);
     QCOMPARE(utc.toLocalTime(), local);
 
-    // and finally, the time_t should equal our number
-    QCOMPARE(qint64(utc.toTime_t()), msec / 1000);
-    QCOMPARE(qint64(local.toTime_t()), msec / 1000);
+    // and finally, the SecsSinceEpoch should equal our number
+    QCOMPARE(qint64(utc.toSecsSinceEpoch()), msec / 1000);
+    QCOMPARE(qint64(local.toSecsSinceEpoch()), msec / 1000);
     QCOMPARE(utc.toMSecsSinceEpoch(), msec);
     QCOMPARE(local.toMSecsSinceEpoch(), msec);
 }
 
-void tst_QDateTime::toTime_t_data()
+void tst_QDateTime::toSecsSinceEpoch_data()
 {
     QTest::addColumn<QString>("dateTimeStr");
     QTest::addColumn<bool>("res");
@@ -1585,11 +1573,12 @@ void tst_QDateTime::toTime_t_data()
                           << bool( sizeof(uint) > 32 && sizeof(time_t) > 32 );
 }
 
-void tst_QDateTime::toTime_t()
+void tst_QDateTime::toSecsSinceEpoch()
 {
     QFETCH( QString, dateTimeStr );
     QDateTime datetime = dt( dateTimeStr );
 
+    qint64 asSecsSinceEpoch = datetime.toSecsSinceEpoch();
     uint asTime_t = datetime.toTime_t();
     QFETCH( bool, res );
     if (res) {
@@ -1597,11 +1586,14 @@ void tst_QDateTime::toTime_t()
     } else {
         QVERIFY( asTime_t == (uint)-1 );
     }
+    QCOMPARE(asSecsSinceEpoch, datetime.toMSecsSinceEpoch() / 1000);
 
     if ( asTime_t != (uint) -1 ) {
         QDateTime datetime2 = QDateTime::fromTime_t( asTime_t );
         QCOMPARE(datetime, datetime2);
     }
+    QDateTime datetime2 = QDateTime::fromSecsSinceEpoch(asSecsSinceEpoch);
+    QCOMPARE(datetime, datetime2);
 }
 
 void tst_QDateTime::daylightSavingsTimeChange_data()
@@ -1640,7 +1632,7 @@ void tst_QDateTime::daylightSavingsTimeChange()
 
     // First with simple construction
     QDateTime dt = QDateTime(outDST, QTime(0, 0, 0), Qt::LocalTime);
-    int outDSTsecs = dt.toTime_t();
+    int outDSTsecs = dt.toSecsSinceEpoch();
 
     dt.setDate(inDST);
     dt = dt.addSecs(1);
@@ -1662,8 +1654,8 @@ void tst_QDateTime::daylightSavingsTimeChange()
     dt = dt.addMonths(-months).addSecs(1);
     QCOMPARE(dt, QDateTime(inDST, QTime(0, 0, 5)));
 
-    // now using fromTime_t
-    dt = QDateTime::fromTime_t(outDSTsecs);
+    // now using fromSecsSinceEpoch
+    dt = QDateTime::fromSecsSinceEpoch(outDSTsecs);
     QCOMPARE(dt, QDateTime(outDST, QTime(0, 0, 0)));
 
     dt.setDate(inDST);
@@ -1717,7 +1709,7 @@ void tst_QDateTime::springForward_data()
     QTest::addColumn<int>("adjust"); // minutes ahead of UTC on day stepped from
 
     /*
-      Zone tests compare a summer and winter moment's time_t to known values.
+      Zone tests compare a summer and winter moment's SecsSinceEpoch to known values.
       This could in principle be flawed (two DST-using zones in the same
       hemisphere with the same DST and standard times but different transition
       times) but no actual example is known where this is a problem.  Please
@@ -1727,8 +1719,8 @@ void tst_QDateTime::springForward_data()
       test.
      */
 
-    uint winter = QDateTime(QDate(2015, 1, 1), QTime()).toTime_t();
-    uint summer = QDateTime(QDate(2015, 7, 1), QTime()).toTime_t();
+    uint winter = QDateTime(QDate(2015, 1, 1), QTime()).toSecsSinceEpoch();
+    uint summer = QDateTime(QDate(2015, 7, 1), QTime()).toSecsSinceEpoch();
 
     if (winter == 1420066800 && summer == 1435701600) {
         QTest::newRow("CET from day before") << QDate(2015, 3, 29) << QTime(2, 30, 0) << 1 << 60;
@@ -1859,7 +1851,6 @@ void tst_QDateTime::operator_eqeq()
     }
 }
 
-#ifndef Q_OS_WINCE
 Q_DECLARE_METATYPE(QDataStream::Version)
 
 void tst_QDateTime::operator_insert_extract_data()
@@ -1988,7 +1979,6 @@ void tst_QDateTime::operator_insert_extract()
         qputenv("TZ", previousTimeZone.constData());
     tzset();
 }
-#endif
 
 void tst_QDateTime::toString_strformat()
 {
@@ -2442,7 +2432,7 @@ void tst_QDateTime::setOffsetFromUtc()
     dt1.setMSecsSinceEpoch(123456789);
     QCOMPARE(dt1.timeSpec(), Qt::OffsetFromUTC);
     QCOMPARE(dt1.offsetFromUtc(), 60 * 60);
-    dt1.setTime_t(123456789);
+    dt1.setSecsSinceEpoch(123456789);
     QCOMPARE(dt1.timeSpec(), Qt::OffsetFromUTC);
     QCOMPARE(dt1.offsetFromUtc(), 60 * 60);
 
@@ -3060,7 +3050,7 @@ void tst_QDateTime::timeZones() const
     QCOMPARE(dt1.time(), QTime(0, 0, 0));
     QCOMPARE(dt1.timeZone(), nzTz);
 
-    QDateTime dt2 = QDateTime::fromTime_t(1338465600, nzTz);
+    QDateTime dt2 = QDateTime::fromSecsSinceEpoch(1338465600, nzTz);
     QCOMPARE(dt2.date(), dt1.date());
     QCOMPARE(dt2.time(), dt1.time());
     QCOMPARE(dt2.timeSpec(), dt1.timeSpec());

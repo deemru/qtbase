@@ -428,7 +428,7 @@ QTextHtmlImporter::QTextHtmlImporter(QTextDocument *_doc, const QString &_html, 
     QString html = _html;
     const int startFragmentPos = html.indexOf(QLatin1String("<!--StartFragment-->"));
     if (startFragmentPos != -1) {
-        QString qt3RichTextHeader(QLatin1String("<meta name=\"qrichtext\" content=\"1\" />"));
+        const QLatin1String qt3RichTextHeader("<meta name=\"qrichtext\" content=\"1\" />");
 
         // Hack for Qt3
         const bool hasQtRichtextMetaTag = html.contains(qt3RichTextHeader);
@@ -827,7 +827,7 @@ bool QTextHtmlImporter::closeTag()
             case Html_div:
                 if (closedNode->children.isEmpty())
                     break;
-                // fall through
+                Q_FALLTHROUGH();
             default:
                 if (closedNode->isBlock())
                     blockTagClosed = true;
@@ -882,7 +882,7 @@ QTextHtmlImporter::Table QTextHtmlImporter::scanTable(int tableNodeIdx)
             if (at(cell).isTableCell()) {
                 // skip all columns with spans from previous rows
                 while (colsInRow < rowColSpanForColumn.size()) {
-                    const RowColSpanInfo &spanInfo = rowColSpanForColumn[colsInRow];
+                    const RowColSpanInfo &spanInfo = rowColSpanForColumn.at(colsInRow);
 
                     if (spanInfo.row + spanInfo.rowSpan > effectiveRow) {
                         Q_ASSERT(spanInfo.col == colsInRow);
@@ -1081,8 +1081,8 @@ QTextHtmlImporter::ProcessNodeResult QTextHtmlImporter::processBlockNode()
         && indent != 0
         && (lists.isEmpty()
             || !hasBlock
-            || !lists.last().list
-            || lists.last().list->itemNumber(cursor.block()) == -1
+            || !lists.constLast().list
+            || lists.constLast().list->itemNumber(cursor.block()) == -1
            )
        ) {
         block.setIndent(indent);

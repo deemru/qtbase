@@ -61,8 +61,6 @@ class tst_QTableView : public QObject
     Q_OBJECT
 
 private slots:
-    void initTestCase();
-
     void getSetCheck();
 
     void noDelegate();
@@ -519,13 +517,6 @@ public:
 
     QSize hint;
 };
-
-void tst_QTableView::initTestCase()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QTableView::noDelegate()
 {
@@ -3996,10 +3987,6 @@ void tst_QTableView::mouseWheel_data()
 
 void tst_QTableView::mouseWheel()
 {
-#ifdef Q_OS_WINCE
-    QSKIP("Since different Windows CE versions sport different taskbars, we skip this test");
-#endif
-
     QFETCH(int, scrollMode);
     QFETCH(int, delta);
     QFETCH(int, horizontalPositon);

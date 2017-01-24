@@ -40,7 +40,7 @@
 #ifndef QEVENT_P_H
 #define QEVENT_P_H
 
-#include <QtCore/qglobal.h>
+#include <QtGui/private/qtguiglobal_p.h>
 #include <QtCore/qurl.h>
 #include <QtGui/qevent.h>
 
@@ -65,7 +65,8 @@ public:
         : ref(1),
           id(id),
           state(Qt::TouchPointReleased),
-          pressure(qreal(-1.))
+          pressure(qreal(-1.)),
+          rotation(qreal(0.))
     { }
 
     inline QTouchEventTouchPointPrivate *detach()
@@ -79,12 +80,14 @@ public:
 
     QAtomicInt ref;
     int id;
+    QPointingDeviceUniqueId uniqueId;
     Qt::TouchPointStates state;
     QRectF rect, sceneRect, screenRect;
     QPointF normalizedPos,
             startPos, startScenePos, startScreenPos, startNormalizedPos,
             lastPos, lastScenePos, lastScreenPos, lastNormalizedPos;
     qreal pressure;
+    qreal rotation;
     QVector2D velocity;
     QTouchEvent::TouchPoint::InfoFlags flags;
     QVector<QPointF> rawScreenPositions;

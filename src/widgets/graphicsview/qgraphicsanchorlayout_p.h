@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QGraphicsWidget>
 #include <private/qobject_p.h>
 
@@ -578,7 +579,7 @@ public:
     bool graphHasConflicts[2];
     QSet<QGraphicsLayoutItem *> m_floatItems[2];
 
-#if defined(QT_DEBUG) || defined(Q_AUTOTEST_EXPORT)
+#if defined(QT_DEBUG) || defined(QT_BUILD_INTERNAL)
     bool lastCalculationUsedSimplex[2];
 #endif
 

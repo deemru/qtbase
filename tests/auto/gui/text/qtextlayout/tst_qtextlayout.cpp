@@ -134,6 +134,9 @@ private slots:
     void xToCursorForLigatures();
     void cursorInNonStopChars();
     void nbsp();
+    void nbspWithFormat();
+    void noModificationOfInputString();
+    void superscriptCrash_qtbug53911();
 
 private:
     QFont testFont;
@@ -2162,6 +2165,130 @@ void tst_QTextLayout::layoutWithCustomTabStops()
     qreal longWidth = textLayout->maximumWidth();
 
     QVERIFY(longWidth > shortWidth);
+}
+
+void tst_QTextLayout::noModificationOfInputString()
+{
+    QString s = QString(QChar(QChar::LineSeparator));
+    {
+        QTextLayout layout;
+        layout.setText(s);
+
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+
+        QCOMPARE(s.size(), 1);
+        QCOMPARE(s.at(0), QChar(QChar::LineSeparator));
+    }
+
+    {
+        QTextLayout layout;
+        layout.setText(s);
+
+        QTextOption option;
+        option.setFlags(QTextOption::ShowLineAndParagraphSeparators);
+        layout.setTextOption(option);
+
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+
+        QCOMPARE(s.size(), 1);
+        QCOMPARE(s.at(0), QChar(QChar::LineSeparator));
+    }
+}
+
+void tst_QTextLayout::superscriptCrash_qtbug53911()
+{
+    static int fontSizes = 64;
+    static QString layoutText = "THIS IS SOME EXAMPLE TEXT THIS IS SOME EXAMPLE TEXT";
+
+    QList<QTextLayout*> textLayouts;
+    for (int i = 0; i < fontSizes; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            QTextLayout* newTextLayout = new QTextLayout();
+            newTextLayout->setText(layoutText);
+            QList<QTextLayout::FormatRange> formatRanges;
+            QTextLayout::FormatRange formatRange;
+
+            formatRange.format.setFont(QFont());
+            formatRange.format.setFontPointSize(i + 5);
+
+            switch (j) {
+            case 0:
+                formatRange.format.setFontWeight(QFont::Normal);
+                formatRange.format.setFontItalic(false);
+                break;
+            case 1:
+                formatRange.format.setFontWeight(QFont::Bold);
+                formatRange.format.setFontItalic(false);
+                break;
+            case 2:
+                formatRange.format.setFontWeight(QFont::Bold);
+                formatRange.format.setFontItalic(true);
+                break;
+            case 3:
+                formatRange.format.setFontWeight(QFont::Normal);
+                formatRange.format.setFontItalic(true);
+                break;
+            }
+
+            formatRange.format.setVerticalAlignment( QTextCharFormat::AlignSuperScript);
+
+            formatRange.start = 0;
+            formatRange.length = layoutText.size();
+            formatRanges << formatRange;
+            newTextLayout->setAdditionalFormats(formatRanges);
+
+            textLayouts.push_front(newTextLayout);
+        }
+    }
+
+    // This loop would crash before fix for QTBUG-53911
+    foreach (QTextLayout *textLayout, textLayouts) {
+        textLayout->beginLayout();
+        while (textLayout->createLine().isValid());
+        textLayout->endLayout();
+    }
+
+    qDeleteAll(textLayouts);
+}
+
+void tst_QTextLayout::nbspWithFormat()
+{
+    QString s1 = QLatin1String("ABCDEF ");
+    QString s2 = QLatin1String("GHI");
+    QChar nbsp(QChar::Nbsp);
+    QString s3 = QLatin1String("JKLMNOPQRSTUVWXYZ");
+
+    QTextLayout layout;
+    layout.setText(s1 + s2 + nbsp + s3);
+
+    QTextLayout::FormatRange formatRange;
+    formatRange.start = s1.length() + s2.length();
+    formatRange.length = 1;
+    formatRange.format.setFontUnderline(true);
+
+    QList<QTextLayout::FormatRange> overrides;
+    overrides.append(formatRange);
+
+    layout.setAdditionalFormats(overrides);
+
+    layout.beginLayout();
+    forever {
+        QTextLine line = layout.createLine();
+        if (!line.isValid())
+            break;
+        line.setLineWidth(1);
+    }
+    layout.endLayout();
+
+    QCOMPARE(layout.lineCount(), 2);
+    QCOMPARE(layout.lineAt(0).textStart(), 0);
+    QCOMPARE(layout.lineAt(0).textLength(), s1.length());
+    QCOMPARE(layout.lineAt(1).textStart(), s1.length());
+    QCOMPARE(layout.lineAt(1).textLength(), s2.length() + 1 + s3.length());
 }
 
 QTEST_MAIN(tst_QTextLayout)

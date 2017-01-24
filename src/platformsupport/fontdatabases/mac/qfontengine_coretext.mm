@@ -51,7 +51,7 @@
 #import <AppKit/AppKit.h>
 #endif
 
-#if defined(Q_OS_IOS) && !QT_IOS_DEPLOYMENT_TARGET_BELOW(__IPHONE_8_2)
+#if defined(QT_PLATFORM_UIKIT) && !QT_IOS_DEPLOYMENT_TARGET_BELOW(__IPHONE_8_2)
 #import <UIKit/UIKit.h>
 #endif
 
@@ -78,7 +78,7 @@
 #define kCTFontWeightBold NSFontWeightBold
 #define kCTFontWeightHeavy NSFontWeightHeavy
 #define kCTFontWeightBlack NSFontWeightBlack
-#elif defined(Q_OS_IOS)
+#elif defined(QT_PLATFORM_UIKIT)
 #define kCTFontWeightUltraLight UIFontWeightUltraLight
 #define kCTFontWeightThin UIFontWeightThin
 #define kCTFontWeightLight UIFontWeightLight
@@ -172,7 +172,7 @@ QFontEngine::GlyphFormat QCoreTextFontEngine::defaultGlyphFormat = QFontEngine::
 CGAffineTransform qt_transform_from_fontdef(const QFontDef &fontDef)
 {
     CGAffineTransform transform = CGAffineTransformIdentity;
-    if (fontDef.stretch != 100)
+    if (fontDef.stretch && fontDef.stretch != 100)
         transform = CGAffineTransformMakeScale(float(fontDef.stretch) / float(100), 1);
     return transform;
 }
@@ -213,7 +213,7 @@ void QCoreTextFontEngine::init()
 
     face_id.index = 0;
     QCFString name = CTFontCopyName(ctfont, kCTFontUniqueNameKey);
-    face_id.filename = QCFString::toQString(name).toUtf8();
+    face_id.filename = QString::fromCFString(name).toUtf8();
 
     QCFString family = CTFontCopyFamilyName(ctfont);
     fontDef.family = family;
@@ -224,11 +224,9 @@ void QCoreTextFontEngine::init()
     synthesisFlags = 0;
     CTFontSymbolicTraits traits = CTFontGetSymbolicTraits(ctfont);
 
-#if defined(Q_OS_IOS) || MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-    if (supportsColorGlyphs() && (traits & kCTFontColorGlyphsTrait))
+    if (traits & kCTFontColorGlyphsTrait)
         glyphFormat = QFontEngine::Format_ARGB;
     else
-#endif
         glyphFormat = defaultGlyphFormat;
 
     if (traits & kCTFontItalicTrait)
@@ -257,6 +255,9 @@ void QCoreTextFontEngine::init()
         avgCharWidth = QFixed::fromReal(width * fontDef.pixelSize / emSize);
     } else
         avgCharWidth = QFontEngine::averageCharWidth();
+
+    underlineThickness = QFixed::fromReal(CTFontGetUnderlineThickness(ctfont));
+    underlinePos = -QFixed::fromReal(CTFontGetUnderlinePosition(ctfont));
 
     cache_cost = (CTFontGetAscent(ctfont) + CTFontGetDescent(ctfont)) * avgCharWidth.toInt() * 2000;
 
@@ -377,6 +378,19 @@ QFixed QCoreTextFontEngine::ascent() const
             ? QFixed::fromReal(CTFontGetAscent(ctfont)).round()
             : QFixed::fromReal(CTFontGetAscent(ctfont));
 }
+
+QFixed QCoreTextFontEngine::capHeight() const
+{
+    QFixed c = QFixed::fromReal(CTFontGetCapHeight(ctfont));
+    if (c <= 0)
+        return calculatedCapHeight();
+
+    if (fontDef.styleStrategy & QFont::ForceIntegerMetrics)
+        c = c.round();
+
+    return c;
+}
+
 QFixed QCoreTextFontEngine::descent() const
 {
     QFixed d = QFixed::fromReal(CTFontGetDescent(ctfont));
@@ -439,31 +453,25 @@ void QCoreTextFontEngine::draw(CGContextRef ctx, qreal x, qreal y, const QTextIt
 
     CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
-
-    QVarLengthArray<CGSize> advances(glyphs.size());
+    QVarLengthArray<CGPoint> cgPositions(glyphs.size());
     QVarLengthArray<CGGlyph> cgGlyphs(glyphs.size());
-
-    for (int i = 0; i < glyphs.size() - 1; ++i) {
-        advances[i].width = (positions[i + 1].x - positions[i].x).toReal();
-        advances[i].height = (positions[i + 1].y - positions[i].y).toReal();
+    const qreal firstX = positions[0].x.toReal();
+    const qreal firstY = positions[0].y.toReal();
+    for (int i = 0; i < glyphs.size(); ++i) {
+        cgPositions[i].x = positions[i].x.toReal() - firstX;
+        cgPositions[i].y = positions[i].y.toReal() - firstY;
         cgGlyphs[i] = glyphs[i];
     }
-    advances[glyphs.size() - 1].width = 0;
-    advances[glyphs.size() - 1].height = 0;
-    cgGlyphs[glyphs.size() - 1] = glyphs[glyphs.size() - 1];
 
-    CGContextSetFont(ctx, cgFont);
     //NSLog(@"Font inDraw %@  ctfont %@", CGFontCopyFullName(cgFont), CTFontCopyFamilyName(ctfont));
 
     CGContextSetTextPosition(ctx, positions[0].x.toReal(), positions[0].y.toReal());
-
-    CGContextShowGlyphsWithAdvances(ctx, cgGlyphs.data(), advances.data(), glyphs.size());
+    CTFontDrawGlyphs(ctfont, cgGlyphs.data(), cgPositions.data(), glyphs.size(), ctx);
 
     if (synthesisFlags & QFontEngine::SynthesizedBold) {
         CGContextSetTextPosition(ctx, positions[0].x.toReal() + 0.5 * lineThickness().toReal(),
                                  positions[0].y.toReal());
-
-        CGContextShowGlyphsWithAdvances(ctx, cgGlyphs.data(), advances.data(), glyphs.size());
+        CTFontDrawGlyphs(ctfont, cgGlyphs.data(), cgPositions.data(), glyphs.size(), ctx);
     }
 
     CGContextSetTextMatrix(ctx, oldTextMatrix);
@@ -608,7 +616,7 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, QFixed subPixelPosition
     if (!im.width() || !im.height())
         return im;
 
-#ifndef Q_OS_IOS
+#ifdef Q_OS_OSX
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
 #else
     CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
@@ -647,18 +655,15 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, QFixed subPixelPosition
         CGContextSetTextMatrix(ctx, cgMatrix);
         CGContextSetRGBFillColor(ctx, 1, 1, 1, 1);
         CGContextSetTextDrawingMode(ctx, kCGTextFill);
-        CGContextSetFont(ctx, cgFont);
         CGContextSetTextPosition(ctx, pos_x, pos_y);
 
-        CGContextShowGlyphsWithAdvances(ctx, &cgGlyph, &CGSizeZero, 1);
+        CTFontDrawGlyphs(ctfont, &cgGlyph, &CGPointZero, 1, ctx);
 
         if (synthesisFlags & QFontEngine::SynthesizedBold) {
             CGContextSetTextPosition(ctx, pos_x + 0.5 * lineThickness().toReal(), pos_y);
-            CGContextShowGlyphsWithAdvances(ctx, &cgGlyph, &CGSizeZero, 1);
+            CTFontDrawGlyphs(ctfont, &cgGlyph, &CGPointZero, 1, ctx);
         }
-    }
-#if defined(Q_OS_IOS) || MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
-    else if (supportsColorGlyphs()) {
+    } else {
         // CGContextSetTextMatrix does not work with color glyphs, so we use
         // the CTM instead. This means we must translate the CTM as well, to
         // set the glyph position, instead of using CGContextSetTextPosition.
@@ -669,7 +674,6 @@ QImage QCoreTextFontEngine::imageForGlyph(glyph_t glyph, QFixed subPixelPosition
         // glyphs in the Apple Color Emoji font, so we use CTFontDrawGlyphs instead.
         CTFontDrawGlyphs(ctfont, &cgGlyph, &CGPointZero, 1, ctx);
     }
-#endif
 
     CGContextRelease(ctx);
     CGColorSpaceRelease(colorspace);
@@ -805,6 +809,16 @@ bool QCoreTextFontEngine::supportsTransformation(const QTransform &transform) co
         return false;
 }
 
+QFixed QCoreTextFontEngine::lineThickness() const
+{
+    return underlineThickness;
+}
+
+QFixed QCoreTextFontEngine::underlinePosition() const
+{
+    return underlinePos;
+}
+
 QFontEngine::Properties QCoreTextFontEngine::properties() const
 {
     Properties result;
@@ -812,8 +826,8 @@ QFontEngine::Properties QCoreTextFontEngine::properties() const
     QCFString psName, copyright;
     psName = CTFontCopyPostScriptName(ctfont);
     copyright = CTFontCopyName(ctfont, kCTFontCopyrightNameKey);
-    result.postscriptName = QCFString::toQString(psName).toUtf8();
-    result.copyright = QCFString::toQString(copyright).toUtf8();
+    result.postscriptName = QString::fromCFString(psName).toUtf8();
+    result.copyright = QString::fromCFString(copyright).toUtf8();
 
     qreal emSquare = CTFontGetUnitsPerEm(ctfont);
     qreal scale = emSquare / CTFontGetSize(ctfont);

@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qatomic.h"
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/QLinkedList>
@@ -211,6 +211,7 @@ public:
     glyph_metrics_t tightBoundingBox(const QGlyphLayout &glyphs);
 
     virtual QFixed ascent() const = 0;
+    virtual QFixed capHeight() const = 0;
     virtual QFixed descent() const = 0;
     virtual QFixed leading() const = 0;
     virtual QFixed xHeight() const;
@@ -324,6 +325,7 @@ public:
     uint cache_cost; // amount of mem used in bytes by the font
     uint fsType : 16;
     bool symbol;
+    bool isSmoothlyScalable;
     struct KernPair {
         uint left_right;
         QFixed adjust;
@@ -348,6 +350,7 @@ protected:
     QFixed lastRightBearing(const QGlyphLayout &glyphs, bool round = false);
 
     inline void setUserData(const QVariant &userData) { m_userData = userData; }
+    QFixed calculatedCapHeight() const;
 
 private:
     struct GlyphCacheEntry {
@@ -357,12 +360,11 @@ private:
 
         GlyphCacheEntry &operator=(const GlyphCacheEntry &);
 
-        const void *context;
         QExplicitlySharedDataPointer<QFontEngineGlyphCache> cache;
-        bool operator==(const GlyphCacheEntry &other) const { return context == other.context && cache == other.cache; }
+        bool operator==(const GlyphCacheEntry &other) const { return cache == other.cache; }
     };
-
-    mutable QLinkedList<GlyphCacheEntry> m_glyphCaches;
+    typedef QLinkedList<GlyphCacheEntry> GlyphCaches;
+    mutable QHash<const void *, GlyphCaches> m_glyphCaches;
 
 private:
     QVariant m_userData;
@@ -414,6 +416,7 @@ public:
     virtual QFontEngine *cloneWithSize(qreal pixelSize) const Q_DECL_OVERRIDE;
 
     virtual QFixed ascent() const Q_DECL_OVERRIDE;
+    virtual QFixed capHeight() const Q_DECL_OVERRIDE;
     virtual QFixed descent() const Q_DECL_OVERRIDE;
     virtual QFixed leading() const Q_DECL_OVERRIDE;
     virtual qreal maxCharWidth() const Q_DECL_OVERRIDE;
@@ -451,6 +454,7 @@ public:
     virtual void getGlyphBearings(glyph_t glyph, qreal *leftBearing = 0, qreal *rightBearing = 0) Q_DECL_OVERRIDE;
 
     virtual QFixed ascent() const Q_DECL_OVERRIDE;
+    virtual QFixed capHeight() const Q_DECL_OVERRIDE;
     virtual QFixed descent() const Q_DECL_OVERRIDE;
     virtual QFixed leading() const Q_DECL_OVERRIDE;
     virtual QFixed xHeight() const Q_DECL_OVERRIDE;

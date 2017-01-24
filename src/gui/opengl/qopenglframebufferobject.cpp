@@ -856,10 +856,8 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, GLenum tar
     \sa size(), texture()
 */
 QOpenGLFramebufferObject::QOpenGLFramebufferObject(int width, int height, GLenum target)
-    : d_ptr(new QOpenGLFramebufferObjectPrivate)
+    : QOpenGLFramebufferObject(QSize(width, height), target)
 {
-    Q_D(QOpenGLFramebufferObject);
-    d->init(this, QSize(width, height), NoAttachment, target, effectiveInternalFormat(0));
 }
 
 /*! \overload
@@ -883,11 +881,8 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, const QOpe
 */
 
 QOpenGLFramebufferObject::QOpenGLFramebufferObject(int width, int height, const QOpenGLFramebufferObjectFormat &format)
-    : d_ptr(new QOpenGLFramebufferObjectPrivate)
+    : QOpenGLFramebufferObject(QSize(width, height), format)
 {
-    Q_D(QOpenGLFramebufferObject);
-    d->init(this, QSize(width, height), format.attachment(), format.textureTarget(),
-            format.internalTextureFormat(), format.samples(), format.mipmap());
 }
 
 /*! \overload
@@ -955,6 +950,12 @@ QOpenGLFramebufferObject::~QOpenGLFramebufferObject()
         d->stencil_buffer_guard->free();
     if (d->fbo_guard)
         d->fbo_guard->free();
+
+    QOpenGLContextPrivate *contextPrv = QOpenGLContextPrivate::get(QOpenGLContext::currentContext());
+    if (contextPrv && contextPrv->qgl_current_fbo == this) {
+        contextPrv->qgl_current_fbo_invalid = true;
+        contextPrv->qgl_current_fbo = Q_NULLPTR;
+    }
 }
 
 /*!
@@ -1074,11 +1075,12 @@ bool QOpenGLFramebufferObject::bind()
     d->funcs.glBindFramebuffer(GL_FRAMEBUFFER, d->fbo());
 
     QOpenGLContextPrivate::get(current)->qgl_current_fbo_invalid = true;
+    QOpenGLContextPrivate::get(current)->qgl_current_fbo = this;
 
     if (d->format.samples() == 0) {
         // Create new textures to replace the ones stolen via takeTexture().
         for (int i = 0; i < d->colorAttachments.count(); ++i) {
-            if (!d->colorAttachments[i].guard)
+            if (!d->colorAttachments.at(i).guard)
                 d->initTexture(i);
         }
     }
@@ -1113,7 +1115,9 @@ bool QOpenGLFramebufferObject::release()
     if (current) {
         d->funcs.glBindFramebuffer(GL_FRAMEBUFFER, current->defaultFramebufferObject());
 
-        QOpenGLContextPrivate::get(current)->qgl_current_fbo_invalid = true;
+        QOpenGLContextPrivate *contextPrv = QOpenGLContextPrivate::get(current);
+        contextPrv->qgl_current_fbo_invalid = true;
+        contextPrv->qgl_current_fbo = Q_NULLPTR;
     }
 
     return true;
@@ -1211,10 +1215,11 @@ GLuint QOpenGLFramebufferObject::takeTexture(int colorAttachmentIndex)
         QOpenGLContext *current = QOpenGLContext::currentContext();
         if (current && current->shareGroup() == d->fbo_guard->group() && isBound())
             release();
-        id = d->colorAttachments[colorAttachmentIndex].guard ? d->colorAttachments[colorAttachmentIndex].guard->id() : 0;
+        auto &guard = d->colorAttachments[colorAttachmentIndex].guard;
+        id = guard ? guard->id() : 0;
         // Do not call free() on texture_guard, just null it out.
         // This way the texture will not be deleted when the guard is destroyed.
-        d->colorAttachments[colorAttachmentIndex].guard = 0;
+        guard = 0;
     }
     return id;
 }
@@ -1284,6 +1289,7 @@ static inline QImage qt_gl_read_framebuffer_rgba8(const QSize &size, bool includ
                               ? context->hasExtension(QByteArrayLiteral("GL_EXT_read_format_bgra"))
                               : context->hasExtension(QByteArrayLiteral("GL_EXT_bgra"));
 
+#ifndef Q_OS_IOS
     const char *renderer = reinterpret_cast<const char *>(funcs->glGetString(GL_RENDERER));
     const char *ver = reinterpret_cast<const char *>(funcs->glGetString(GL_VERSION));
 
@@ -1293,8 +1299,11 @@ static inline QImage qt_gl_read_framebuffer_rgba8(const QSize &size, bool includ
                              (qstrcmp(renderer, "Mali-T760") == 0
                              && ::strstr(ver, "3.1") != 0) ||
                              (qstrcmp(renderer, "Mali-T720") == 0
-                             && ::strstr(ver, "3.1") != 0);
-
+                             && ::strstr(ver, "3.1") != 0) ||
+                             qstrcmp(renderer, "PowerVR SGX 554") == 0;
+#else
+    const bool blackListed = true;
+#endif
     const bool supports_bgra = has_bgra_ext && !blackListed;
 
     if (supports_bgra) {
@@ -1489,6 +1498,7 @@ bool QOpenGLFramebufferObject::bindDefault()
     if (ctx) {
         ctx->functions()->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
         QOpenGLContextPrivate::get(ctx)->qgl_current_fbo_invalid = true;
+        QOpenGLContextPrivate::get(ctx)->qgl_current_fbo = Q_NULLPTR;
     }
 #ifdef QT_DEBUG
     else

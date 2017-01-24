@@ -42,8 +42,6 @@
 #include <qstylefactory.h>
 #include <qscreen.h>
 
-#include "../../../qtest-config.h"
-
 typedef QList<QGraphicsItem *> QGraphicsItemList;
 
 class EventSpy : public QObject
@@ -1112,9 +1110,7 @@ void tst_QGraphicsWidget::initStyleOption()
     bool hasFocus = option.state & QStyle::State_HasFocus;
     QCOMPARE(hasFocus, focus);
     bool isUnderMouse = option.state & QStyle::State_MouseOver;
-#ifndef Q_OS_WINCE
     QCOMPARE(isUnderMouse, underMouse);
-#endif
     // if (layoutDirection != Qt::LeftToRight)
     //QEXPECT_FAIL("", "QApplicaiton::layoutDirection doesn't propagate to QGraphicsWidget", Continue);
     //QCOMPARE(option.direction, layoutDirection);
@@ -2938,8 +2934,8 @@ protected:
 
 void tst_QGraphicsWidget::respectHFW()
 {
-#if defined(Q_OS_WINCE) || defined(Q_OS_MAC)
-    QSKIP("This test is platform dependent, it fails on wince and mac. Please fix.");
+#if defined(Q_OS_DARWIN)
+    QSKIP("This test is platform dependent, it fails on Apple platforms. Please fix.");
 #else
     QGraphicsScene scene;
     HFWWidget *window = new HFWWidget;
@@ -3184,7 +3180,7 @@ void tst_QGraphicsWidget::itemChangeEvents()
                 valueDuringEvents.insert(QEvent::ParentChange, QVariant::fromValue(parentItem()));
                 break;
             }
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
             case QEvent::CursorChange: {
                 valueDuringEvents.insert(QEvent::CursorChange, int(cursor().shape()));
                 break;
@@ -3235,7 +3231,7 @@ void tst_QGraphicsWidget::itemChangeEvents()
     QVERIFY(!item->isVisible());
     QTRY_VERIFY(!item->valueDuringEvents.value(QEvent::Hide).toBool());
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     // CursorChange should be triggered after the cursor has changed
     item->setCursor(Qt::PointingHandCursor);
     QTRY_COMPARE(item->valueDuringEvents.value(QEvent::CursorChange).toInt(), int(item->cursor().shape()));

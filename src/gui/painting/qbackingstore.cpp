@@ -112,6 +112,8 @@ void QBackingStore::flush(const QRegion &region, QWindow *win, const QPoint &off
     }
 #endif
 
+    Q_ASSERT(win == this->window() || this->window()->isAncestorOf(win, QWindow::ExcludeTransients));
+
     d_ptr->platformBackingStore->flush(win, QHighDpi::toNativeLocalRegion(region, win),
                                             QHighDpi::toNativeLocalPosition(offset, win));
 }
@@ -138,6 +140,7 @@ QBackingStore::QBackingStore(QWindow *window)
     : d_ptr(new QBackingStorePrivate(window))
 {
     d_ptr->platformBackingStore = QGuiApplicationPrivate::platformIntegration()->createPlatformBackingStore(window);
+    d_ptr->platformBackingStore->setBackingStore(this);
 }
 
 /*!
@@ -236,11 +239,16 @@ QSize QBackingStore::size() const
 */
 bool QBackingStore::scroll(const QRegion &area, int dx, int dy)
 {
-    Q_UNUSED(area);
-    Q_UNUSED(dx);
-    Q_UNUSED(dy);
+    // Disable scrolling for non-integer scroll deltas. For this case
+    // the the existing rendered pixels can't be re-used, and we return
+    // false to signal that a repaint is needed.
+    const qreal nativeDx = QHighDpi::toNativePixels(qreal(dx), d_ptr->window);
+    const qreal nativeDy = QHighDpi::toNativePixels(qreal(dy), d_ptr->window);
+    if (qFloor(nativeDx) != nativeDx || qFloor(nativeDy) != nativeDy)
+        return false;
 
-    return d_ptr->platformBackingStore->scroll(QHighDpi::toNativeLocalRegion(area, d_ptr->window), QHighDpi::toNativePixels(dx, d_ptr->window), QHighDpi::toNativePixels(dy, d_ptr->window));
+    return d_ptr->platformBackingStore->scroll(QHighDpi::toNativeLocalRegion(area, d_ptr->window),
+                                               nativeDx, nativeDy);
 }
 
 /*!

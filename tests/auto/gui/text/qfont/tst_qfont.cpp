@@ -62,6 +62,7 @@ private slots:
     void styleName();
     void defaultFamily_data();
     void defaultFamily();
+    void toAndFromString();
 
     void sharing();
 };
@@ -508,11 +509,11 @@ void tst_QFont::defaultFamily_data()
     QTest::addColumn<QFont::StyleHint>("styleHint");
     QTest::addColumn<QStringList>("acceptableFamilies");
 
-    QTest::newRow("serif") << QFont::Serif << (QStringList() << "Times New Roman" << "Times" << "Droid Serif" << getPlatformGenericFont("serif"));
-    QTest::newRow("monospace") << QFont::Monospace << (QStringList() << "Courier New" << "Monaco" << "Droid Sans Mono" << getPlatformGenericFont("monospace"));
-    QTest::newRow("cursive") << QFont::Cursive << (QStringList() << "Comic Sans MS" << "Apple Chancery" << "Roboto" << "Droid Sans" << getPlatformGenericFont("cursive"));
-    QTest::newRow("fantasy") << QFont::Fantasy << (QStringList() << "Impact" << "Zapfino"  << "Roboto" << "Droid Sans" << getPlatformGenericFont("fantasy"));
-    QTest::newRow("sans-serif") << QFont::SansSerif << (QStringList() << "Arial" << "Lucida Grande" << "Roboto" << "Droid Sans" << getPlatformGenericFont("sans-serif"));
+    QTest::newRow("serif") << QFont::Serif << (QStringList() << "Times New Roman" << "Times" << "Droid Serif" << getPlatformGenericFont("serif").split(","));
+    QTest::newRow("monospace") << QFont::Monospace << (QStringList() << "Courier New" << "Monaco" << "Droid Sans Mono" << getPlatformGenericFont("monospace").split(","));
+    QTest::newRow("cursive") << QFont::Cursive << (QStringList() << "Comic Sans MS" << "Apple Chancery" << "Roboto" << "Droid Sans" << getPlatformGenericFont("cursive").split(","));
+    QTest::newRow("fantasy") << QFont::Fantasy << (QStringList() << "Impact" << "Zapfino"  << "Roboto" << "Droid Sans" << getPlatformGenericFont("fantasy").split(","));
+    QTest::newRow("sans-serif") << QFont::SansSerif << (QStringList() << "Arial" << "Lucida Grande" << "Roboto" << "Droid Sans" << getPlatformGenericFont("sans-serif").split(","));
 }
 
 void tst_QFont::defaultFamily()
@@ -537,6 +538,26 @@ void tst_QFont::defaultFamily()
     }
 
     QVERIFY2(isAcceptable, msgNotAcceptableFont(familyForHint, acceptableFamilies));
+}
+
+void tst_QFont::toAndFromString()
+{
+    QFont defaultFont = QGuiApplication::font();
+    QString family = defaultFont.family();
+
+    QFontDatabase fdb;
+    const QStringList stylesList = fdb.styles(family);
+    if (stylesList.size() == 0)
+        QSKIP("Default font doesn't have any styles");
+
+    for (const QString &style : stylesList) {
+        QFont result;
+        QFont initial = fdb.font(family, style, defaultFont.pointSize());
+
+        result.fromString(initial.toString());
+
+        QCOMPARE(result, initial);
+    }
 }
 
 void tst_QFont::sharing()

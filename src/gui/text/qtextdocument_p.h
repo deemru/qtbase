@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qstring.h"
 #include "QtCore/qvector.h"
 #include "QtCore/qlist.h"
@@ -158,7 +158,7 @@ public:
 };
 Q_DECLARE_TYPEINFO(QTextUndoCommand, Q_PRIMITIVE_TYPE);
 
-class Q_AUTOTEST_EXPORT QTextDocumentPrivate : public QObjectPrivate
+class Q_GUI_EXPORT QTextDocumentPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QTextDocument)
 public:
@@ -378,7 +378,7 @@ private:
     enum StyleMode { EmitStyleTag, OmitStyleTag };
     enum FrameType { TextFrame, TableFrame, RootFrame };
 
-    void emitFrame(QTextFrame::Iterator frameIt);
+    void emitFrame(const QTextFrame::Iterator &frameIt);
     void emitTextFrame(const QTextFrame *frame);
     void emitBlock(const QTextBlock &block);
     void emitTable(const QTextTable *table);

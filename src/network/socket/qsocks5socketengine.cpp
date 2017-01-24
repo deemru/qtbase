@@ -64,11 +64,7 @@ static const int MaxWriteBufferSize = 128*1024;
 //#define QSOCKS5SOCKETLAYER_DEBUG
 
 #define MAX_DATA_DUMP 256
-#if !defined(Q_OS_WINCE)
 #define SOCKS5_BLOCKING_BIND_TIMEOUT 5000
-#else
-#define SOCKS5_BLOCKING_BIND_TIMEOUT 10000
-#endif
 
 #define Q_INIT_CHECK(returnValue) do { \
     if (!d->data) { \
@@ -622,7 +618,7 @@ void QSocks5SocketEnginePrivate::setErrorState(Socks5State state, const QString 
                                  QSocks5SocketEngine::tr("Connection to proxy timed out"));
                     break;
                 }
-                /* fall through */
+                Q_FALLTHROUGH();
             default:
                 q->setError(controlSocketError, data->controlSocket->errorString());
                 break;
@@ -1122,7 +1118,9 @@ bool QSocks5SocketEngine::connectInternal()
     }
 
     if (d->socketState != QAbstractSocket::ConnectingState) {
-        if (d->socks5State == QSocks5SocketEnginePrivate::Uninitialized) {
+        if (d->socks5State == QSocks5SocketEnginePrivate::Uninitialized
+            // We may have new auth credentials since an earlier failure:
+         || d->socks5State == QSocks5SocketEnginePrivate::AuthenticatingError) {
             setState(QAbstractSocket::ConnectingState);
             //limit buffer in internal socket, data is buffered in the external socket under application control
             d->data->controlSocket->setReadBufferSize(65536);
@@ -1207,7 +1205,7 @@ void QSocks5SocketEnginePrivate::_q_controlSocketReadNotification()
                 break;
             }
 
-            // fall through
+            Q_FALLTHROUGH();
         default:
             qWarning("QSocks5SocketEnginePrivate::_q_controlSocketReadNotification: "
                      "Unexpectedly received data while in state=%d and mode=%d",
@@ -1607,8 +1605,31 @@ bool QSocks5SocketEngine::setMulticastInterface(const QNetworkInterface &)
 }
 #endif // QT_NO_NETWORKINTERFACE
 
+bool QSocks5SocketEngine::hasPendingDatagrams() const
+{
+    Q_D(const QSocks5SocketEngine);
+    Q_INIT_CHECK(false);
+
+    d->checkForDatagrams();
+
+    return !d->udpData->pendingDatagrams.isEmpty();
+}
+
+qint64 QSocks5SocketEngine::pendingDatagramSize() const
+{
+    Q_D(const QSocks5SocketEngine);
+
+    d->checkForDatagrams();
+
+    if (!d->udpData->pendingDatagrams.isEmpty())
+        return d->udpData->pendingDatagrams.head().data.size();
+    return 0;
+}
+#endif // QT_NO_UDPSOCKET
+
 qint64 QSocks5SocketEngine::readDatagram(char *data, qint64 maxlen, QIpPacketHeader *header, PacketHeaderOptions)
 {
+#ifndef QT_NO_UDPSOCKET
     Q_D(QSocks5SocketEngine);
 
     d->checkForDatagrams();
@@ -1622,10 +1643,17 @@ qint64 QSocks5SocketEngine::readDatagram(char *data, qint64 maxlen, QIpPacketHea
     header->senderAddress = datagram.address;
     header->senderPort = datagram.port;
     return copyLen;
+#else
+    Q_UNUSED(data)
+    Q_UNUSED(maxlen)
+    Q_UNUSED(header)
+    return -1;
+#endif // QT_NO_UDPSOCKET
 }
 
 qint64 QSocks5SocketEngine::writeDatagram(const char *data, qint64 len, const QIpPacketHeader &header)
 {
+#ifndef QT_NO_UDPSOCKET
     Q_D(QSocks5SocketEngine);
 
     // it is possible to send with out first binding with udp, but socks5 requires a bind.
@@ -1662,29 +1690,13 @@ qint64 QSocks5SocketEngine::writeDatagram(const char *data, qint64 len, const QI
     }
 
     return len;
-}
-
-bool QSocks5SocketEngine::hasPendingDatagrams() const
-{
-    Q_D(const QSocks5SocketEngine);
-    Q_INIT_CHECK(false);
-
-    d->checkForDatagrams();
-
-    return !d->udpData->pendingDatagrams.isEmpty();
-}
-
-qint64 QSocks5SocketEngine::pendingDatagramSize() const
-{
-    Q_D(const QSocks5SocketEngine);
-
-    d->checkForDatagrams();
-
-    if (!d->udpData->pendingDatagrams.isEmpty())
-        return d->udpData->pendingDatagrams.head().data.size();
-    return 0;
-}
+#else
+    Q_UNUSED(data)
+    Q_UNUSED(len)
+    Q_UNUSED(header)
+    return -1;
 #endif // QT_NO_UDPSOCKET
+}
 
 qint64 QSocks5SocketEngine::bytesToWrite() const
 {

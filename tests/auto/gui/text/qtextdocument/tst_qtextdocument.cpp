@@ -314,6 +314,8 @@ void tst_QTextDocument::find_data()
                                        << 15 << 6 << 11;
 
     QTest::newRow("nbsp") << "Hello" + QString(QChar(QChar::Nbsp)) +"World" << " " << int(QTextDocument::FindCaseSensitively) << 0 << 5 << 6;
+
+    QTest::newRow("from-the-end") << "Hello World" << "Hello World" << int(QTextDocument::FindCaseSensitively| QTextDocument::FindBackward) << 11 << 0 << 11;
 }
 
 void tst_QTextDocument::find()
@@ -455,6 +457,24 @@ void tst_QTextDocument::findMultiple()
     QCOMPARE(cursor.selectionStart(), text.indexOf("bar"));
     QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
     cursor = doc->find(expr, cursor);
+    QCOMPARE(cursor.selectionStart(), text.lastIndexOf("bar"));
+    QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
+
+    QRegularExpression regularExpression("bar");
+
+    cursor.movePosition(QTextCursor::End);
+    cursor = doc->find(regularExpression, cursor, QTextDocument::FindBackward);
+    QCOMPARE(cursor.selectionStart(), text.lastIndexOf("bar"));
+    QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
+    cursor = doc->find(regularExpression, cursor, QTextDocument::FindBackward);
+    QCOMPARE(cursor.selectionStart(), text.indexOf("bar"));
+    QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
+
+    cursor.movePosition(QTextCursor::Start);
+    cursor = doc->find(regularExpression, cursor);
+    QCOMPARE(cursor.selectionStart(), text.indexOf("bar"));
+    QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
+    cursor = doc->find(regularExpression, cursor);
     QCOMPARE(cursor.selectionStart(), text.lastIndexOf("bar"));
     QCOMPARE(cursor.selectionEnd(), cursor.selectionStart() + 3);
 }
@@ -2901,14 +2921,27 @@ void tst_QTextDocument::testUndoBlocks()
     doc->undo();
     QCOMPARE(doc->toPlainText(), QString(""));
 
+    cursor.insertText("town");
+    cursor.beginEditBlock(); // Edit block 1 - Deletion/Insertion
+    cursor.setPosition(0, QTextCursor::KeepAnchor);
+    cursor.insertText("r");
+    cursor.endEditBlock();
+    cursor.insertText("est"); // Merged into edit block 1
+    QCOMPARE(doc->toPlainText(), QString("rest"));
+    doc->undo();
+    QCOMPARE(doc->toPlainText(), QString("town"));
+    doc->undo();
+    QCOMPARE(doc->toPlainText(), QString(""));
+
+    // This case would not happen in practice. If the user typed out this text, it would all be part of one
+    // edit block. This would cause the undo to clear all text. But for the purpose of testing the beginEditBlock
+    // and endEditBlock calls with respect to qtextdocument this is tested.
     cursor.insertText("quod");
-    cursor.beginEditBlock();
+    cursor.beginEditBlock(); // Edit block 1 - Insertion
     cursor.insertText(" erat");
     cursor.endEditBlock();
-    cursor.insertText(" demonstrandum");
+    cursor.insertText(" demonstrandum"); // Merged into edit block 1
     QCOMPARE(doc->toPlainText(), QString("quod erat demonstrandum"));
-    doc->undo();
-    QCOMPARE(doc->toPlainText(), QString("quod erat"));
     doc->undo();
     QCOMPARE(doc->toPlainText(), QString("quod"));
     doc->undo();

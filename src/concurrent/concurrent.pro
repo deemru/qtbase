@@ -37,8 +37,4 @@ HEADERS += \
 # private headers
 HEADERS += \
 
-contains(QT_CONFIG, clock-gettime) {
-    linux-*|hpux-*|solaris-*: LIBS_PRIVATE *= -lrt
-}
-
 load(qt_module)

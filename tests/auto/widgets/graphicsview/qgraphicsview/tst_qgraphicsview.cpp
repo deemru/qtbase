@@ -49,12 +49,14 @@
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QDesktopWidget>
+#ifndef QT_NO_OPENGL
+#include <QtWidgets/QOpenGLWidget>
+#endif
 #include <private/qgraphicsscene_p.h>
 #include <private/qgraphicsview_p.h>
 #include "../../../shared/platforminputcontext.h"
 #include <private/qinputmethod_p.h>
 
-#include "../../../qtest-config.h"
 #include "tst_qgraphicsview.h"
 
 Q_DECLARE_METATYPE(ExpectedValueDescription)
@@ -143,7 +145,6 @@ public:
         : platformName(QGuiApplication::platformName().toLower())
     { }
 private slots:
-    void initTestCase();
     void cleanup();
     void construction();
     void renderHints();
@@ -156,6 +157,9 @@ private slots:
     void sceneRect_growing();
     void setSceneRect();
     void viewport();
+#ifndef QT_NO_OPENGL
+    void openGLViewport();
+#endif
     void dragMode_scrollHand();
     void dragMode_rubberBand();
     void rubberBandSelectionMode();
@@ -196,7 +200,7 @@ private slots:
 #ifndef QT_NO_WHEELEVENT
     void wheelEvent();
 #endif
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void cursor();
     void cursor2();
 #endif
@@ -260,7 +264,7 @@ private slots:
     void QTBUG_4151_clipAndIgnore_data();
     void QTBUG_4151_clipAndIgnore();
     void QTBUG_5859_exposedRect();
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void QTBUG_7438_cursor();
 #endif
     void hoverLeave();
@@ -272,13 +276,6 @@ public slots:
 private:
     QString platformName;
 };
-
-void tst_QGraphicsView::initTestCase()
-{
-#ifdef Q_OS_WINCE_WM
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QGraphicsView::cleanup()
 {
@@ -664,6 +661,45 @@ void tst_QGraphicsView::viewport()
     QTest::qWait(25);
 }
 
+#ifndef QT_NO_OPENGL
+void tst_QGraphicsView::openGLViewport()
+{
+    QGraphicsScene scene;
+    scene.setBackgroundBrush(Qt::white);
+    scene.addText("GraphicsView");
+    scene.addEllipse(QRectF(400, 50, 50, 50));
+    scene.addEllipse(QRectF(-100, -400, 50, 50));
+    scene.addEllipse(QRectF(50, -100, 50, 50));
+    scene.addEllipse(QRectF(-100, 50, 50, 50));
+
+    QGraphicsView view(&scene);
+    view.setSceneRect(-400, -400, 800, 800);
+    view.resize(400, 400);
+
+    QOpenGLWidget *glw = new QOpenGLWidget;
+    QSignalSpy spy1(glw, SIGNAL(resized()));
+    QSignalSpy spy2(glw, SIGNAL(frameSwapped()));
+
+    view.setViewport(glw);
+
+    view.show();
+    QTest::qWaitForWindowExposed(&view);
+    QTRY_VERIFY(spy1.count() > 0);
+    QTRY_VERIFY(spy2.count() >= spy1.count());
+    spy1.clear();
+    spy2.clear();
+
+    // Now test for resize (QTBUG-52419). This is special when the viewport is
+    // a QOpenGLWidget since the underlying FBO must also be maintained.
+    view.resize(300, 300);
+    QTRY_VERIFY(spy1.count() > 0);
+    QTRY_VERIFY(spy2.count() >= spy1.count());
+    // There is no sane way to check if the framebuffer contents got updated
+    // (grabFramebuffer is no good for the viewport case as that does not go
+    // through paintGL). So skip the actual verification.
+}
+#endif
+
 void tst_QGraphicsView::dragMode_scrollHand()
 {
     for (int j = 0; j < 2; ++j) {
@@ -694,7 +730,7 @@ void tst_QGraphicsView::dragMode_scrollHand()
 
         for (int i = 0; i < 2; ++i) {
             // ScrollHandDrag
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
             Qt::CursorShape cursorShape = view.viewport()->cursor().shape();
 #endif
             int horizontalScrollBarValue = view.horizontalScrollBar()->value();
@@ -713,7 +749,7 @@ void tst_QGraphicsView::dragMode_scrollHand()
             QTRY_VERIFY(item->isSelected());
 
             for (int k = 0; k < 4; ++k) {
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
                 QCOMPARE(view.viewport()->cursor().shape(), Qt::ClosedHandCursor);
 #endif
                 {
@@ -756,7 +792,7 @@ void tst_QGraphicsView::dragMode_scrollHand()
             QTRY_VERIFY(item->isSelected());
             QCOMPARE(view.horizontalScrollBar()->value(), horizontalScrollBarValue - 10);
             QCOMPARE(view.verticalScrollBar()->value(), verticalScrollBarValue - 10);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
             QCOMPARE(view.viewport()->cursor().shape(), cursorShape);
 #endif
 
@@ -816,7 +852,7 @@ void tst_QGraphicsView::dragMode_rubberBand()
 
     for (int i = 0; i < 2; ++i) {
         // RubberBandDrag
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         Qt::CursorShape cursorShape = view.viewport()->cursor().shape();
 #endif
         int horizontalScrollBarValue = view.horizontalScrollBar()->value();
@@ -830,7 +866,7 @@ void tst_QGraphicsView::dragMode_rubberBand()
             QApplication::sendEvent(view.viewport(), &event);
             QVERIFY(event.isAccepted());
         }
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         QCOMPARE(view.viewport()->cursor().shape(), cursorShape);
 #endif
 
@@ -878,7 +914,7 @@ void tst_QGraphicsView::dragMode_rubberBand()
         }
         QCOMPARE(view.horizontalScrollBar()->value(), horizontalScrollBarValue);
         QCOMPARE(view.verticalScrollBar()->value(), verticalScrollBarValue);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         QCOMPARE(view.viewport()->cursor().shape(), cursorShape);
 #endif
 
@@ -1383,20 +1419,9 @@ void tst_QGraphicsView::fitInView()
     items[0]->setTransform(QTransform().rotate(30), true);
     items[1]->setTransform(QTransform().rotate(-30), true);
 
-#if defined(Q_OS_WINCE)
-    //Is the standard scrollbar size
-    int scrollbarSize = qApp->style()->pixelMetric(QStyle::PM_ScrollBarExtent) - 13;
-#endif
-
     QGraphicsView view(&scene);
     view.setSceneRect(-400, -400, 800, 800);
-
-#if defined(Q_OS_WINCE)
-    //We need to take in account the scrollbar size for the WindowsMobilStyle
-    view.setFixedSize(400 + scrollbarSize, 200 + scrollbarSize);
-#else
     view.setFixedSize(400, 200);
-#endif
 
     view.showNormal();
     view.fitInView(scene.itemsBoundingRect(), Qt::IgnoreAspectRatio);
@@ -1810,11 +1835,7 @@ void tst_QGraphicsView::mapToScene()
     QGraphicsView view(&topLevel);
     view.setScene(&scene);
     view.setSceneRect(-500, -500, 1000, 1000);
-#if defined(Q_OS_WINCE)
-    QSize viewSize(200,200);
-#else
     QSize viewSize(300,300);
-#endif
 
     view.setFixedSize(viewSize);
     topLevel.show();
@@ -2221,7 +2242,7 @@ void tst_QGraphicsView::wheelEvent()
 }
 #endif // !QT_NO_WHEELEVENT
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QGraphicsView::cursor()
 {
     QGraphicsScene scene;
@@ -2245,7 +2266,7 @@ void tst_QGraphicsView::cursor()
 }
 #endif
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QGraphicsView::cursor2()
 {
     QGraphicsScene scene;
@@ -2879,6 +2900,9 @@ void tst_QGraphicsView::scrollBarRanges()
 
     if (useStyledPanel && style == QStringLiteral("Macintosh") && platformName == QStringLiteral("cocoa"))
         QSKIP("Insignificant on OSX");
+
+    QScopedPointer<QStyle> stylePtr;
+
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.setRenderHint(QPainter::Antialiasing);
@@ -2886,9 +2910,10 @@ void tst_QGraphicsView::scrollBarRanges()
     view.setFrameStyle(useStyledPanel ? QFrame::StyledPanel : QFrame::NoFrame);
 
     if (style == QString("motif"))
-        view.setStyle(new FauxMotifStyle);
+        stylePtr.reset(new FauxMotifStyle);
     else
-        view.setStyle(QStyleFactory::create(style));
+        stylePtr.reset(QStyleFactory::create(style));
+    view.setStyle(stylePtr.data());
     view.setStyleSheet(" "); // enables style propagation ;-)
 
     int adjust = 0;
@@ -3455,7 +3480,7 @@ void tst_QGraphicsView::task245469_itemsAtPointWithClip()
 static QGraphicsView *createSimpleViewAndScene()
 {
     QGraphicsView *view = new QGraphicsView;
-    QGraphicsScene *scene = new QGraphicsScene;
+    QGraphicsScene *scene = new QGraphicsScene(view);
     view->setScene(scene);
 
     view->setBackgroundBrush(Qt::blue);
@@ -3583,7 +3608,7 @@ void tst_QGraphicsView::moveItemWhileScrolling()
         MoveItemScrollView()
         {
             setWindowFlags(Qt::X11BypassWindowManagerHint);
-            setScene(new QGraphicsScene(0, 0, 1000, 1000));
+            setScene(new QGraphicsScene(0, 0, 1000, 1000, this));
             rect = scene()->addRect(0, 0, 10, 10);
             rect->setPos(50, 50);
             rect->setPen(QPen(Qt::black, 0));
@@ -3649,7 +3674,7 @@ void tst_QGraphicsView::centerOnDirtyItem()
     toplevel.setWindowFlags(view.windowFlags() | Qt::WindowStaysOnTopHint);
     view.resize(200, 200);
 
-    QGraphicsScene *scene = new QGraphicsScene;
+    QGraphicsScene *scene = new QGraphicsScene(&view);
     view.setScene(scene);
     view.setSceneRect(-1000, -1000, 2000, 2000);
 
@@ -3740,7 +3765,7 @@ void tst_QGraphicsView::mouseTracking()
         QGraphicsView view(&scene);
 
         QGraphicsRectItem *item = new QGraphicsRectItem(10, 10, 10, 10);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         item->setCursor(Qt::CrossCursor);
 #endif
         scene.addItem(item);
@@ -3750,7 +3775,7 @@ void tst_QGraphicsView::mouseTracking()
         // Adding an item to the scene before the scene is set on the view.
         QGraphicsScene scene(-10000, -10000, 20000, 20000);
         QGraphicsRectItem *item = new QGraphicsRectItem(10, 10, 10, 10);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         item->setCursor(Qt::CrossCursor);
 #endif
         scene.addItem(item);
@@ -3767,7 +3792,7 @@ void tst_QGraphicsView::mouseTracking()
         QGraphicsView view3(&scene);
 
         QGraphicsRectItem *item = new QGraphicsRectItem(10, 10, 10, 10);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
         item->setCursor(Qt::CrossCursor);
 #endif
         scene.addItem(item);
@@ -4528,9 +4553,6 @@ void tst_QGraphicsView::task253415_reconnectUpdateSceneOnSceneChanged()
 
 void tst_QGraphicsView::task255529_transformationAnchorMouseAndViewportMargins()
 {
-#if defined(Q_OS_WINCE)
-    QSKIP("Qt/CE does not implement mouse tracking at this point");
-#endif
     QGraphicsScene scene(-100, -100, 200, 200);
     scene.addRect(QRectF(-50, -50, 100, 100), QPen(Qt::black), QBrush(Qt::blue));
 
@@ -4722,7 +4744,7 @@ void tst_QGraphicsView::QTBUG_5859_exposedRect()
     QCOMPARE(item.lastExposedRect, scene.lastBackgroundExposedRect);
 }
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QGraphicsView::QTBUG_7438_cursor()
 {
     QGraphicsScene scene;

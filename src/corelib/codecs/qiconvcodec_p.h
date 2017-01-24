@@ -44,22 +44,19 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
 
+#include <QtCore/private/qglobal_p.h>
 #include "qtextcodec.h"
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_ICONV) && !defined(QT_BOOTSTRAPPED)
+QT_REQUIRE_CONFIG(iconv);
 
-#ifdef Q_OS_MAC
-typedef void * iconv_t;
-#else
 #include <iconv.h>
-#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -98,7 +95,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // Q_OS_UNIX && !QT_NO_ICONV && !QT_BOOTSTRAPPED
 
 #endif // QICONVCODEC_P_H

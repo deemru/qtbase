@@ -54,7 +54,8 @@ static QBearerEngineImpl *getEngineFromId(const QString &id)
 {
     QNetworkConfigurationManagerPrivate *priv = qNetworkConfigurationManagerPrivate();
 
-    foreach (QBearerEngine *engine, priv->engines()) {
+    const auto engines = priv->engines();
+    for (QBearerEngine *engine : engines) {
         QBearerEngineImpl *engineImpl = qobject_cast<QBearerEngineImpl *>(engine);
         if (engineImpl && engineImpl->hasIdentifier(id))
             return engineImpl;
@@ -111,10 +112,10 @@ void QNetworkSessionPrivateImpl::syncStateWithInterface()
     case QNetworkConfiguration::ServiceNetwork:
         serviceConfig = publicConfig;
         // Defer setting engine and signals until open().
-        // fall through
+        Q_FALLTHROUGH();
     case QNetworkConfiguration::UserChoice:
         // Defer setting serviceConfig and activeConfig until open().
-        // fall through
+        Q_FALLTHROUGH();
     default:
         engine = 0;
     }
@@ -285,7 +286,7 @@ quint64 QNetworkSessionPrivateImpl::bytesReceived() const
 quint64 QNetworkSessionPrivateImpl::activeTime() const
 {
     if (state == QNetworkSession::Connected && startTime != Q_UINT64_C(0))
-        return QDateTime::currentDateTimeUtc().toTime_t() - startTime;
+        return QDateTime::currentSecsSinceEpoch() - startTime;
     return Q_UINT64_C(0);
 }
 
@@ -306,7 +307,8 @@ void QNetworkSessionPrivateImpl::updateStateFromServiceNetwork()
 {
     QNetworkSession::State oldState = state;
 
-    foreach (const QNetworkConfiguration &config, serviceConfig.children()) {
+    const auto configs = serviceConfig.children();
+    for (const QNetworkConfiguration &config : configs) {
         if ((config.state() & QNetworkConfiguration::Active) != QNetworkConfiguration::Active)
             continue;
 

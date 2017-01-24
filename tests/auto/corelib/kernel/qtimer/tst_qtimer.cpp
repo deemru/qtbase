@@ -52,6 +52,7 @@ private slots:
     void remainingTime();
     void remainingTimeDuringActivation_data();
     void remainingTimeDuringActivation();
+    void basic_chrono();
     void livelock_data();
     void livelock();
     void timerInfiniteRecursion_data();
@@ -68,6 +69,7 @@ private slots:
     void singleShotStaticFunctionZeroTimeout();
     void recurseOnTimeoutAndStopTimer();
     void singleShotToFunctors();
+    void singleShot_chrono();
     void crossThreadSingleShotToFunctor();
 
     void dontBlockEvents();
@@ -214,6 +216,67 @@ void tst_QTimer::remainingTimeDuringActivation()
     }
 }
 
+namespace {
+
+#if QT_HAS_INCLUDE(<chrono>)
+    template <typename T>
+    std::chrono::milliseconds to_ms(T t)
+    { return std::chrono::duration_cast<std::chrono::milliseconds>(t); }
+#endif
+
+} // unnamed namespace
+
+void tst_QTimer::basic_chrono()
+{
+#if !QT_HAS_INCLUDE(<chrono>)
+    QSKIP("This test requires C++11 <chrono> support");
+#else
+    // duplicates zeroTimer, singleShotTimeout, interval and remainingTime
+    using namespace std::chrono;
+    TimerHelper helper;
+    QTimer timer;
+    timer.setInterval(to_ms(nanoseconds(0)));
+    timer.start();
+    QCOMPARE(timer.intervalAsDuration().count(), milliseconds::rep(0));
+    QCOMPARE(timer.remainingTimeAsDuration().count(), milliseconds::rep(0));
+
+    connect(&timer, SIGNAL(timeout()), &helper, SLOT(timeout()));
+
+    QCoreApplication::processEvents();
+
+    QCOMPARE(helper.count, 1);
+
+    helper.count = 0;
+    timer.start(milliseconds(100));
+    QCOMPARE(helper.count, 0);
+
+    QTest::qWait(TIMEOUT_TIMEOUT);
+    QVERIFY(helper.count > 0);
+    int oldCount = helper.count;
+
+    QTest::qWait(TIMEOUT_TIMEOUT);
+    QVERIFY(helper.count > oldCount);
+
+    helper.count = 0;
+    timer.start(to_ms(microseconds(200000)));
+    QCOMPARE(timer.intervalAsDuration().count(), milliseconds::rep(200));
+    QTest::qWait(50);
+    QCOMPARE(helper.count, 0);
+
+    milliseconds rt = timer.remainingTimeAsDuration();
+    QVERIFY2(qAbs(rt.count() - 150) < 50, qPrintable(QString::number(rt.count())));
+
+    helper.count = 0;
+    timer.setSingleShot(true);
+    timer.start(milliseconds(100));
+    QTest::qWait(500);
+    QCOMPARE(helper.count, 1);
+    QTest::qWait(500);
+    QCOMPARE(helper.count, 1);
+    helper.count = 0;
+#endif
+}
+
 void tst_QTimer::livelock_data()
 {
     QTest::addColumn<int>("interval");
@@ -295,9 +358,6 @@ void tst_QTimer::livelock()
     QTRY_COMPARE(tester.timeoutsForFirst, 1);
     QCOMPARE(tester.timeoutsForExtra, 0);
     QTRY_COMPARE(tester.timeoutsForSecond, 1);
-#if defined(Q_OS_WINCE)
-    QEXPECT_FAIL("non-zero timer", "Windows CE devices often too slow", Continue);
-#endif
     QVERIFY(tester.postEventAtRightTime);
 }
 
@@ -788,6 +848,51 @@ void tst_QTimer::singleShotToFunctors()
 
     _e.reset();
     _t = Q_NULLPTR;
+}
+
+void tst_QTimer::singleShot_chrono()
+{
+#if !QT_HAS_INCLUDE(<chrono>)
+    QSKIP("This test requires C++11 <chrono> support");
+#else
+    // duplicates singleShotStaticFunctionZeroTimeout and singleShotToFunctors
+    using namespace std::chrono;
+    TimerHelper helper;
+
+    QTimer::singleShot(hours(0), &helper, SLOT(timeout()));
+    QTest::qWait(500);
+    QCOMPARE(helper.count, 1);
+    QTest::qWait(500);
+    QCOMPARE(helper.count, 1);
+
+    TimerHelper nhelper;
+
+    QTimer::singleShot(seconds(0), &nhelper, &TimerHelper::timeout);
+    QCoreApplication::processEvents();
+    QCOMPARE(nhelper.count, 1);
+    QCoreApplication::processEvents();
+    QCOMPARE(nhelper.count, 1);
+
+    int count = 0;
+    QTimer::singleShot(to_ms(microseconds(0)), CountedStruct(&count));
+    QCoreApplication::processEvents();
+    QCOMPARE(count, 1);
+
+    _e.reset(new QEventLoop);
+    QTimer::singleShot(0, &StaticEventLoop::quitEventLoop);
+    QCOMPARE(_e->exec(), 0);
+
+    QObject c3;
+    QTimer::singleShot(milliseconds(500), &c3, CountedStruct(&count));
+    QTest::qWait(800);
+    QCOMPARE(count, 2);
+
+    QTimer::singleShot(0, [&count] { ++count; });
+    QCoreApplication::processEvents();
+    QCOMPARE(count, 3);
+
+    _e.reset();
+#endif
 }
 
 class DontBlockEvents : public QObject

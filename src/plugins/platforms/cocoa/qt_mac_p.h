@@ -51,12 +51,12 @@
 // We mean it.
 //
 
-#include "qmacdefines_mac.h"
-
 #ifdef __OBJC__
 #include <AppKit/AppKit.h>
 #include <objc/runtime.h>
 #endif
+
+#include "qmacdefines_mac.h"
 
 #include <CoreServices/CoreServices.h>
 
@@ -87,60 +87,6 @@ public:
     }
     operator RgnHandle() {
         return qdRgn;
-    }
-};
-
-class Q_WIDGETS_EXPORT QMacWindowChangeEvent
-{
-private:
-    static QList<QMacWindowChangeEvent*> *change_events;
-public:
-    QMacWindowChangeEvent() {
-    }
-    virtual ~QMacWindowChangeEvent() {
-    }
-    static inline void exec(bool ) {
-    }
-protected:
-    virtual void windowChanged() = 0;
-    virtual void flushWindowChanged() = 0;
-};
-
-class QMacCGContext
-{
-    CGContextRef context;
-public:
-    QMacCGContext(QPainter *p); //qpaintengine_mac.mm
-    inline QMacCGContext() { context = 0; }
-    inline QMacCGContext(QPaintDevice *pdev) {
-        extern CGContextRef qt_mac_cg_context(QPaintDevice *);
-        context = qt_mac_cg_context(pdev);
-    }
-    inline QMacCGContext(CGContextRef cg, bool takeOwnership=false) {
-        context = cg;
-        if(!takeOwnership)
-            CGContextRetain(context);
-    }
-    inline QMacCGContext(const QMacCGContext &copy) : context(0) { *this = copy; }
-    inline ~QMacCGContext() {
-        if(context)
-            CGContextRelease(context);
-    }
-    inline bool isNull() const { return context; }
-    inline operator CGContextRef() { return context; }
-    inline QMacCGContext &operator=(const QMacCGContext &copy) {
-        if(context)
-            CGContextRelease(context);
-        context = copy.context;
-        CGContextRetain(context);
-        return *this;
-    }
-    inline QMacCGContext &operator=(CGContextRef cg) {
-        if(context)
-            CGContextRelease(context);
-        context = cg;
-        CGContextRetain(context); //we do not take ownership
-        return *this;
     }
 };
 

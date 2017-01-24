@@ -1,13 +1,15 @@
 TARGET = qminimalegl
 
-QT += core-private gui-private platformsupport-private
+QT += \
+    core-private gui-private \
+    eventdispatcher_support-private fontdatabase_support-private egl_support-private
 
 #DEFINES += QEGL_EXTRA_DEBUG
 
 #DEFINES += Q_OPENKODE
 
-#Avoid X11 header collision
-DEFINES += MESA_EGL_NO_X11_HEADERS
+# Avoid X11 header collision, use generic EGL native types
+DEFINES += QT_EGL_NO_X11
 
 SOURCES =   main.cpp \
             qminimaleglintegration.cpp \
@@ -20,7 +22,7 @@ HEADERS =   qminimaleglintegration.h \
             qminimaleglbackingstore.h \
             qminimaleglscreen.h
 
-CONFIG += egl qpa/genericunixfontdatabase
+CONFIG += egl
 
 OTHER_FILES += \
     minimalegl.json

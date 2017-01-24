@@ -1,6 +1,8 @@
 TARGET = qqnx
 
-QT += platformsupport-private core-private gui-private
+QT += \
+    core-private gui-private \
+    fontdatabase_support-private eventdispatcher_support-private egl_support-private
 
 # Uncomment this to build with support for IMF once it becomes available in the BBNDK
 #CONFIG += qqnx_imf
@@ -75,14 +77,14 @@ CONFIG(qqnx_screeneventthread) {
 
 LIBS += -lscreen
 
-contains(QT_CONFIG, opengles2) {
+qtConfig(opengles2) {
     SOURCES += qqnxglcontext.cpp \
                qqnxeglwindow.cpp
 
     HEADERS += qqnxglcontext.h \
                qqnxeglwindow.h
 
-    LIBS += -lEGL
+    QMAKE_USE += egl
 }
 
 CONFIG(qqnx_pps) {
@@ -100,7 +102,7 @@ CONFIG(qqnx_pps) {
                qqnxnavigatoreventnotifier.h \
                qqnxvirtualkeyboardpps.h
 
-    LIBS += -lpps
+    QMAKE_USE += pps
     !contains(DEFINES, QT_NO_CLIPBOARD): LIBS += -lclipboard
 
     CONFIG(qqnx_imf) {
@@ -116,15 +118,10 @@ CONFIG(qqnx_pps) {
 lgmon {
     DEFINES += QQNX_LGMON
     SOURCES += qqnxlgmon.cpp
-    LIBS += -llgmon
+    QMAKE_USE += lgmon
 }
 
 OTHER_FILES += qnx.json
-
-QMAKE_CXXFLAGS += -I./private
-
-include (../../../platformsupport/eglconvenience/eglconvenience.pri)
-include (../../../platformsupport/fontdatabases/fontdatabases.pri)
 
 PLUGIN_TYPE = platforms
 PLUGIN_CLASS_NAME = QQnxIntegrationPlugin

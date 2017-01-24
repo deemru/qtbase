@@ -63,7 +63,7 @@ QT_BEGIN_NAMESPACE
  */
 static QString qt_strippedText(QString s)
 {
-    s.remove( QString::fromLatin1("...") );
+    s.remove(QStringLiteral("..."));
     for (int i = 0; i < s.size(); ++i) {
         if (s.at(i) == QLatin1Char('&'))
             s.remove(i, 1);
@@ -255,7 +255,7 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 /*!
     \enum QAction::MenuRole
 
-    This enum describes how an action should be moved into the application menu on OS X.
+    This enum describes how an action should be moved into the application menu on \macos.
 
     \value NoRole This action should not be put into the application menu
     \value TextHeuristicRole This action should be put in the application menu based on the action's text
@@ -264,7 +264,7 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
     \value AboutQtRole This action handles the "About Qt" menu item.
     \value AboutRole This action should be placed where the "About" menu item is in the application menu. The text of
            the menu item will be set to "About <application name>". The application name is fetched from the
-           \c{Info.plist} file in the application's bundle (See \l{Qt for OS X - Deployment}).
+           \c{Info.plist} file in the application's bundle (See \l{Qt for macOS - Deployment}).
     \value PreferencesRole This action should be placed where the  "Preferences..." menu item is in the application menu.
     \value QuitRole This action should be placed where the Quit menu item is in the application menu.
 
@@ -279,12 +279,8 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
     group the action will be automatically inserted into the group.
 */
 QAction::QAction(QObject* parent)
-    : QObject(*(new QActionPrivate), parent)
+    : QAction(*new QActionPrivate, parent)
 {
-    Q_D(QAction);
-    d->group = qobject_cast<QActionGroup *>(parent);
-    if (d->group)
-        d->group->addAction(this);
 }
 
 
@@ -302,13 +298,10 @@ QAction::QAction(QObject* parent)
 
 */
 QAction::QAction(const QString &text, QObject* parent)
-    : QObject(*(new QActionPrivate), parent)
+    : QAction(parent)
 {
     Q_D(QAction);
     d->text = text;
-    d->group = qobject_cast<QActionGroup *>(parent);
-    if (d->group)
-        d->group->addAction(this);
 }
 
 /*!
@@ -324,14 +317,10 @@ QAction::QAction(const QString &text, QObject* parent)
     setToolTip().
 */
 QAction::QAction(const QIcon &icon, const QString &text, QObject* parent)
-    : QObject(*(new QActionPrivate), parent)
+    : QAction(text, parent)
 {
     Q_D(QAction);
     d->icon = icon;
-    d->text = text;
-    d->group = qobject_cast<QActionGroup *>(parent);
-    if (d->group)
-        d->group->addAction(this);
 }
 
 /*!
@@ -1237,12 +1226,12 @@ void QAction::activate(ActionEvent event)
     \brief the action's menu role
     \since 4.2
 
-    This indicates what role the action serves in the application menu on Mac
-    OS X. By default all actions have the TextHeuristicRole, which means that
+    This indicates what role the action serves in the application menu on
+    \macos. By default all actions have the TextHeuristicRole, which means that
     the action is added based on its text (see QMenuBar for more information).
 
     The menu role can only be changed before the actions are put into the menu
-    bar in OS X (usually just before the first application window is
+    bar in \macos (usually just before the first application window is
     shown).
 */
 void QAction::setMenuRole(MenuRole menuRole)
@@ -1315,8 +1304,10 @@ Q_WIDGETS_EXPORT QDebug operator<<(QDebug d, const QAction *action)
             d << " toolTip=" << action->toolTip();
         if (action->isCheckable())
             d << " checked=" << action->isChecked();
+#ifndef QT_NO_SHORTCUT
         if (!action->shortcut().isEmpty())
             d << " shortcut=" << action->shortcut();
+#endif
         d << " menuRole=";
         QtDebugUtils::formatQEnum(d, action->menuRole());
         d << " visible=" << action->isVisible();

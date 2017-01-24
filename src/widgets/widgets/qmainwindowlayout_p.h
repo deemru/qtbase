@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qmainwindow.h"
 
 #ifndef QT_NO_MAINWINDOW
@@ -80,7 +81,7 @@ public:
         : QWidget(parent, f) {}
     QDockAreaLayoutInfo *layoutInfo() const;
     QDockWidget *topDockWidget() const;
-    void destroyIfEmpty();
+    void destroyOrHideIfEmpty();
     void adjustFlags();
 protected:
     bool event(QEvent *) Q_DECL_OVERRIDE;
@@ -324,7 +325,7 @@ private:
 #ifndef QT_NO_TABBAR
     void updateTabBarShapes();
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     static OSStatus qtmacToolbarDelegate(EventHandlerCallRef, EventRef , void *);
     static OSStatus qtoolbarInHIToolbarHandler(EventHandlerCallRef inCallRef, EventRef event,
                                                void *data);
@@ -357,7 +358,7 @@ public:
     QUnifiedToolbarSurface *unifiedSurface;
     void updateUnifiedToolbarOffset();
 
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 };
 
 #if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_DEBUG_STREAM)

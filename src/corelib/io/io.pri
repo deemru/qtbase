@@ -106,25 +106,21 @@ win32 {
         SOURCES += io/qfilesystemiterator_win.cpp
 
     !winrt {
-        SOURCES += io/qsettings_win.cpp
-        SOURCES += io/qstandardpaths_win.cpp
+        HEADERS += \
+            io/qwindowspipereader_p.h \
+            io/qwindowspipewriter_p.h \
+            io/qwinoverlappedionotifier_p.h
 
-        wince* {
-            SOURCES += io/qprocess_wince.cpp \
-                io/qstorageinfo_stub.cpp
-        } else {
-            HEADERS += \
-                io/qwinoverlappedionotifier_p.h \
-                io/qwindowspipereader_p.h \
-                io/qwindowspipewriter_p.h
-            SOURCES += \
-                io/qprocess_win.cpp \
-                io/qwinoverlappedionotifier.cpp \
-                io/qwindowspipereader.cpp \
-                io/qwindowspipewriter.cpp \
-                io/qstorageinfo_win.cpp
-            LIBS += -lmpr
-        }
+        SOURCES += \
+            io/qprocess_win.cpp \
+            io/qsettings_win.cpp \
+            io/qstandardpaths_win.cpp \
+            io/qstorageinfo_win.cpp \
+            io/qwindowspipereader.cpp \
+            io/qwindowspipewriter.cpp \
+            io/qwinoverlappedionotifier.cpp
+
+        LIBS += -lmpr
     } else {
         SOURCES += \
                 io/qstandardpaths_winrt.cpp \
@@ -139,7 +135,7 @@ win32 {
                 io/qprocess_unix.cpp \
                 io/qfilesystemiterator_unix.cpp
 
-        !integrity {
+        !integrity:!uikit {
             SOURCES += io/forkfd_qt.cpp
             HEADERS += \
                      ../3rdparty/forkfd/forkfd.h
@@ -147,9 +143,7 @@ win32 {
         }
         !nacl:mac: {
             SOURCES += io/qsettings_mac.cpp
-            OBJECTIVE_SOURCES += io/qurl_mac.mm
         }
-        freebsd: LIBS_PRIVATE += -lutil         # qlockfile_unix.cpp requires this
         mac {
             SOURCES += io/qstorageinfo_mac.cpp
             OBJECTIVE_SOURCES += io/qstandardpaths_mac.mm
@@ -157,7 +151,7 @@ win32 {
                 OBJECTIVE_SOURCES += io/qfilesystemwatcher_fsevents.mm
                 HEADERS += io/qfilesystemwatcher_fsevents_p.h
                 LIBS += -framework DiskArbitration -framework IOKit
-            } else:ios {
+            } else {
                 LIBS += -framework MobileCoreServices
             }
         } else:android {
@@ -175,7 +169,7 @@ win32 {
                 io/qstorageinfo_unix.cpp
         }
 
-        linux|if(qnx:contains(QT_CONFIG, inotify)) {
+        linux|if(qnx:qtConfig(inotify)) {
             SOURCES += io/qfilesystemwatcher_inotify.cpp
             HEADERS += io/qfilesystemwatcher_inotify_p.h
         }

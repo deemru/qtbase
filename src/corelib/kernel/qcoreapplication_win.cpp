@@ -55,7 +55,10 @@ QT_BEGIN_NAMESPACE
 
 int appCmdShow = 0;
 
-#if defined(Q_OS_WINRT)
+// GetModuleFileName only exists for MSVC2015 and upwards for WinRT, meaning
+// Windows 10 (Mobile). Hence take the first argument passed to the
+// QCoreApplication contructor for older versions as a fallback on older platforms.
+#if defined(Q_OS_WINRT) && _MSC_VER < 1900
 
 Q_CORE_EXPORT QString qAppFileName()
 {
@@ -67,31 +70,7 @@ QString QCoreApplicationPrivate::appName() const
     return QFileInfo(QCoreApplication::arguments().constFirst()).baseName();
 }
 
-#else
-
-Q_CORE_EXPORT HINSTANCE qWinAppInst()                // get Windows app handle
-{
-    return GetModuleHandle(0);
-}
-
-Q_CORE_EXPORT HINSTANCE qWinAppPrevInst()                // get Windows prev app handle
-{
-    return 0;
-}
-
-Q_CORE_EXPORT int qWinAppCmdShow()                        // get main window show command
-{
-#if defined(Q_OS_WINCE)
-    return appCmdShow;
-#else
-    STARTUPINFO startupInfo;
-    GetStartupInfo(&startupInfo);
-
-    return (startupInfo.dwFlags & STARTF_USESHOWWINDOW)
-        ? startupInfo.wShowWindow
-        : SW_SHOWDEFAULT;
-#endif
-}
+#else // !(defined(Q_OS_WINRT) && _MSC_VER < 1900)
 
 Q_CORE_EXPORT QString qAppFileName()                // get application file name
 {
@@ -139,11 +118,41 @@ QString QCoreApplicationPrivate::appName() const
     return QFileInfo(qAppFileName()).baseName();
 }
 
+#endif // !(defined(Q_OS_WINRT) && _MSC_VER < 1900)
+
+#ifndef Q_OS_WINRT
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+Q_CORE_EXPORT HINSTANCE qWinAppInst()                // get Windows app handle
+{
+    return GetModuleHandle(0);
+}
+
+Q_CORE_EXPORT HINSTANCE qWinAppPrevInst()                // get Windows prev app handle
+{
+    return 0;
+}
+
+Q_CORE_EXPORT int qWinAppCmdShow()                        // get main window show command
+{
+#if defined(Q_OS_WINCE)
+    return appCmdShow;
+#else
+    STARTUPINFO startupInfo;
+    GetStartupInfo(&startupInfo);
+
+    return (startupInfo.dwFlags & STARTF_USESHOWWINDOW)
+        ? startupInfo.wShowWindow
+        : SW_SHOWDEFAULT;
+#endif
+}
+#endif
+
 /*****************************************************************************
   qWinMain() - Initializes Windows. Called from WinMain() in qtmain_win.cpp
  *****************************************************************************/
 
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
 
 // ### Qt6: FIXME: Consider removing this function. It is here for Active Qt
 // servers and for binary for compatibility to applications built with Qt 5.3
@@ -164,30 +173,7 @@ void qWinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdParam,
         argv.append(_strdup(wArg.toLocal8Bit().constData()));
 }
 
-#elif defined(Q_OS_WINCE)
-
-Q_CORE_EXPORT void __cdecl qWinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdParam,
-               int cmdShow, int &argc, QVector<char *> &argv)
-{
-    static bool already_called = false;
-
-    if (already_called) {
-        qWarning("Qt: Internal error: qWinMain should be called only once");
-        return;
-    }
-    already_called = true;
-
-    // Create command line
-    argv = qWinCmdLine<char>(cmdParam, int(strlen(cmdParam)), argc);
-
-    appCmdShow = cmdShow;
-
-    // Ignore Windows parameters
-    Q_UNUSED(instance);
-    Q_UNUSED(prevInstance);
-}
-
-#endif // Q_OS_WINCE
+#endif // !Q_OS_WINRT
 
 #ifndef QT_NO_QOBJECT
 
@@ -204,11 +190,6 @@ QT_END_INCLUDE_NAMESPACE
 #if !defined(GET_X_LPARAM)
 #  define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #  define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
-#endif
-#ifdef _WIN32_WCE
-#  ifndef WM_NCACTIVATE
-#    define WM_NCACTIVATE 0x86
-#  endif
 #endif
 
 // The values below should never change. Note that none of the usual

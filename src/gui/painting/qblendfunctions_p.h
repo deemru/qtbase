@@ -40,6 +40,7 @@
 #ifndef QBLENDFUNCTIONS_P_H
 #define QBLENDFUNCTIONS_P_H
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include <qmath.h>
 #include "qdrawhelper_p.h"
 
@@ -140,7 +141,7 @@ void qt_scale_image_16bit(uchar *destPixels, int dbpl,
     if (yend < 0 || yend >= srch)
         --h;
     int xend = (basex + ix * (w - 1)) >> 16;
-    if (xend < 0 || xend >= (int)(sbpl/sizeof(quint32)))
+    if (xend < 0 || xend >= (int)(sbpl/sizeof(SRC)))
         --w;
 
     while (h--) {

@@ -49,7 +49,7 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #ifndef QT_NO_OPENGL
-#include <QtGui/private/qopengltextureblitter_p.h>
+#include <QtGui/qopengltextureblitter.h>
 #endif
 #include <qpa/qplatformgraphicsbuffer.h>
 #include <qpa/qplatformgraphicsbufferhelper.h>
@@ -77,6 +77,7 @@ class QPlatformBackingStorePrivate
 public:
     QPlatformBackingStorePrivate(QWindow *w)
         : window(w)
+        , backingStore(0)
 #ifndef QT_NO_OPENGL
         , textureId(0)
         , blitter(0)
@@ -100,6 +101,7 @@ public:
 #endif
     }
     QWindow *window;
+    QBackingStore *backingStore;
 #ifndef QT_NO_OPENGL
     mutable GLuint textureId;
     mutable QSize textureSize;
@@ -251,9 +253,8 @@ static QRegion deviceRegion(const QRegion &region, QWindow *window, const QPoint
         return region;
 
     QVector<QRect> rects;
-    const QVector<QRect> regionRects = region.rects();
-    rects.reserve(regionRects.count());
-    for (const QRect &rect : regionRects)
+    rects.reserve(region.rectCount());
+    for (const QRect &rect : region)
         rects.append(deviceRect(rect.translated(offset), window));
 
     QRegion deviceRegion;
@@ -390,7 +391,7 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
 
     if (textureId) {
         if (d_ptr->needsSwizzle)
-            d_ptr->blitter->setSwizzleRB(true);
+            d_ptr->blitter->setRedBlueSwizzle(true);
         // The backingstore is for the entire tlw.
         // In case of native children offset tells the position relative to the tlw.
         const QRect srcRect = toBottomLeftRect(deviceWindowRect.translated(offset), d_ptr->textureSize.height());
@@ -399,7 +400,7 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
                                                                          origin);
         d_ptr->blitter->blit(textureId, QMatrix4x4(), source);
         if (d_ptr->needsSwizzle)
-            d_ptr->blitter->setSwizzleRB(false);
+            d_ptr->blitter->setRedBlueSwizzle(false);
     }
 
     // Textures for renderToTexture widgets that have WA_AlwaysStackOnTop set.
@@ -413,7 +414,7 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
 
     context->swapBuffers(window);
 }
-
+#endif
 /*!
   Implemented in subclasses to return the content of the backingstore as a QImage.
 
@@ -426,7 +427,7 @@ QImage QPlatformBackingStore::toImage() const
 {
     return QImage();
 }
-
+#ifndef QT_NO_OPENGL
 /*!
   May be reimplemented in subclasses to return the content of the
   backingstore as an OpenGL texture. \a dirtyRegion is the part of the
@@ -472,14 +473,14 @@ GLuint QPlatformBackingStore::toTexture(const QRegion &dirtyRegion, QSize *textu
     switch (image.format()) {
     case QImage::Format_ARGB32_Premultiplied:
         *flags |= TexturePremultiplied;
-        // no break
+        Q_FALLTHROUGH();
     case QImage::Format_RGB32:
     case QImage::Format_ARGB32:
         *flags |= TextureSwizzle;
         break;
     case QImage::Format_RGBA8888_Premultiplied:
         *flags |= TexturePremultiplied;
-        // no break
+        Q_FALLTHROUGH();
     case QImage::Format_RGBX8888:
     case QImage::Format_RGBA8888:
         break;
@@ -621,6 +622,23 @@ QPlatformBackingStore::~QPlatformBackingStore()
 QWindow* QPlatformBackingStore::window() const
 {
     return d_ptr->window;
+}
+
+/*!
+    Sets the backing store associated with this surface.
+*/
+void QPlatformBackingStore::setBackingStore(QBackingStore *backingStore)
+{
+    d_ptr->backingStore = backingStore;
+}
+
+/*!
+    Returns a pointer to the backing store associated with this
+    surface.
+*/
+QBackingStore *QPlatformBackingStore::backingStore() const
+{
+    return d_ptr->backingStore;
 }
 
 /*!

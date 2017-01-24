@@ -36,6 +36,7 @@
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qstandardpaths.h>
+#include <qtemporaryfile.h>
 
 #include <process.h>
 #include <errno.h>
@@ -61,13 +62,13 @@ struct CompilerInfo{
     const char *executable;
 } compiler_info[] = {
     // The compilers here are sorted in a reversed-preferred order
-    {CC_BORLAND, "Borland C++",                                                    0, "bcc32.exe"},
     {CC_MINGW,   "MinGW (Minimalist GNU for Windows)",                             0, "g++.exe"},
     {CC_INTEL,   "Intel(R) C++ Compiler for 32-bit applications",                  0, "icl.exe"}, // xilink.exe, xilink5.exe, xilink6.exe, xilib.exe
     {CC_MSVC2012, "Microsoft (R) Visual Studio 2012 C/C++ Compiler (11.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\11.0", "cl.exe"}, // link.exe, lib.exe
     {CC_MSVC2013, "Microsoft (R) Visual Studio 2013 C/C++ Compiler (12.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\12.0", "cl.exe"}, // link.exe, lib.exe
     // Microsoft skipped version 13
     {CC_MSVC2015, "Microsoft (R) Visual Studio 2015 C/C++ Compiler (14.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VS7\\14.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2017, "Microsoft (R) Visual Studio 2017 C/C++ Compiler (15.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VS7\\15.0", "cl.exe"}, // link.exe, lib.exe
     {CC_UNKNOWN, "Unknown", 0, 0},
 };
 
@@ -93,6 +94,9 @@ QString Environment::detectQMakeSpec()
 {
     QString spec;
     switch (detectCompiler()) {
+    case CC_MSVC2017:
+        spec = "win32-msvc2017";
+        break;
     case CC_MSVC2015:
         spec = "win32-msvc2015";
         break;
@@ -108,43 +112,11 @@ QString Environment::detectQMakeSpec()
     case CC_MINGW:
         spec = "win32-g++";
         break;
-    case CC_BORLAND:
-        spec = "win32-borland";
-        break;
     default:
         break;
     }
 
     return spec;
-}
-
-Compiler Environment::compilerFromQMakeSpec(const QString &qmakeSpec)
-{
-    if (qmakeSpec == QLatin1String("win32-msvc2015"))
-        return CC_MSVC2015;
-    if (qmakeSpec == QLatin1String("win32-msvc2013"))
-        return CC_MSVC2013;
-    if (qmakeSpec == QLatin1String("win32-msvc2012"))
-        return CC_MSVC2012;
-    if (qmakeSpec == QLatin1String("win32-icc"))
-        return CC_INTEL;
-    if (qmakeSpec == QLatin1String("win32-g++"))
-        return CC_MINGW;
-    if (qmakeSpec == QLatin1String("win32-borland"))
-        return CC_BORLAND;
-    return CC_UNKNOWN;
-}
-
-QString Environment::gccVersion()
-{
-    CompilerInfo *info = compilerInfo(CC_MINGW);
-    int returnValue = 0;
-    QString version = execute(QStringLiteral("%1 -dumpversion").arg(info->executable), &returnValue);
-    if (returnValue != 0) {
-        cout << "Could not get mingw version" << returnValue << qPrintable(version);
-        version.resize(0);
-    }
-    return version;
 }
 
 /*!
@@ -429,191 +401,6 @@ QString Environment::execute(const QString &command, int *returnCode)
             *returnCode = r;
     }
     return output;
-}
-
-/*!
-    Copies the \a srcDir contents into \a destDir.
-
-    Returns true if copying was successful.
-*/
-bool Environment::cpdir(const QString &srcDir, const QString &destDir)
-{
-    QString cleanSrcName = QDir::cleanPath(srcDir);
-    QString cleanDstName = QDir::cleanPath(destDir);
-
-#ifdef CONFIGURE_DEBUG_CP_DIR
-    qDebug() << "Attempt to cpdir " << cleanSrcName << "->" << cleanDstName;
-#endif
-    if(!QFile::exists(cleanDstName) && !QDir().mkpath(cleanDstName)) {
-        qDebug() << "cpdir: Failure to create " << cleanDstName;
-        return false;
-    }
-
-    bool result = true;
-    QDir dir = QDir(cleanSrcName);
-    QFileInfoList allEntries = dir.entryInfoList(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
-    for (int i = 0; result && (i < allEntries.count()); ++i) {
-        QFileInfo entry = allEntries.at(i);
-        bool intermediate = true;
-        if (entry.isDir()) {
-            intermediate = cpdir(QString("%1/%2").arg(cleanSrcName).arg(entry.fileName()),
-                                 QString("%1/%2").arg(cleanDstName).arg(entry.fileName()));
-        } else {
-            QString destFile = QString("%1/%2").arg(cleanDstName).arg(entry.fileName());
-#ifdef CONFIGURE_DEBUG_CP_DIR
-            qDebug() << "About to cp (file)" << entry.absoluteFilePath() << "->" << destFile;
-#endif
-            QFile::remove(destFile);
-            intermediate = QFile::copy(entry.absoluteFilePath(), destFile);
-            SetFileAttributes((wchar_t*)destFile.utf16(), FILE_ATTRIBUTE_NORMAL);
-        }
-        if (!intermediate) {
-            qDebug() << "cpdir: Failure for " << entry.fileName() << entry.isDir();
-            result = false;
-        }
-    }
-    return result;
-}
-
-bool Environment::rmdir(const QString &name)
-{
-    bool result = true;
-    QString cleanName = QDir::cleanPath(name);
-
-    QDir dir = QDir(cleanName);
-    QFileInfoList allEntries = dir.entryInfoList(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
-    for (int i = 0; result && (i < allEntries.count()); ++i) {
-        QFileInfo entry = allEntries.at(i);
-        if (entry.isDir()) {
-            result &= rmdir(entry.absoluteFilePath());
-        } else {
-            result &= QFile::remove(entry.absoluteFilePath());
-        }
-    }
-    result &= dir.rmdir(cleanName);
-    return result;
-}
-
-static QStringList splitPathList(const QString &path)
-{
-#if defined(Q_OS_WIN)
-    QRegExp splitReg(QStringLiteral("[;,]"));
-#else
-    QRegExp splitReg(QStringLiteral("[:]"));
-#endif
-    QStringList result = path.split(splitReg, QString::SkipEmptyParts);
-    const QStringList::iterator end = result.end();
-    for (QStringList::iterator it = result.begin(); it != end; ++it) {
-        // Remove any leading or trailing ", this is commonly used in the environment
-        // variables
-        if (it->startsWith('"'))
-            it->remove(0, 1);
-        if (it->endsWith('"'))
-            it->chop(1);
-        *it = QDir::cleanPath(*it);
-        if (it->endsWith(QLatin1Char('/')))
-            it->chop(1);
-    }
-    return result;
-}
-
-QString Environment::findFileInPaths(const QString &fileName, const QStringList &paths)
-{
-    if (!paths.isEmpty()) {
-        QDir d;
-        const QChar separator = QDir::separator();
-        foreach (const QString &path, paths)
-            if (d.exists(path + separator + fileName))
-                    return path;
-    }
-    return QString();
-}
-
-QStringList Environment::path()
-{
-    return splitPathList(QString::fromLocal8Bit(qgetenv("PATH")));
-}
-
-static QStringList mingwPaths(const QString &mingwPath, const QString &pathName)
-{
-    QStringList ret;
-    QDir mingwDir(mingwPath);
-    const QFileInfoList subdirs = mingwDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (int i = 0 ;i < subdirs.length(); ++i) {
-        const QFileInfo &fi = subdirs.at(i);
-        const QString name = fi.fileName();
-        if (name == pathName)
-            ret += fi.absoluteFilePath();
-        else if (name.contains(QLatin1String("mingw"))) {
-            ret += fi.absoluteFilePath() + QLatin1Char('/') + pathName;
-        }
-    }
-    return ret;
-}
-
-// Return MinGW location from "c:\mingw\bin" -> "c:\mingw"
-static inline QString detectMinGW()
-{
-    const QString gcc = QStandardPaths::findExecutable(QLatin1String("g++.exe"));
-    return gcc.isEmpty() ?
-           gcc : QFileInfo(QFileInfo(gcc).absolutePath()).absolutePath();
-}
-
-// Detect Direct X SDK up tp June 2010. Included in Windows Kit 8.
-QString Environment::detectDirectXSdk()
-{
-    const QByteArray directXSdkEnv = qgetenv("DXSDK_DIR");
-    if (directXSdkEnv.isEmpty())
-        return QString();
-    QString directXSdk = QDir::cleanPath(QString::fromLocal8Bit(directXSdkEnv));
-    if (directXSdk.endsWith(QLatin1Char('/')))
-        directXSdk.truncate(directXSdk.size() - 1);
-    return directXSdk;
-}
-
-QStringList Environment::headerPaths(Compiler compiler)
-{
-    QStringList headerPaths;
-    if (compiler == CC_MINGW) {
-        const QString mingwPath = detectMinGW();
-        headerPaths = mingwPaths(mingwPath, QLatin1String("include"));
-        // Additional compiler paths
-        const QFileInfoList mingwConfigs = QDir(mingwPath + QLatin1String("/lib/gcc")).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (int i = 0; i < mingwConfigs.length(); ++i) {
-            const QDir mingwLibDir = mingwConfigs.at(i).absoluteFilePath();
-            foreach (const QFileInfo &version, mingwLibDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
-                headerPaths += version.absoluteFilePath() + QLatin1String("/include");
-        }
-    } else {
-        headerPaths = splitPathList(QString::fromLocal8Bit(getenv("INCLUDE")));
-    }
-
-    // Add Direct X SDK for ANGLE
-    const QString directXSdk = detectDirectXSdk();
-    if (!directXSdk.isEmpty()) // Add Direct X SDK for ANGLE
-        headerPaths += directXSdk + QLatin1String("/include");
-    return headerPaths;
-}
-
-QStringList Environment::libraryPaths(Compiler compiler)
-{
-    QStringList libraryPaths;
-    if (compiler == CC_MINGW) {
-        libraryPaths = mingwPaths(detectMinGW(), "lib");
-    } else {
-        libraryPaths = splitPathList(QString::fromLocal8Bit(qgetenv("LIB")));
-    }
-
-    // Add Direct X SDK for ANGLE
-    const QString directXSdk = detectDirectXSdk();
-    if (!directXSdk.isEmpty()) {
-#ifdef Q_OS_WIN64
-        libraryPaths += directXSdk + QLatin1String("/lib/x64");
-#else
-        libraryPaths += directXSdk + QLatin1String("/lib/x86");
-#endif
-    }
-    return libraryPaths;
 }
 
 QT_END_NAMESPACE

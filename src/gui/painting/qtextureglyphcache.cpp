@@ -42,7 +42,6 @@
 #include "qtextureglyphcache_p.h"
 #include "private/qfontengine_p.h"
 #include "private/qnumeric_p.h"
-#include "private/qnativeimage_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -247,6 +246,7 @@ void QTextureGlyphCache::fillInPendingGlyphs()
             resizeCache(qNextPowerOfTwo(requiredWidth - 1), qNextPowerOfTwo(requiredHeight - 1));
     }
 
+    beginFillTexture();
     {
         QHash<GlyphAndSubPixelPosition, Coord>::iterator iter = m_pendingGlyphs.begin();
         while (iter != m_pendingGlyphs.end()) {
@@ -256,6 +256,7 @@ void QTextureGlyphCache::fillInPendingGlyphs()
             ++iter;
         }
     }
+    endFillTexture();
 
     m_pendingGlyphs.clear();
 }

@@ -2186,11 +2186,10 @@ void QPainter::setBrushOrigin(const QPointF &p)
     destination pixel in such a way that the alpha component of the
     source defines the translucency of the pixel.
 
-    When the paint device is a QImage, the image format must be set to
-    \l {QImage::Format}{Format_ARGB32_Premultiplied} or
-    \l {QImage::Format}{Format_ARGB32} for the composition modes to have
-    any effect. For performance the premultiplied version is the preferred
-    format.
+    Several composition modes require an alpha channel in the source or
+    target images to have an effect. For optimal performance the
+    image format \l {QImage::Format}{Format_ARGB32_Premultiplied} is
+    preferred.
 
     When a composition mode is set it applies to all painting
     operator, pens, brushes, gradients and pixmap/image drawing.
@@ -2469,7 +2468,7 @@ void QPainter::setClipping(bool enable)
 
     // we can't enable clipping if we don't have a clip
     if (enable
-        && (d->state->clipInfo.isEmpty() || d->state->clipInfo.last().operation == Qt::NoClip))
+        && (d->state->clipInfo.isEmpty() || d->state->clipInfo.constLast().operation == Qt::NoClip))
         return;
     d->state->clipEnabled = enable;
 
@@ -2835,7 +2834,7 @@ void QPainter::setClipRegion(const QRegion &r, Qt::ClipOperation op)
     QRect rect = r.boundingRect();
     if (qt_show_painter_debug_output)
         printf("QPainter::setClipRegion(), size=%d, [%d,%d,%d,%d]\n",
-           r.rects().size(), rect.x(), rect.y(), rect.width(), rect.height());
+           r.rectCount(), rect.x(), rect.y(), rect.width(), rect.height());
 #endif
     if (!d->engine) {
         qWarning("QPainter::setClipRegion: Painter not active");
@@ -6440,7 +6439,8 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
         updateState(state);
 
     if (!ti.glyphs.numGlyphs) {
-        // nothing to do
+        drawTextItemDecoration(q, p, ti.fontEngine, textEngine, ti.underlineStyle,
+            ti.flags, ti.width.toReal(), ti.charFormat);
     } else if (ti.fontEngine->type() == QFontEngine::Multi) {
         QFontEngineMulti *multi = static_cast<QFontEngineMulti *>(ti.fontEngine);
 
@@ -6478,6 +6478,8 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
                 extended->drawTextItem(QPointF(x, y), ti2);
             else
                 engine->drawTextItem(QPointF(x, y), ti2);
+            drawTextItemDecoration(q, p, ti2.fontEngine, textEngine, ti2.underlineStyle,
+                                   ti2.flags, ti2.width.toReal(), ti2.charFormat);
 
             if (!rtl)
                 x += ti2.width.toReal();
@@ -6509,6 +6511,8 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
             extended->drawTextItem(QPointF(x, y), ti2);
         else
             engine->drawTextItem(QPointF(x,y), ti2);
+        drawTextItemDecoration(q, p, ti2.fontEngine, textEngine, ti2.underlineStyle,
+                               ti2.flags, ti2.width.toReal(), ti2.charFormat);
 
         // reset the high byte for all glyphs
         const int hi = which << 24;
@@ -6520,9 +6524,9 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
             extended->drawTextItem(p, ti);
         else
             engine->drawTextItem(p, ti);
+        drawTextItemDecoration(q, p, ti.fontEngine, textEngine, ti.underlineStyle,
+                               ti.flags, ti.width.toReal(), ti.charFormat);
     }
-    drawTextItemDecoration(q, p, ti.fontEngine, textEngine, ti.underlineStyle,
-                           ti.flags, ti.width.toReal(), ti.charFormat);
 
     if (state->renderHints != oldRenderHints) {
         state->renderHints = oldRenderHints;

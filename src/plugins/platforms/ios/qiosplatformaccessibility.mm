@@ -39,6 +39,8 @@
 
 #include "qiosplatformaccessibility.h"
 
+#ifndef QT_NO_ACCESSIBILITY
+
 #include <QtGui/QtGui>
 #include "qioswindow.h"
 
@@ -63,7 +65,7 @@ void invalidateCache(QAccessibleInterface *iface)
     // when items get added or removed from the screen
     foreach (QWindow *win, QGuiApplication::topLevelWindows()) {
         if (win && win->handle()) {
-            QIOSWindow *window = static_cast<QIOSWindow*>(win->handle());
+            QT_PREPEND_NAMESPACE(QIOSWindow) *window = static_cast<QT_PREPEND_NAMESPACE(QIOSWindow) *>(win->handle());
             window->clearAccessibleCache();
         }
     }
@@ -85,3 +87,5 @@ void QIOSPlatformAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *even
         break;
     }
 }
+
+#endif

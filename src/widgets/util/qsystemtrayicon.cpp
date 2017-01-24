@@ -82,9 +82,9 @@ QT_BEGIN_NAMESPACE
     \li All X11 desktop environments that implement the D-Bus
        \l{http://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem}
        specification, including recent versions of KDE and Unity.
-    \li All supported versions of OS X. Note that the Growl
+    \li All supported versions of \macos. Note that the Growl
        notification system must be installed for
-       QSystemTrayIcon::showMessage() to display messages on Mac OS X prior to 10.8 (Mountain Lion).
+       QSystemTrayIcon::showMessage() to display messages on \macos prior to 10.8 (Mountain Lion).
     \endlist
 
     To check whether a system tray is present on the user's desktop,
@@ -141,7 +141,7 @@ QSystemTrayIcon::QSystemTrayIcon(QObject *parent)
     \sa visible
 */
 QSystemTrayIcon::QSystemTrayIcon(const QIcon &icon, QObject *parent)
-: QObject(*new QSystemTrayIconPrivate(), parent)
+    : QSystemTrayIcon(parent)
 {
     setIcon(icon);
 }
@@ -163,7 +163,7 @@ QSystemTrayIcon::~QSystemTrayIcon()
     The menu will pop up when the user requests the context menu for the system
     tray icon by clicking the mouse button.
 
-    On OS X, this is currenly converted to a NSMenu, so the
+    On \macos, this is currenly converted to a NSMenu, so the
     aboutToHide() signal is not emitted.
 
     \note The system tray icon does not take ownership of the menu. You must
@@ -323,7 +323,7 @@ bool QSystemTrayIcon::event(QEvent *e)
     This signal is emitted when the message displayed using showMessage()
     was clicked by the user.
 
-    Currently this signal is not sent on OS X.
+    Currently this signal is not sent on \macos.
 
     \note We follow Microsoft Windows XP/Vista behavior, so the
     signal is also emitted when the user clicks on a tray icon with
@@ -374,7 +374,7 @@ bool QSystemTrayIcon::supportsMessages()
     On Windows, the \a millisecondsTimeoutHint is usually ignored by the system
     when the application has focus.
 
-    On OS X, the Growl notification system must be installed for this function to
+    On \macos, the Growl notification system must be installed for this function to
     display messages.
 
     Has been turned into a slot in Qt 5.2.
@@ -446,19 +446,11 @@ QBalloonTip::QBalloonTip(QSystemTrayIcon::MessageIcon icon, const QString& title
     titleLabel->setText(title);
     QFont f = titleLabel->font();
     f.setBold(true);
-#ifdef Q_OS_WINCE
-    f.setPointSize(f.pointSize() - 2);
-#endif
     titleLabel->setFont(f);
     titleLabel->setTextFormat(Qt::PlainText); // to maintain compat with windows
 
-#ifdef Q_OS_WINCE
-    const int iconSize = style()->pixelMetric(QStyle::PM_SmallIconSize);
-    const int closeButtonSize = style()->pixelMetric(QStyle::PM_SmallIconSize) - 2;
-#else
     const int iconSize = 18;
     const int closeButtonSize = 15;
-#endif
 
     QPushButton *closeButton = new QPushButton;
     closeButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
@@ -468,21 +460,13 @@ QBalloonTip::QBalloonTip(QSystemTrayIcon::MessageIcon icon, const QString& title
     QObject::connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
 
     QLabel *msgLabel = new QLabel;
-#ifdef Q_OS_WINCE
-    f.setBold(false);
-    msgLabel->setFont(f);
-#endif
     msgLabel->installEventFilter(this);
     msgLabel->setText(message);
     msgLabel->setTextFormat(Qt::PlainText);
     msgLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
     // smart size for the message label
-#ifdef Q_OS_WINCE
-    int limit = QApplication::desktop()->availableGeometry(msgLabel).size().width() / 2;
-#else
     int limit = QApplication::desktop()->availableGeometry(msgLabel).size().width() / 3;
-#endif
     if (msgLabel->sizeHint().width() > limit) {
         msgLabel->setWordWrap(true);
         if (msgLabel->sizeHint().width() > limit) {
@@ -493,15 +477,9 @@ QBalloonTip::QBalloonTip(QSystemTrayIcon::MessageIcon icon, const QString& title
                 control->document()->setDefaultTextOption(opt);
             }
         }
-#ifdef Q_OS_WINCE
-        // Make sure that the text isn't wrapped "somewhere" in the balloon widget
-        // in the case that we have a long title label.
-        setMaximumWidth(limit);
-#else
         // Here we allow the text being much smaller than the balloon widget
         // to emulate the weird standard windows behavior.
         msgLabel->setFixedSize(limit, msgLabel->heightForWidth(limit));
-#endif
     }
 
     QIcon si;
@@ -587,7 +565,7 @@ void QBalloonTip::balloon(const QPoint& pos, int msecs, bool showArrow)
     }
 
     QPainterPath path;
-#if defined(QT_NO_XSHAPE) && defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if defined(QT_NO_XSHAPE) && 0 /* Used to be included in Qt4 for Q_WS_X11 */
     // XShape is required for setting the mask, so we just
     // draw an ugly square when its not available
     path.moveTo(0, 0);
@@ -753,9 +731,8 @@ void QSystemTrayIconPrivate::addPlatformMenu(QMenu *menu) const
 
     // The recursion depth is the same as menu depth, so should not
     // be higher than 3 levels.
-    QListIterator<QAction *> it(menu->actions());
-    while (it.hasNext()) {
-        QAction *action = it.next();
+    const auto actions = menu->actions();
+    for (QAction *action : actions) {
         if (action->menu())
             addPlatformMenu(action->menu());
     }

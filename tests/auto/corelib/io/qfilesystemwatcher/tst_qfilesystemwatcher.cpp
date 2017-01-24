@@ -73,6 +73,8 @@ private slots:
 
     void signalsEmittedAfterFileMoved();
 
+    void watchUnicodeCharacters();
+
 private:
     QString m_tempDirPattern;
 #endif // QT_NO_FILESYSTEMWATCHER
@@ -146,12 +148,7 @@ void tst_QFileSystemWatcher::basicTest()
     // resolution of the modification time is system dependent, but it's at most 1 second when using
     // the polling engine. I've heard rumors that FAT32 has a 2 second resolution. So, we have to
     // wait a bit before we can modify the file (hrmph)...
-#ifndef Q_OS_WINCE
     QTest::qWait(2000);
-#else
-    // WinCE is always a little bit slower. Give it a little bit more time
-    QTest::qWait(5000);
-#endif
 
     testFile.open(QIODevice::WriteOnly | QIODevice::Append);
     testFile.write(QByteArray("world"));
@@ -309,9 +306,6 @@ void tst_QFileSystemWatcher::watchDirectory()
     QVERIFY(temporaryDir.rmdir(testDirName));
 
     // waiting max 5 seconds for notification for directory removal to trigger
-#ifdef Q_OS_WINCE
-    QEXPECT_FAIL("poller", "Directory does not get updated on file removal(See #137910)", Abort);
-#endif
     QTRY_COMPARE(changedSpy.count(), 2);
     QCOMPARE(changedSpy.at(0).count(), 1);
     QCOMPARE(changedSpy.at(1).count(), 1);
@@ -553,9 +547,6 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
         QEXPECT_FAIL("", "See QTBUG-30943", Continue);
 #endif
     QCOMPARE(fileChangedSpyCount, 0);
-#ifdef Q_OS_WINCE
-    QEXPECT_FAIL("poller", "Directory does not get updated on file removal(See #137910)", Abort);
-#endif
     QCOMPARE(dirChangedSpy.count(), 1);
 
     dirChangedSpy.clear();
@@ -758,6 +749,25 @@ void tst_QFileSystemWatcher::signalsEmittedAfterFileMoved()
     QCoreApplication::processEvents();
     QVERIFY2(changedSpy.count() <= fileCount, changedSpy.receivedFilesMessage());
     QTRY_COMPARE(changedSpy.count(), fileCount);
+}
+
+void tst_QFileSystemWatcher::watchUnicodeCharacters()
+{
+    QTemporaryDir temporaryDirectory(m_tempDirPattern);
+    QVERIFY2(temporaryDirectory.isValid(), qPrintable(temporaryDirectory.errorString()));
+
+    QDir testDir(temporaryDirectory.path());
+    const QString subDir(QString::fromLatin1("caf\xe9"));
+    QVERIFY(testDir.mkdir(subDir));
+    testDir = QDir(temporaryDirectory.path() + QDir::separator() + subDir);
+
+    QFileSystemWatcher watcher;
+    QVERIFY(watcher.addPath(testDir.path()));
+
+    FileSystemWatcherSpy changedSpy(&watcher, FileSystemWatcherSpy::SpyOnDirectoryChanged);
+    QCOMPARE(changedSpy.count(), 0);
+    QVERIFY(testDir.mkdir("creme"));
+    QTRY_COMPARE(changedSpy.count(), 1);
 }
 #endif // QT_NO_FILESYSTEMWATCHER
 

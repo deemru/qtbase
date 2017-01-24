@@ -165,7 +165,16 @@ const char *PaintCommands::imageFormatTable[] = {
     "Format_ARGB8555_Premultiplied",
     "Format_RGB888",
     "Format_RGB444",
-    "Format_ARGB4444_Premultiplied"
+    "Format_ARGB4444_Premultiplied",
+    "Format_RGBX8888",
+    "Format_RGBA8888",
+    "Format_RGBA8888_Premultiplied",
+    "Format_BGR30",
+    "Format_A2BGR30_Premultiplied",
+    "Format_RGB30",
+    "Format_A2RGB30_Premultiplied",
+    "Alpha8",
+    "Grayscale8",
 };
 
 int PaintCommands::translateEnum(const char *table[], const QString &pattern, int limit)
@@ -2384,7 +2393,7 @@ void PaintCommands::command_surface_begin(QRegExp re)
         m_painter->fillRect(QRect(0, 0, qRound(w), qRound(h)), Qt::transparent);
         m_painter->restore();
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     } else if (m_type == WidgetType) {
         m_surface_pixmap = QPixmap(qRound(w), qRound(h));
         m_surface_pixmap.fill(Qt::transparent);
@@ -2435,7 +2444,7 @@ void PaintCommands::command_surface_end(QRegExp)
         m_painter->beginNativePainting();
         m_painter->endNativePainting();
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     } else if (m_type == WidgetType) {
         m_painter->drawPixmap(m_surface_rect.topLeft(), m_surface_pixmap);
         m_surface_pixmap = QPixmap();

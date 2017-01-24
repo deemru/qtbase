@@ -40,7 +40,7 @@
 #ifndef QWINDOWSBACKINGSTORE_H
 #define QWINDOWSBACKINGSTORE_H
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 #include <qpa/qplatformbackingstore.h>
 #include <QtCore/QScopedPointer>
@@ -65,9 +65,7 @@ public:
 
     HDC getDC() const;
 
-#ifndef QT_NO_OPENGL
     QImage toImage() const Q_DECL_OVERRIDE;
-#endif
 
 private:
     QScopedPointer<QWindowsNativeImage> m_image;

@@ -41,6 +41,7 @@
 #include "qcocoainputcontext.h"
 #include "qcocoanativeinterface.h"
 #include "qcocoawindow.h"
+#include "qcocoahelpers.h"
 
 #include <Carbon/Carbon.h>
 
@@ -102,7 +103,8 @@ void QCocoaInputContext::reset()
     if (!mWindow)
         return;
 
-    QNSView *view = static_cast<QCocoaWindow *>(mWindow->handle())->qtView();
+    QCocoaWindow *window = static_cast<QCocoaWindow *>(mWindow->handle());
+    QNSView *view = qnsview_cast(window->view());
     if (!view)
         return;
 
@@ -131,14 +133,14 @@ void QCocoaInputContext::updateLocale()
     CFArrayRef languages = (CFArrayRef) TISGetInputSourceProperty(source, kTISPropertyInputSourceLanguages);
     if (CFArrayGetCount(languages) > 0) {
         CFStringRef langRef = (CFStringRef)CFArrayGetValueAtIndex(languages, 0);
-        QString name = QCFString::toQString(langRef);
+        QString name = QString::fromCFString(langRef);
         QLocale locale(name);
         if (m_locale != locale) {
             m_locale = locale;
             emitLocaleChanged();
         }
-        CFRelease(langRef);
     }
+    CFRelease(source);
 }
 
 QT_END_NAMESPACE

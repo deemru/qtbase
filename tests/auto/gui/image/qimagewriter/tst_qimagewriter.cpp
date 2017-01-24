@@ -55,9 +55,6 @@ class tst_QImageWriter : public QObject
 {
     Q_OBJECT
 
-public:
-    virtual ~tst_QImageWriter();
-
 public slots:
     void initTestCase();
 
@@ -155,16 +152,6 @@ void tst_QImageWriter::getSetCheck()
     QCOMPARE(1.1f, obj1.gamma());
 }
 
-tst_QImageWriter::~tst_QImageWriter()
-{
-    QDir dir(prefix);
-    QStringList filesToDelete = dir.entryList(QStringList() << "gen-*" , QDir::NoDotAndDotDot | QDir::Files);
-    foreach( QString file, filesToDelete) {
-        QFile::remove(dir.absoluteFilePath(file));
-    }
-
-}
-
 void tst_QImageWriter::writeImage_data()
 {
     QTest::addColumn<QString>("fileName");
@@ -252,7 +239,7 @@ void tst_QImageWriter::writeImage2_data()
         foreach (const QString format, formats) {
             const QString fileName = QLatin1String("solidcolor_")
                 + QString::number(imgFormat) + QLatin1Char('.') + format;
-            QTest::newRow(fileName.toLatin1()) << fileName
+            QTest::newRow(fileName.toLatin1()) << writePrefix + fileName
                                                << format.toLatin1()
                                                << image;
         }
@@ -509,9 +496,6 @@ void tst_QImageWriter::saveToTemporaryFile()
             QVERIFY(writer.write(image));
         else
             qWarning() << file.errorString();
-#if defined(Q_OS_WINCE)
-        file.reset();
-#endif
         QCOMPARE(QImage(writer.fileName()), image);
     }
     {
@@ -526,18 +510,15 @@ void tst_QImageWriter::saveToTemporaryFile()
     }
     {
         // 3) Via QImageWriter's API, with a named temp file
-        QTemporaryFile file("tempXXXXXX");
+        QTemporaryFile file(writePrefix + QLatin1String("tempXXXXXX"));
         QVERIFY2(file.open(), qPrintable(file.errorString()));
         QImageWriter writer(&file, "PNG");
         QVERIFY(writer.write(image));
-#if defined(Q_OS_WINCE)
-        file.reset();
-#endif
         QCOMPARE(QImage(writer.fileName()), image);
     }
     {
         // 4) Via QImage's API, with a named temp file
-        QTemporaryFile file("tempXXXXXX");
+        QTemporaryFile file(writePrefix + QLatin1String("tempXXXXXX"));
         QVERIFY2(file.open(), qPrintable(file.errorString()));
         QVERIFY(image.save(&file, "PNG"));
         file.reset();

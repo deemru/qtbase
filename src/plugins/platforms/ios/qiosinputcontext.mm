@@ -62,16 +62,49 @@ static QUIView *focusView()
 
 // -------------------------------------------------------------------------
 
+@interface QIOSLocaleListener : NSObject
+@end
+
+@implementation QIOSLocaleListener
+
+- (id)init
+{
+    if (self = [super init]) {
+        NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
+        [notificationCenter addObserver:self
+            selector:@selector(localeDidChange:)
+            name:NSCurrentLocaleDidChangeNotification object:nil];
+    }
+
+    return self;
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [super dealloc];
+}
+
+- (void)localeDidChange:(NSNotification *)notification
+{
+    Q_UNUSED(notification);
+    QIOSInputContext::instance()->emitLocaleChanged();
+}
+
+@end
+
+// -------------------------------------------------------------------------
+
 @interface QIOSKeyboardListener : UIGestureRecognizer <UIGestureRecognizerDelegate> {
   @private
-    QIOSInputContext *m_context;
+    QT_PREPEND_NAMESPACE(QIOSInputContext) *m_context;
 }
 @property BOOL hasDeferredScrollToCursor;
 @end
 
 @implementation QIOSKeyboardListener
 
-- (id)initWithQIOSInputContext:(QIOSInputContext *)context
+- (id)initWithQIOSInputContext:(QT_PREPEND_NAMESPACE(QIOSInputContext) *)context
 {
     if (self = [super initWithTarget:self action:@selector(gestureStateChanged:)]) {
 
@@ -84,6 +117,7 @@ static QUIView *focusView()
         self.cancelsTouchesInView = NO;
         self.delaysTouchesEnded = NO;
 
+#ifndef Q_OS_TVOS
         NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
 
         [notificationCenter addObserver:self
@@ -101,6 +135,7 @@ static QUIView *focusView()
         [notificationCenter addObserver:self
             selector:@selector(keyboardDidChangeFrame:)
             name:UIKeyboardDidChangeFrameNotification object:nil];
+#endif
     }
 
     return self;
@@ -256,6 +291,8 @@ static QUIView *focusView()
 
 // -------------------------------------------------------------------------
 
+QT_BEGIN_NAMESPACE
+
 Qt::InputMethodQueries ImeState::update(Qt::InputMethodQueries properties)
 {
     if (!properties)
@@ -291,6 +328,7 @@ QIOSInputContext *QIOSInputContext::instance()
 
 QIOSInputContext::QIOSInputContext()
     : QPlatformInputContext()
+    , m_localeListener([QIOSLocaleListener new])
     , m_keyboardHideGesture([[QIOSKeyboardListener alloc] initWithQIOSInputContext:this])
     , m_textResponder(0)
 {
@@ -304,6 +342,7 @@ QIOSInputContext::QIOSInputContext()
 
 QIOSInputContext::~QIOSInputContext()
 {
+    [m_localeListener release];
     [m_keyboardHideGesture.view removeGestureRecognizer:m_keyboardHideGesture];
     [m_keyboardHideGesture release];
 
@@ -342,6 +381,9 @@ void QIOSInputContext::clearCurrentFocusObject()
 
 void QIOSInputContext::updateKeyboardState(NSNotification *notification)
 {
+#ifdef Q_OS_TVOS
+    Q_UNUSED(notification);
+#else
     static CGRect currentKeyboardRect = CGRectZero;
 
     KeyboardState previousState = m_keyboardState;
@@ -377,7 +419,7 @@ void QIOSInputContext::updateKeyboardState(NSNotification *notification)
         m_keyboardState.animationDuration = [[userInfo objectForKey:UIKeyboardAnimationDurationUserInfoKey] doubleValue];
         m_keyboardState.keyboardAnimating = m_keyboardState.animationDuration > 0 && !atEndOfKeyboardTransition;
 
-        qImDebug() << qPrintable(QString::fromNSString(notification.name)) << "from" << fromCGRect(frameBegin) << "to" << fromCGRect(frameEnd)
+        qImDebug() << qPrintable(QString::fromNSString(notification.name)) << "from" << QRectF::fromCGRect(frameBegin) << "to" << QRectF::fromCGRect(frameEnd)
                    << "(curve =" << m_keyboardState.animationCurve << "duration =" << m_keyboardState.animationDuration << "s)";
     } else {
         qImDebug("No notification to update keyboard state based on, just updating keyboard rect");
@@ -386,7 +428,7 @@ void QIOSInputContext::updateKeyboardState(NSNotification *notification)
     if (!focusView() || CGRectIsEmpty(currentKeyboardRect))
         m_keyboardState.keyboardRect = QRectF();
     else // QInputmethod::keyboardRectangle() is documented to be in window coordinates.
-        m_keyboardState.keyboardRect = fromCGRect([focusView() convertRect:currentKeyboardRect fromView:nil]);
+        m_keyboardState.keyboardRect = QRectF::fromCGRect([focusView() convertRect:currentKeyboardRect fromView:nil]);
 
     // Emit for all changed properties
     if (m_keyboardState.keyboardVisible != previousState.keyboardVisible)
@@ -395,6 +437,7 @@ void QIOSInputContext::updateKeyboardState(NSNotification *notification)
         emitAnimatingChanged();
     if (m_keyboardState.keyboardRect != previousState.keyboardRect)
         emitKeyboardRectChanged();
+#endif
 }
 
 bool QIOSInputContext::isInputPanelVisible() const
@@ -514,7 +557,11 @@ void QIOSInputContext::scroll(int y)
                 if (keyboardScrollIsActive && !originalWindowLevels.contains(window))
                     originalWindowLevels.insert(window, window.windowLevel);
 
+#ifndef Q_OS_TVOS
                 UIWindowLevel windowLevelAdjustment = keyboardScrollIsActive ? UIWindowLevelStatusBar : 0;
+#else
+                UIWindowLevel windowLevelAdjustment = 0;
+#endif
                 window.windowLevel = originalWindowLevels.value(window) + windowLevelAdjustment;
 
                 if (!keyboardScrollIsActive)
@@ -663,3 +710,10 @@ void QIOSInputContext::commit()
     [m_textResponder unmarkText];
     [m_textResponder notifyInputDelegate:Qt::ImSurroundingText];
 }
+
+QLocale QIOSInputContext::locale() const
+{
+    return QLocale(QString::fromNSString([[NSLocale currentLocale] objectForKey:NSLocaleIdentifier]));
+}
+
+QT_END_NAMESPACE

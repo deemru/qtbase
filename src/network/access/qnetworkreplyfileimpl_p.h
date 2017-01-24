@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "qnetworkreply.h"
 #include "qnetworkreply_p.h"
 #include "qnetworkaccessmanager.h"
@@ -59,13 +60,12 @@
 
 QT_BEGIN_NAMESPACE
 
-
 class QNetworkReplyFileImplPrivate;
 class QNetworkReplyFileImpl: public QNetworkReply
 {
     Q_OBJECT
 public:
-    QNetworkReplyFileImpl(QObject *parent, const QNetworkRequest &req, const QNetworkAccessManager::Operation op);
+    QNetworkReplyFileImpl(QNetworkAccessManager *manager, const QNetworkRequest &req, const QNetworkAccessManager::Operation op);
     ~QNetworkReplyFileImpl();
     virtual void abort() Q_DECL_OVERRIDE;
 
@@ -77,6 +77,9 @@ public:
 
     virtual qint64 readData(char *data, qint64 maxlen) Q_DECL_OVERRIDE;
 
+private Q_SLOTS:
+    void fileOpenFinished(bool isOpen);
+
     Q_DECLARE_PRIVATE(QNetworkReplyFileImpl)
 };
 
@@ -85,12 +88,14 @@ class QNetworkReplyFileImplPrivate: public QNetworkReplyPrivate
 public:
     QNetworkReplyFileImplPrivate();
 
-    QFile realFile;
-    qint64 realFileSize;
+    QNetworkAccessManagerPrivate *managerPrivate;
+    QPointer<QFile> realFile;
 
     Q_DECLARE_PUBLIC(QNetworkReplyFileImpl)
 };
 
 QT_END_NAMESPACE
+
+Q_DECLARE_METATYPE(QNetworkRequest::KnownHeaders)
 
 #endif // QNETWORKREPLYFILEIMPL_H

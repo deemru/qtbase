@@ -233,10 +233,8 @@ QLabel::QLabel(QWidget *parent, Qt::WindowFlags f)
     \sa setText(), setAlignment(), setFrameStyle(), setIndent()
 */
 QLabel::QLabel(const QString &text, QWidget *parent, Qt::WindowFlags f)
-        : QFrame(*new QLabelPrivate(), parent, f)
+    : QLabel(parent, f)
 {
-    Q_D(QLabel);
-    d->init();
     setText(text);
 }
 
@@ -585,6 +583,7 @@ QSize QLabelPrivate::sizeForWidth(int w) const
 #ifndef QT_NO_MOVIE
     } else if (movie && !movie->currentPixmap().isNull()) {
         br = movie->currentPixmap().rect();
+        br.setSize(br.size() / movie->currentPixmap().devicePixelRatio());
 #endif
     } else if (isTextLabel) {
         int align = QStyle::visualAlignment(textDirection(), QFlag(this->align));

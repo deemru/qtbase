@@ -870,8 +870,7 @@ const char *QMetaType::typeName(int typeId)
     return result;
 }
 
-/*!
-    \internal
+/*
     Similar to QMetaType::type(), but only looks in the static set of types.
 */
 static inline int qMetaTypeStaticType(const char *typeName, int length)
@@ -884,8 +883,7 @@ static inline int qMetaTypeStaticType(const char *typeName, int length)
     return types[i].type;
 }
 
-/*!
-    \internal
+/*
     Similar to QMetaType::type(), but only looks in the custom set of
     types, and doesn't lock the mutex.
     The extra \a firstInvalidIndex parameter is an easy way to avoid
@@ -1270,6 +1268,7 @@ bool QMetaType::save(QDataStream &stream, int type, const void *data)
     case QMetaType::UnknownType:
     case QMetaType::Void:
     case QMetaType::VoidStar:
+    case QMetaType::Nullptr:
     case QMetaType::QObjectStar:
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
@@ -1491,6 +1490,7 @@ bool QMetaType::load(QDataStream &stream, int type, void *data)
     case QMetaType::UnknownType:
     case QMetaType::Void:
     case QMetaType::VoidStar:
+    case QMetaType::Nullptr:
     case QMetaType::QObjectStar:
     case QMetaType::QModelIndex:
     case QMetaType::QPersistentModelIndex:
@@ -1840,6 +1840,8 @@ public:
 
     template<typename T>
     void delegate(const T *where) { DestructorImpl<T>::Destruct(m_type, const_cast<T*>(where)); }
+    // MSVC2013 and earlier can not const_cast a std::nullptr_t pointer.
+    void delegate(const std::nullptr_t *) {}
     void delegate(const void *) {}
     void delegate(const QMetaTypeSwitcher::UnknownType*) {}
     void delegate(const QMetaTypeSwitcher::NotBuiltinType *where)

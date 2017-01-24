@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "private/qabstractsocketengine_p.h"
 #include "qabstractsocket.h"
 #include "qnetworkproxy.h"
@@ -111,13 +112,13 @@ public:
     bool setMulticastInterface(const QNetworkInterface &iface) Q_DECL_OVERRIDE;
 #endif // QT_NO_NETWORKINTERFACE
 
-    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader *,
-                        PacketHeaderOptions) Q_DECL_OVERRIDE;
-    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     bool hasPendingDatagrams() const Q_DECL_OVERRIDE;
     qint64 pendingDatagramSize() const Q_DECL_OVERRIDE;
 #endif // QT_NO_UDPSOCKET
 
+    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader *,
+                        PacketHeaderOptions) Q_DECL_OVERRIDE;
+    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     qint64 bytesToWrite() const Q_DECL_OVERRIDE;
 
     int option(SocketOption option) const Q_DECL_OVERRIDE;

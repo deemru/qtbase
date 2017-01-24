@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #ifndef QT_NO_FILEDIALOG
 
@@ -177,10 +177,6 @@ public:
 #if defined(Q_OS_WIN)
         QString n(path);
         n.replace(QLatin1Char('\\'), QLatin1Char('/'));
-#if defined(Q_OS_WINCE)
-        if ((n.size() > 1) && (n.startsWith(QLatin1String("//"))))
-            n = n.mid(1);
-#endif
         return n;
 #else // the compile should optimize away this
         return path;

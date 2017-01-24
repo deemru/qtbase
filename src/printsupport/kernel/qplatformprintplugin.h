@@ -49,9 +49,11 @@
 // source and binary incompatible with future versions of Qt.
 //
 
+#include <QtPrintSupport/qtprintsupportglobal.h>
 #include <QtCore/qplugin.h>
 #include <QtCore/qfactoryinterface.h>
-#include <QtPrintSupport/qtprintsupportglobal.h>
+
+#ifndef QT_NO_PRINTER
 
 QT_BEGIN_NAMESPACE
 
@@ -73,5 +75,7 @@ public:
 };
 
 QT_END_NAMESPACE
+
+#endif
 
 #endif // QPLATFORMPRINTPLUGIN_H

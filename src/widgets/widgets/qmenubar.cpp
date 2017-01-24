@@ -64,10 +64,6 @@
 #include "qmenubar_p.h"
 #include "qdebug.h"
 
-#ifdef Q_OS_WINCE
-extern bool qt_wince_is_mobile(); //defined in qguifunctions_wce.cpp
-#endif
-
 QT_BEGIN_NAMESPACE
 
 class QMenuBarExtension : public QToolButton
@@ -616,15 +612,16 @@ void QMenuBar::initStyleOption(QStyleOptionMenuItem *option, const QAction *acti
     for items in the menu bar are only shown when the \uicontrol{Alt} key is
     pressed.
 
-    \section1 QMenuBar on OS X
+    \section1 QMenuBar as a Global Menu Bar
 
-    QMenuBar on OS X is a wrapper for using the system-wide menu bar.
+    On \macos and on certain Linux desktop environments such as
+    Ubuntu Unity, QMenuBar is a wrapper for using the system-wide menu bar.
     If you have multiple menu bars in one dialog the outermost menu bar
     (normally inside a widget with widget flag Qt::Window) will
     be used for the system-wide menu bar.
 
-    Qt for OS X also provides a menu bar merging feature to make
-    QMenuBar conform more closely to accepted OS X menu bar layout.
+    Qt for \macos also provides a menu bar merging feature to make
+    QMenuBar conform more closely to accepted \macos menu bar layout.
     The merging functionality is based on string matching the title of
     a QMenu entry. These strings are translated (using QObject::tr())
     in the "QMenuBar" context. If an entry is moved its slots will still
@@ -661,22 +658,15 @@ void QMenuBar::initStyleOption(QStyleOptionMenuItem *option, const QAction *acti
     as its parent. That menu bar would only be displayed for the
     parent QMainWindow.
 
-    \b{Note:} The text used for the application name in the menu
+    \b{Note:} The text used for the application name in the \macos menu
     bar is obtained from the value set in the \c{Info.plist} file in
-    the application's bundle. See \l{Qt for OS X - Deployment}
+    the application's bundle. See \l{Qt for macOS - Deployment}
     for more information.
 
-    \section1 QMenuBar on Windows CE
-
-    QMenuBar on Windows CE is a wrapper for using the system-wide menu bar,
-    similar to the Mac.  This feature is activated for Windows Mobile
-    and integrates QMenuBar with the native soft keys. The left soft
-    key can be controlled with QMenuBar::setDefaultAction() and the
-    right soft key can be used to access the menu bar.
-
-    The hovered() signal is not supported for the native menu
-    integration. Also, it is not possible to display an icon in a
-    native menu on Windows Mobile.
+    \b{Note:} On Linux, if the com.canonical.AppMenu.Registrar
+    service is available on the D-Bus session bus, then Qt will
+    communicate with it to install the application's menus into the
+    global menu bar, as described.
 
     \section1 Examples
 
@@ -701,16 +691,6 @@ void QMenuBarPrivate::init()
 
     if (platformMenuBar)
         q->hide();
-#ifdef Q_OS_WINCE
-    if (qt_wince_is_mobile()) {
-        wceCreateMenuBar(q->parentWidget());
-        if(wce_menubar)
-            q->hide();
-    }
-    else {
-        QApplication::setAttribute(Qt::AA_DontUseNativeMenuBar, true);
-    }
-#endif
     q->setBackgroundRole(QPalette::Button);
     handleReparent();
     q->setMouseTracking(q->style()->styleHint(QStyle::SH_MenuBar_MouseTracking, 0, q));
@@ -760,11 +740,6 @@ QMenuBar::~QMenuBar()
     Q_D(QMenuBar);
     delete d->platformMenuBar;
     d->platformMenuBar = 0;
-
-#ifdef Q_OS_WINCE
-    if (qt_wince_is_mobile())
-        d->wceDestroyMenuBar();
-#endif
 }
 
 /*!
@@ -908,7 +883,7 @@ void QMenuBar::setActiveAction(QAction *act)
 /*!
     Removes all the actions from the menu bar.
 
-    \note On OS X, menu items that have been merged to the system
+    \note On \macos, menu items that have been merged to the system
     menu bar are not removed by this function. One way to handle this
     would be to remove the extra actions yourself. You can set the
     \l{QAction::MenuRole}{menu role} on the different menus, so that
@@ -1016,13 +991,11 @@ void QMenuBar::paintEvent(QPaintEvent *e)
 */
 void QMenuBar::setVisible(bool visible)
 {
-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
     if (isNativeMenuBar()) {
         if (!visible)
             QWidget::setVisible(false);
         return;
     }
-#endif
     QWidget::setVisible(visible);
 }
 
@@ -1132,11 +1105,13 @@ void QMenuBar::keyPressEvent(QKeyEvent *e)
         key_consumed = false;
     }
 
+#ifndef QT_NO_SHORTCUT
     if (!key_consumed && e->matches(QKeySequence::Cancel)) {
         d->setCurrentAction(0);
         d->setKeyboardMode(false);
         key_consumed = true;
     }
+#endif
 
     if(!key_consumed &&
        (!e->modifiers() ||
@@ -1217,6 +1192,10 @@ QPlatformMenu *QMenuBarPrivate::getPlatformMenu(QAction *action)
     QPlatformMenu *platformMenu = action->menu()->platformMenu();
     if (!platformMenu && platformMenuBar) {
         platformMenu = platformMenuBar->createMenu();
+        // QPlatformMenuBar::createMenu() was introduced in Qt 5.7. Not all third party
+        // platform themes are using it, so fallback to QPlatformTheme::createPlatformMenu().
+        if (!platformMenu)
+            platformMenu = QGuiApplicationPrivate::platformTheme()->createPlatformMenu();
         if (platformMenu)
             action->menu()->setPlatformMenu(platformMenu);
     }
@@ -1233,11 +1212,7 @@ void QMenuBar::actionEvent(QActionEvent *e)
     d->itemsDirty = true;
 
     if (d->platformMenuBar) {
-#if !defined(Q_OS_WINCE)
         QPlatformMenuBar *nativeMenuBar = d->platformMenuBar;
-#else
-        QMenuBarPrivate::QWceMenuBarPrivate *nativeMenuBar = d->wce_menubar;
-#endif
         if (!nativeMenuBar)
             return;
 
@@ -1389,11 +1364,6 @@ void QMenuBarPrivate::handleReparent()
             platformMenuBar->handleReparent(0);
         }
     }
-
-#ifdef Q_OS_WINCE
-    if (qt_wince_is_mobile() && wce_menubar)
-        wce_menubar->rebuild();
-#endif
 }
 
 /*!
@@ -1453,6 +1423,7 @@ bool QMenuBar::event(QEvent *e)
     case QEvent::Show:
         d->_q_updateLayout();
     break;
+#ifndef QT_NO_SHORTCUT
     case QEvent::ShortcutOverride: {
         QKeyEvent *kev = static_cast<QKeyEvent*>(e);
         //we only filter out escape if there is a current action
@@ -1462,8 +1433,7 @@ bool QMenuBar::event(QEvent *e)
         }
     }
     break;
-
-
+#endif
 #ifndef QT_NO_WHATSTHIS
     case QEvent::QueryWhatsThis:
         e->setAccepted(d->whatsThis.size());
@@ -1572,11 +1542,7 @@ QRect QMenuBar::actionGeometry(QAction *act) const
 QSize QMenuBar::minimumSizeHint() const
 {
     Q_D(const QMenuBar);
-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
     const bool as_gui_menubar = !isNativeMenuBar();
-#else
-    const bool as_gui_menubar = true;
-#endif
 
     ensurePolished();
     QSize ret(0, 0);
@@ -1628,12 +1594,7 @@ QSize QMenuBar::minimumSizeHint() const
 QSize QMenuBar::sizeHint() const
 {
     Q_D(const QMenuBar);
-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
     const bool as_gui_menubar = !isNativeMenuBar();
-#else
-    const bool as_gui_menubar = true;
-#endif
-
 
     ensurePolished();
     QSize ret(0, 0);
@@ -1686,11 +1647,7 @@ QSize QMenuBar::sizeHint() const
 int QMenuBar::heightForWidth(int) const
 {
     Q_D(const QMenuBar);
-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
     const bool as_gui_menubar = !isNativeMenuBar();
-#else
-    const bool as_gui_menubar = true;
-#endif
 
     const_cast<QMenuBarPrivate*>(d)->updateGeometries();
     int height = 0;
@@ -1821,24 +1778,23 @@ QWidget *QMenuBar::cornerWidget(Qt::Corner corner) const
     \brief Whether or not a menubar will be used as a native menubar on platforms that support it
     \since 4.6
 
-    This property specifies whether or not the menubar should be used as a native menubar on platforms
-    that support it. The currently supported platforms are OS X and Windows CE. On these platforms
-    if this property is \c true, the menubar is used in the native menubar and is not in the window of
-    its parent, if false the menubar remains in the window. On other platforms the value of this
-    attribute has no effect.
+    This property specifies whether or not the menubar should be used as a native menubar on
+    platforms that support it. The currently supported platforms are \macos, and
+    Linux desktops which use the com.canonical.dbusmenu D-Bus interface (such as Ubuntu Unity).
+    If this property is \c true, the menubar is used in the native menubar and is not in the window of
+    its parent; if \c false the menubar remains in the window. On other platforms,
+    setting this attribute has no effect, and reading this attribute will always return \c false.
 
     The default is to follow whether the Qt::AA_DontUseNativeMenuBar attribute
-    is set for the application. Explicitly settings this property overrides
-    the presence (or abscence) of the attribute.
+    is set for the application. Explicitly setting this property overrides
+    the presence (or absence) of the attribute.
 */
 
 void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
 {
     Q_D(QMenuBar);
-    if (d->nativeMenuBar == -1 || (nativeMenuBar != bool(d->nativeMenuBar))) {
-        d->nativeMenuBar = nativeMenuBar;
-
-        if (!d->nativeMenuBar) {
+    if (nativeMenuBar != bool(d->platformMenuBar)) {
+        if (!nativeMenuBar) {
             delete d->platformMenuBar;
             d->platformMenuBar = 0;
         } else {
@@ -1847,7 +1803,7 @@ void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
         }
 
         updateGeometry();
-        if (!d->nativeMenuBar && parentWidget())
+        if (!nativeMenuBar && parentWidget())
             setVisible(true);
     }
 }
@@ -1855,10 +1811,7 @@ void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
 bool QMenuBar::isNativeMenuBar() const
 {
     Q_D(const QMenuBar);
-    if (d->nativeMenuBar == -1) {
-        return !QApplication::instance()->testAttribute(Qt::AA_DontUseNativeMenuBar);
-    }
-    return d->nativeMenuBar;
+    return bool(d->platformMenuBar);
 }
 
 /*!
@@ -1869,55 +1822,6 @@ QPlatformMenuBar *QMenuBar::platformMenuBar()
     Q_D(const QMenuBar);
     return d->platformMenuBar;
 }
-
-/*!
-  \since 4.4
-
-  Sets the default action to \a act.
-
-  The default action is assigned to the left soft key. The menu is assigned
-  to the right soft key.
-
-  Currently there is only support for the default action on Windows
-  Mobile. On all other platforms this method is not available.
-
-  \sa defaultAction()
-*/
-
-#ifdef Q_OS_WINCE
-void QMenuBar::setDefaultAction(QAction *act)
-{
-    Q_D(QMenuBar);
-    if (d->defaultAction == act)
-        return;
-    if (qt_wince_is_mobile())
-        if (d->defaultAction) {
-            disconnect(d->defaultAction, SIGNAL(changed()), this, SLOT(_q_updateDefaultAction()));
-            disconnect(d->defaultAction, SIGNAL(destroyed()), this, SLOT(_q_updateDefaultAction()));
-        }
-    d->defaultAction = act;
-    if (qt_wince_is_mobile())
-        if (d->defaultAction) {
-            connect(d->defaultAction, SIGNAL(changed()), this, SLOT(_q_updateDefaultAction()));
-            connect(d->defaultAction, SIGNAL(destroyed()), this, SLOT(_q_updateDefaultAction()));
-        }
-    if (d->wce_menubar) {
-        d->wce_menubar->rebuild();
-    }
-}
-
-/*!
-  \since 4.4
-
-  Returns the current default action.
-
-  \sa setDefaultAction()
-*/
-QAction *QMenuBar::defaultAction() const
-{
-    return d_func()->defaultAction;
-}
-#endif
 
 /*!
     \fn void QMenuBar::triggered(QAction *action)

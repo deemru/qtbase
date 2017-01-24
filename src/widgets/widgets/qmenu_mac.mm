@@ -62,8 +62,9 @@ inline QPlatformNativeInterface::NativeResourceForIntegrationFunction resolvePla
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
         nativeInterface->nativeResourceFunctionForIntegration(functionName);
     if (Q_UNLIKELY(!function))
-         qWarning() << "Qt could not resolve function" << functionName
-                    << "from QGuiApplication::platformNativeInterface()->nativeResourceFunctionForIntegration()";
+         qWarning("Qt could not resolve function %s from "
+                  "QGuiApplication::platformNativeInterface()->nativeResourceFunctionForIntegration()",
+                  functionName.constData());
     return function;
 }
 } //namespsace
@@ -72,18 +73,19 @@ inline QPlatformNativeInterface::NativeResourceForIntegrationFunction resolvePla
 /*!
     \since 5.2
 
-    Returns the native NSMenu for this menu. Available on OS X only.
+    Returns the native NSMenu for this menu. Available on \macos only.
 
     \note Qt sets the delegate on the native menu. If you need to set your own
     delegate, make sure you save the original one and forward any calls to it.
 */
 NSMenu *QMenu::toNSMenu()
 {
+    Q_D(QMenu);
     // Call into the cocoa platform plugin: qMenuToNSMenu(platformMenu())
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function = resolvePlatformFunction("qmenutonsmenu");
     if (function) {
         typedef void* (*QMenuToNSMenuFunction)(QPlatformMenu *platformMenu);
-        return reinterpret_cast<NSMenu *>(reinterpret_cast<QMenuToNSMenuFunction>(function)(platformMenu()));
+        return reinterpret_cast<NSMenu *>(reinterpret_cast<QMenuToNSMenuFunction>(function)(d->createPlatformMenu()));
     }
     return nil;
 }
@@ -93,15 +95,16 @@ NSMenu *QMenu::toNSMenu()
     \since 5.2
 
     Set this menu to be the dock menu available by option-clicking
-    on the application dock icon. Available on OS X only.
+    on the application dock icon. Available on \macos only.
 */
 void QMenu::setAsDockMenu()
 {
+    Q_D(QMenu);
     // Call into the cocoa platform plugin: setDockMenu(platformMenu())
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function = resolvePlatformFunction("setdockmenu");
     if (function) {
         typedef void (*SetDockMenuFunction)(QPlatformMenu *platformMenu);
-        reinterpret_cast<SetDockMenuFunction>(function)(platformMenu());
+        reinterpret_cast<SetDockMenuFunction>(function)(d->createPlatformMenu());
     }
 }
 
@@ -111,7 +114,7 @@ void QMenu::setAsDockMenu()
     \deprecated
 
     Sets this \a menu to be the dock menu available by option-clicking
-    on the application dock icon. Available on OS X only.
+    on the application dock icon. Available on \macos only.
 
     Deprecated; use \l QMenu::setAsDockMenu() instead.
 */
@@ -141,7 +144,7 @@ void QMenuPrivate::moveWidgetToPlatformItem(QWidget *widget, QPlatformMenuItem* 
 /*!
     \since 5.2
 
-    Returns the native NSMenu for this menu bar. Available on OS X only.
+    Returns the native NSMenu for this menu bar. Available on \macos only.
 
     \note Qt may set the delegate on the native menu bar. If you need to set your
     own delegate, make sure you save the original one and forward any calls to it.

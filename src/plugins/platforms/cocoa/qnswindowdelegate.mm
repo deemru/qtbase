@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qnswindowdelegate.h"
+#include "qcocoahelpers.h"
 
 #include <QDebug>
 #include <qpa/qwindowsysteminterface.h>
@@ -60,7 +61,7 @@
     if (m_cocoaWindow->m_windowUnderMouse) {
         QPointF windowPoint;
         QPointF screenPoint;
-        [m_cocoaWindow->m_qtView convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+        [qnsview_cast(m_cocoaWindow->view()) convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
         QWindowSystemInterface::handleEnterEvent(m_cocoaWindow->m_enterLeaveTargetWindow, windowPoint, screenPoint);
     }
 }
@@ -110,9 +111,31 @@
 - (BOOL)windowShouldZoom:(NSWindow *)window toFrame:(NSRect)newFrame
 {
     Q_UNUSED(newFrame);
-    if (m_cocoaWindow && m_cocoaWindow->m_qtView)
-        [m_cocoaWindow->m_qtView notifyWindowWillZoom:![window isZoomed]];
+    if (m_cocoaWindow && m_cocoaWindow->window()->type() != Qt::ForeignWindow)
+        [qnsview_cast(m_cocoaWindow->view()) notifyWindowWillZoom:![window isZoomed]];
     return YES;
 }
 
+- (void)windowWillClose:(NSNotification *)notification
+{
+    Q_UNUSED(notification);
+    if (m_cocoaWindow)
+        m_cocoaWindow->windowWillClose();
+}
+
+- (BOOL)window:(NSWindow *)window shouldPopUpDocumentPathMenu:(NSMenu *)menu
+{
+    Q_UNUSED(window);
+    Q_UNUSED(menu);
+    return m_cocoaWindow && m_cocoaWindow->m_hasWindowFilePath;
+}
+
+- (BOOL)window:(NSWindow *)window shouldDragDocumentWithEvent:(NSEvent *)event from:(NSPoint)dragImageLocation withPasteboard:(NSPasteboard *)pasteboard
+{
+    Q_UNUSED(window);
+    Q_UNUSED(event);
+    Q_UNUSED(dragImageLocation);
+    Q_UNUSED(pasteboard);
+    return m_cocoaWindow && m_cocoaWindow->m_hasWindowFilePath;
+}
 @end

@@ -108,7 +108,7 @@ QPixmapStyle::~QPixmapStyle()
 void QPixmapStyle::polish(QApplication *application)
 {
     QCommonStyle::polish(application);
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
 #endif
 }
@@ -170,7 +170,7 @@ void QPixmapStyle::polish(QWidget *widget)
             frame->setContentsMargins(pix.margins.left(), desc.margins.top(),
                                       pix.margins.right(), desc.margins.bottom());
             frame->setAttribute(Qt::WA_TranslucentBackground);
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
             // FramelessWindowHint is needed on windows to make
             // WA_TranslucentBackground work properly
             frame->setWindowFlags(widget->windowFlags() | Qt::FramelessWindowHint);
@@ -187,7 +187,9 @@ void QPixmapStyle::polish(QWidget *widget)
             view->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
             view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
         }
+#if QT_CONFIG(gestures)
         QScroller::grabGesture(scrollArea->viewport(), QScroller::LeftMouseButtonGesture);
+#endif
     }
 
     if (qobject_cast<QScrollBar*>(widget))
@@ -217,8 +219,10 @@ void QPixmapStyle::unpolish(QWidget *widget)
     if (qstrcmp(widget->metaObject()->className(),"QComboBoxPrivateContainer") == 0)
         widget->removeEventFilter(this);
 
+#if QT_CONFIG(gestures)
     if (QAbstractScrollArea *scrollArea = qobject_cast<QAbstractScrollArea*>(widget))
         QScroller::ungrabGesture(scrollArea->viewport());
+#endif
 
     QCommonStyle::unpolish(widget);
 }
@@ -624,10 +628,10 @@ void QPixmapStyle::drawCachedPixmap(QPixmapStyle::ControlDescriptor control, con
                                     QPainter *p) const
 {
     Q_D(const QPixmapStyle);
-    if (!d->descriptors.contains(control))
+    auto descriptor = d->descriptors.constFind(control);
+    if (descriptor == d->descriptors.constEnd())
         return;
-    const QPixmapStyleDescriptor &desc = d->descriptors.value(control);
-    const QPixmap pix = d->getCachedPixmap(control, desc, rect.size());
+    const QPixmap pix = d->getCachedPixmap(control, descriptor.value(), rect.size());
     Q_ASSERT(!pix.isNull());
     p->drawPixmap(rect, pix);
 }

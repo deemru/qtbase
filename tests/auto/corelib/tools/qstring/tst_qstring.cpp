@@ -37,10 +37,6 @@
 # undef QT_ASCII_CAST_WARNINGS
 #endif
 
-#if defined(Q_OS_WIN) && defined(Q_OS_WINCE)
-#define Q_OS_WIN_AND_WINCE
-#endif
-
 #include <QtTest/QtTest>
 #include <qregexp.h>
 #include <qregularexpression.h>
@@ -88,11 +84,11 @@ public:
 
     template <typename MemFun>
     void apply0(QString &s, MemFun mf) const
-    { Q_FOREACH (QChar ch, this->pinned) (s.*mf)(ch); }
+    { for (QChar ch : qAsConst(this->pinned)) (s.*mf)(ch); }
 
     template <typename MemFun, typename A1>
     void apply1(QString &s, MemFun mf, A1 a1) const
-    { Q_FOREACH (QChar ch, this->pinned) (s.*mf)(a1, ch); }
+    { for (QChar ch : qAsConst(this->pinned)) (s.*mf)(a1, ch); }
 };
 
 template <>
@@ -127,7 +123,7 @@ template <>
 class Arg<QStringRef> : ArgBase
 {
     QStringRef ref() const
-    { return this->pinned.isNull() ? QStringRef() : this->pinned.midRef(0) ; }
+    { return QStringRef(&pinned); }
 public:
     explicit Arg(const char *str) : ArgBase(str) {}
 
@@ -258,6 +254,9 @@ public:
 };
 
 } // unnamed namespace
+QT_BEGIN_NAMESPACE
+Q_DECLARE_TYPEINFO(CharStarContainer, Q_PRIMITIVE_TYPE);
+QT_END_NAMESPACE
 
 Q_DECLARE_METATYPE(CharStarContainer)
 
@@ -356,7 +355,7 @@ private slots:
     void replace_qchar_qstring();
     void replace_uint_uint_data();
     void replace_uint_uint();
-    void replace_uint_uint_extra();
+    void replace_extra();
     void replace_string_data();
     void replace_string();
     void replace_regexp_data();
@@ -479,6 +478,8 @@ private slots:
     void sprintfS();
     void fill();
     void truncate();
+    void chop_data();
+    void chop();
     void constructor();
     void constructorQByteArray_data();
     void constructorQByteArray();
@@ -498,6 +499,8 @@ private slots:
     void fromLocal8Bit();
     void local8Bit_data();
     void local8Bit();
+    void invalidToLocal8Bit_data();
+    void invalidToLocal8Bit();
     void nullFromLocal8Bit();
     void fromLatin1Roundtrip_data();
     void fromLatin1Roundtrip();
@@ -527,7 +530,7 @@ private slots:
     void integer_conversion();
     void tortureSprintfDouble();
     void toNum();
-#if !defined(Q_OS_WIN) || defined(Q_OS_WIN_AND_WINCE)
+#if !defined(Q_OS_WIN)
     void localeAwareCompare_data();
     void localeAwareCompare();
 #endif
@@ -645,7 +648,7 @@ QString verifyZeroTermination(const QString &str)
     } while (0)                                                         \
     /**/
 
-typedef QList<int> IntList;
+typedef QVector<int> IntList;
 
 tst_QString::tst_QString()
 {
@@ -1053,10 +1056,6 @@ void tst_QString::acc_01()
     QVERIFY(a.isNull());
     QVERIFY(*a.toLatin1().constData() == '\0');
     {
-#if defined(Q_OS_WINCE)
-        int argc = 0;
-        QCoreApplication app(argc, 0);
-#endif
         QFile f("COMPARE.txt");
         f.open(QIODevice::ReadOnly);
         QTextStream ts( &f );
@@ -1200,7 +1199,7 @@ void tst_QString::macTypes()
 #ifndef Q_OS_MAC
     QSKIP("This is a Mac-only test");
 #else
-    extern void tst_QString_macTypes(); // in qstring_mac.mm
+    extern void tst_QString_macTypes(); // in qcore_foundation.mm
     tst_QString_macTypes();
 #endif
 }
@@ -1217,6 +1216,31 @@ void tst_QString::truncate()
     QVERIFY(e.isEmpty());
     QVERIFY(!e.isNull());
 
+}
+
+void tst_QString::chop_data()
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<int>("count" );
+    QTest::addColumn<QString>("result");
+
+    const QString original("abcd");
+
+    QTest::newRow("data0") << original << 1 << QString("abc");
+    QTest::newRow("data1") << original << 0 << original;
+    QTest::newRow("data2") << original << -1 << original;
+    QTest::newRow("data3") << original << original.size() << QString();
+    QTest::newRow("data4") << original << 1000  << QString();
+}
+
+void tst_QString::chop()
+{
+    QFETCH(QString, input);
+    QFETCH(int, count);
+    QFETCH(QString, result);
+
+    input.chop(count);
+    QCOMPARE(input, result);
 }
 
 void tst_QString::fill()
@@ -2784,7 +2808,7 @@ void tst_QString::replace_uint_uint()
     }
 }
 
-void tst_QString::replace_uint_uint_extra()
+void tst_QString::replace_extra()
 {
     /*
         This test is designed to be extremely slow if QString::replace() doesn't optimize the case
@@ -2821,6 +2845,44 @@ void tst_QString::replace_uint_uint_extra()
     QString str5("abcdefghij");
     str5.replace(8, 10, str5);
     QCOMPARE(str5, QString("abcdefghabcdefghij"));
+
+    // Replacements using only part of the string modified:
+    QString str6("abcdefghij");
+    str6.replace(1, 8, str6.constData() + 3, 3);
+    QCOMPARE(str6, QString("adefj"));
+
+    QString str7("abcdefghibcdefghij");
+    str7.replace(str7.constData() + 1, 6, str7.constData() + 2, 3);
+    QCOMPARE(str7, QString("acdehicdehij"));
+
+    const int many = 1024;
+    /*
+      QS::replace(const QChar *, int, const QChar *, int, Qt::CaseSensitivity)
+      does its replacements in batches of many (please keep in sync with any
+      changes to batch size), which lead to misbehaviour if ether QChar * array
+      was part of the data being modified.
+    */
+    QString str8("abcdefg"), ans8("acdeg");
+    {
+        // Make str8 and ans8 repeat themselves many + 1 times:
+        int i = many;
+        QString big(str8), small(ans8);
+        while (i && !(i & 1)) { // Exploit many being a power of 2:
+            big += big;
+            small += small;
+            i >>= 1;
+        }
+        while (i-- > 0) {
+            str8 += big;
+            ans8 += small;
+        }
+    }
+    str8.replace(str8.constData() + 1, 5, str8.constData() + 2, 3);
+    // Pre-test the bit where the diff happens, so it gets displayed:
+    QCOMPARE(str8.mid((many - 3) * 5), ans8.mid((many - 3) * 5));
+    // Also check the full values match, of course:
+    QCOMPARE(str8.size(), ans8.size());
+    QCOMPARE(str8, ans8);
 }
 
 void tst_QString::replace_string()
@@ -4233,6 +4295,66 @@ void tst_QString::local8Bit()
     QCOMPARE(local8Bit.toLocal8Bit(), QByteArray(result));
 }
 
+void tst_QString::invalidToLocal8Bit_data()
+{
+    QTest::addColumn<QString>("unicode");
+    QTest::addColumn<QByteArray>("expect"); // Initial validly-converted prefix
+
+    {
+        const QChar malformed[] = { 'A', 0xd800, 'B', 0 };
+        const char expected[] = "A";
+        QTest::newRow("LoneHighSurrogate")
+            << QString(malformed, sizeof(malformed) / sizeof(QChar))
+            // Don't include the terminating '\0' of expected:
+            << QByteArray(expected, sizeof(expected) / sizeof(char) - 1);
+    }
+    {
+        const QChar malformed[] = { 'A', 0xdc00, 'B', 0 };
+        const char expected[] = "A";
+        QTest::newRow("LoneLowSurrogate")
+            << QString(malformed, sizeof(malformed) / sizeof(QChar))
+            << QByteArray(expected, sizeof(expected) / sizeof(char) - 1);
+    }
+    {
+        const QChar malformed[] = { 'A', 0xd800, 0xd801, 'B', 0 };
+        const char expected[] = "A";
+        QTest::newRow("DoubleHighSurrogate")
+            << QString(malformed, sizeof(malformed) / sizeof(QChar))
+            << QByteArray(expected, sizeof(expected) / sizeof(char) - 1);
+    }
+    {
+        const QChar malformed[] = { 'A', 0xdc00, 0xdc01, 'B', 0 };
+        const char expected[] = "A";
+        QTest::newRow("DoubleLowSurrogate")
+            << QString(malformed, sizeof(malformed) / sizeof(QChar))
+            << QByteArray(expected, sizeof(expected) / sizeof(char) - 1);
+    }
+    {
+        const QChar malformed[] = { 'A', 0xdc00, 0xd800, 'B', 0 };
+        const char expected[] = "A";
+        QTest::newRow("ReversedSurrogates") // low before high
+            << QString(malformed, sizeof(malformed) / sizeof(QChar))
+            << QByteArray(expected, sizeof(expected) / sizeof(char) - 1);
+    }
+}
+
+void tst_QString::invalidToLocal8Bit()
+{
+    QFETCH(QString, unicode);
+    QFETCH(QByteArray, expect);
+    QByteArray local = unicode.toLocal8Bit();
+    /*
+      The main concern of this test is to check that any error-reporting that
+      toLocal8Bit() prompts on failure isn't dependent on outputting the data
+      it's converting via toLocal8Bit(), which would be apt to recurse.  So the
+      real purpose of this QVERIFY(), for all that we should indeed check we get
+      the borked output that matches what we can reliably expect (despite
+      variation in how codecs respond to errors), is to verify that we got here
+      - i.e. we didn't crash in such a recursive stack over-flow.
+     */
+    QVERIFY(local.startsWith(expect));
+}
+
 void tst_QString::nullFromLocal8Bit()
 {
     QString a;
@@ -4955,6 +5077,12 @@ void tst_QString::operator_eqeq_nullstring()
     QVERIFY( QString("") == "" );
     QVERIFY( "" == QString("") );
 
+    QVERIFY(QString() == nullptr);
+    QVERIFY(nullptr == QString());
+
+    QVERIFY(QString("") == nullptr);
+    QVERIFY(nullptr == QString(""));
+
     QVERIFY( QString().size() == 0 );
 
     QVERIFY( QString("").size() == 0 );
@@ -4968,6 +5096,8 @@ void tst_QString::operator_smaller()
     QString null;
     QString empty("");
     QString foo("foo");
+    const char *nullC = nullptr;
+    const char *emptyC = "";
 
     QVERIFY( !(null < QString()) );
     QVERIFY( !(null > QString()) );
@@ -4977,6 +5107,12 @@ void tst_QString::operator_smaller()
 
     QVERIFY( !(null < empty) );
     QVERIFY( !(null > empty) );
+
+    QVERIFY( !(nullC < empty) );
+    QVERIFY( !(nullC > empty) );
+
+    QVERIFY( !(null < emptyC) );
+    QVERIFY( !(null > emptyC) );
 
     QVERIFY( null < foo );
     QVERIFY( !(null > foo) );
@@ -5309,15 +5445,11 @@ void tst_QString::tortureSprintfDouble()
 
 #include <locale.h>
 
-#if !defined(Q_OS_WIN) || defined(Q_OS_WIN_AND_WINCE)
-// On Q_OS_WIN others than Win CE, we cannot set the system or user locale
+#if !defined(Q_OS_WIN)
+// On Q_OS_WIN, we cannot set the system or user locale
 void tst_QString::localeAwareCompare_data()
 {
-#ifdef Q_OS_WIN_AND_WINCE
-    QTest::addColumn<ulong>("locale");
-#else
     QTest::addColumn<QString>("locale");
-#endif
     QTest::addColumn<QString>("s1");
     QTest::addColumn<QString>("s2");
     QTest::addColumn<int>("result");
@@ -5327,15 +5459,9 @@ void tst_QString::localeAwareCompare_data()
         Latin-1-specific characters (I think). Compare with Swedish
         below.
     */
-#ifdef Q_OS_WIN_AND_WINCE // assume c locale to be english
-    QTest::newRow("c1") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString::fromLatin1("\xe5") << QString::fromLatin1("\xe4") << 1;
-    QTest::newRow("c2") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
-    QTest::newRow("c3") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString::fromLatin1("\xe5") << QString::fromLatin1("\xf6") << -1;
-#else
     QTest::newRow("c1") << QString("C") << QString::fromLatin1("\xe5") << QString::fromLatin1("\xe4") << 1;
     QTest::newRow("c2") << QString("C") << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
     QTest::newRow("c3") << QString("C") << QString::fromLatin1("\xe5") << QString::fromLatin1("\xf6") << -1;
-#endif
 
     /*
         It's hard to test English, because it's treated differently
@@ -5345,15 +5471,9 @@ void tst_QString::localeAwareCompare_data()
         comparison of Latin-1 values, although I'm not sure. So I
         just test digits to make sure that it's not totally broken.
     */
-#ifdef Q_OS_WIN_AND_WINCE
-    QTest::newRow("english1") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString("5") << QString("4") << 1;
-    QTest::newRow("english2") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString("4") << QString("6") << -1;
-    QTest::newRow("english3") << MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT) << QString("5") << QString("6") << -1;
-#else
     QTest::newRow("english1") << QString("en_US") << QString("5") << QString("4") << 1;
     QTest::newRow("english2") << QString("en_US") << QString("4") << QString("6") << -1;
     QTest::newRow("english3") << QString("en_US") << QString("5") << QString("6") << -1;
-#endif
     /*
         In Swedish, a with ring above (E5) comes before a with
         diaresis (E4), which comes before o diaresis (F6), which
@@ -5364,11 +5484,6 @@ void tst_QString::localeAwareCompare_data()
     QTest::newRow("swedish2") << QString("sv_SE.ISO8859-1") << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
     QTest::newRow("swedish3") << QString("sv_SE.ISO8859-1") << QString::fromLatin1("\xe5") << QString::fromLatin1("\xf6") << -1;
     QTest::newRow("swedish4") << QString("sv_SE.ISO8859-1") << QString::fromLatin1("z") << QString::fromLatin1("\xe5") << -1;
-#elif defined(Q_OS_WIN_AND_WINCE)
-    QTest::newRow("swedish1") << MAKELCID(MAKELANGID(LANG_SWEDISH, SUBLANG_SWEDISH), SORT_DEFAULT) << QString::fromLatin1("\xe5") << QString::fromLatin1("\xe4") << -1;
-    QTest::newRow("swedish2") << MAKELCID(MAKELANGID(LANG_SWEDISH, SUBLANG_SWEDISH), SORT_DEFAULT) << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
-    QTest::newRow("swedish3") << MAKELCID(MAKELANGID(LANG_SWEDISH, SUBLANG_SWEDISH), SORT_DEFAULT) << QString::fromLatin1("\xe5") << QString::fromLatin1("\xf6") << -1;
-    QTest::newRow("swedish4") << MAKELCID(MAKELANGID(LANG_SWEDISH, SUBLANG_SWEDISH), SORT_DEFAULT) << QString::fromLatin1("z") << QString::fromLatin1("\xe5") << -1;
 #else
     QTest::newRow("swedish1") << QString("sv_SE") << QString::fromLatin1("\xe5") << QString::fromLatin1("\xe4") << -1;
     QTest::newRow("swedish2") << QString("sv_SE") << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
@@ -5394,10 +5509,6 @@ void tst_QString::localeAwareCompare_data()
     QTest::newRow("german1") << QString("de_DE.ISO8859-1") << QString::fromLatin1("z") << QString::fromLatin1("\xe4") << 1;
     QTest::newRow("german2") << QString("de_DE.ISO8859-1") << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
     QTest::newRow("german3") << QString("de_DE.ISO8859-1") << QString::fromLatin1("z") << QString::fromLatin1("\xf6") << 1;
-#elif defined(Q_OS_WIN_AND_WINCE)
-    QTest::newRow("german1") << MAKELCID(MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN), SORT_DEFAULT) << QString::fromLatin1("z") << QString::fromLatin1("\xe4") << 1;
-    QTest::newRow("german2") << MAKELCID(MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN), SORT_DEFAULT) << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
-    QTest::newRow("german3") << MAKELCID(MAKELANGID(LANG_GERMAN, SUBLANG_GERMAN), SORT_DEFAULT) << QString::fromLatin1("z") << QString::fromLatin1("\xf6") << 1;
 #else
     QTest::newRow("german1") << QString("de_DE") << QString::fromLatin1("z") << QString::fromLatin1("\xe4") << 1;
     QTest::newRow("german2") << QString("de_DE") << QString::fromLatin1("\xe4") << QString::fromLatin1("\xf6") << -1;
@@ -5407,11 +5518,7 @@ void tst_QString::localeAwareCompare_data()
 
 void tst_QString::localeAwareCompare()
 {
-#ifdef Q_OS_WIN_AND_WINCE
-    QFETCH(ulong, locale);
-#else
     QFETCH(QString, locale);
-#endif
     QFETCH(QString, s1);
     QFETCH(QString, s2);
     QFETCH(int, result);
@@ -5419,11 +5526,7 @@ void tst_QString::localeAwareCompare()
     QStringRef r1(&s1, 0, s1.length());
     QStringRef r2(&s2, 0, s2.length());
 
-#ifdef Q_OS_WIN_AND_WINCE
-    DWORD oldLcid = GetUserDefaultLCID();
-    SetUserDefaultLCID(locale);
-    QCOMPARE(locale, GetUserDefaultLCID());
-#elif defined (Q_OS_MAC) || defined(QT_USE_ICU)
+#if defined (Q_OS_DARWIN) || defined(QT_USE_ICU)
     QSKIP("Setting the locale is not supported on OS X or ICU (you can set the C locale, but that won't affect localeAwareCompare)");
 #else
     if (!locale.isEmpty()) {
@@ -5485,14 +5588,10 @@ void tst_QString::localeAwareCompare()
         QVERIFY(testres == 0);
     }
 
-#ifdef Q_OS_WIN_AND_WINCE
-    SetUserDefaultLCID(oldLcid);
-#else
     if (!locale.isEmpty())
             setlocale(LC_ALL, "");
-#endif
 }
-#endif //!defined(Q_OS_WIN) || defined(Q_OS_WIN_AND_WINCE)
+#endif //!defined(Q_OS_WIN)
 
 void tst_QString::reverseIterators()
 {

@@ -2,14 +2,7 @@ CONFIG += testcase
 TARGET = tst_qfontdatabase
 SOURCES  += tst_qfontdatabase.cpp
 QT += testlib core-private gui-private
+TESTDATA += LED_REAL.TTF
 
-wince* {
-    additionalFiles.files = FreeMono.ttf
-    additionalFiles.path = .
-    DEPLOYMENT += additionalFiles
-}
-
-android {
-    RESOURCES += testdata.qrc
-}
+RESOURCES += testdata.qrc
 

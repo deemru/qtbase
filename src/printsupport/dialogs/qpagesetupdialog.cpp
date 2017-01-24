@@ -56,12 +56,12 @@ QT_BEGIN_NAMESPACE
     \ingroup printing
     \inmodule QtPrintSupport
 
-    On Windows and OS X the page setup dialog is implemented using
+    On Windows and \macos the page setup dialog is implemented using
     the native page setup dialogs.
 
-    Note that on Windows and OS X custom paper sizes won't be
+    Note that on Windows and \macos custom paper sizes won't be
     reflected in the native page setup dialogs. Additionally, custom
-    page margins set on a QPrinter won't show in the native OS X
+    page margins set on a QPrinter won't show in the native \macos
     page setup dialog.
 
     \sa QPrinter, QPrintDialog
@@ -116,7 +116,7 @@ void QPageSetupDialogPrivate::setPrinter(QPrinter *newPrinter)
         printer = new QPrinter;
         ownsPrinter = true;
     }
-#ifndef Q_DEAD_CODE_FROM_QT4_X11
+#if 1 // Used to be excluded in Qt4 for Q_WS_X11
     if (printer->outputFormat() != QPrinter::NativeFormat)
         qWarning("QPageSetupDialog: Cannot be used on non-native printers");
 #endif

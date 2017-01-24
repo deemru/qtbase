@@ -39,9 +39,7 @@
 #include <qimage.h>
 #include <qthread.h>
 #include <limits.h>
-#if !defined(Q_OS_WINCE)
 #include <math.h>
-#endif
 #include <qpaintengine.h>
 #ifndef QT_NO_WIDGETS
 #include <qdesktopwidget.h>
@@ -297,6 +295,11 @@ private slots:
 
     void QTBUG50153_drawImage_assert();
 
+    void rotateImage_data();
+    void rotateImage();
+
+    void QTBUG56252();
+
 private:
     void fillData();
     void setPenColor(QPainter& p);
@@ -496,7 +499,7 @@ void tst_QPainter::drawPixmap_comp()
     destPm.fill(c1);
     srcPm.fill(c2);
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     if (!destPm.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -5059,6 +5062,81 @@ void tst_QPainter::QTBUG50153_drawImage_assert()
 
         // No crash, all fine
     }
+}
+
+void tst_QPainter::rotateImage_data()
+{
+    QTest::addColumn<QImage>("image");
+    QTest::addColumn<bool>("smooth");
+
+    QImage image(128, 128, QImage::Format_RGB32);
+    for (int y = 0; y < 128; ++y) {
+        for (int x = 0; x < 128; ++x) {
+            image.setPixel(x, y, qRgb(x + y, x + y, x + y));
+        }
+    }
+
+    QTest::newRow("fast") << image << false;
+    QTest::newRow("smooth") << image << true;
+}
+
+void tst_QPainter::rotateImage()
+{
+    QFETCH(QImage, image);
+    QFETCH(bool, smooth);
+
+    QImage dest(184, 184, QImage::Format_ARGB32_Premultiplied);
+    dest.fill(Qt::transparent);
+
+    QPainter painter(&dest);
+    QTransform transform;
+    transform.translate(92, 0);
+    transform.rotate(45);
+    painter.setTransform(transform);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, smooth);
+    painter.drawImage(0, 0, image);
+    painter.end();
+
+    QRgb lastRow = qRgba(0, 0, 0, 0);
+    for (int y = 0; y < 184; ++y) {
+        QRgb row = qRgba(0, 0, 0, 0);
+        for (int x = 0; x < 184; ++x) {
+            QRgb pixel = dest.pixel(x, y);
+            if (qAlpha(pixel) < 255)
+                continue;
+            if (qAlpha(row) == 0) {
+                row = pixel;
+            } else {
+                QCOMPARE(qRed(pixel), qGreen(pixel));
+                QCOMPARE(qGreen(pixel), qBlue(pixel));
+                QVERIFY(qAbs(qRed(row) - qRed(pixel)) <= 2);
+                QVERIFY(qAbs(qGreen(row) - qGreen(pixel)) <= 2);
+                QVERIFY(qAbs(qBlue(row) - qBlue(pixel)) <= 2);
+            }
+
+        }
+        if (qAlpha(row) && qAlpha(lastRow))
+            QVERIFY(qGray(lastRow) <= qGray(row));
+        lastRow = row;
+    }
+
+}
+
+void tst_QPainter::QTBUG56252()
+{
+    QImage sourceImage(1770, 1477, QImage::Format_RGB32);
+    QImage rotatedImage(1478, 1771, QImage::Format_RGB32);
+    QTransform transformCenter;
+    transformCenter.translate(739.0, 885.5);
+    transformCenter.rotate(270.0);
+    transformCenter.translate(-885.0, -738.5);
+    QPainter painter;
+    painter.begin(&rotatedImage);
+    painter.setTransform(transformCenter);
+    painter.drawImage(QPoint(0, 0),sourceImage);
+    painter.end();
+
+    // If no crash or illegal memory read, all is fine
 }
 
 QTEST_MAIN(tst_QPainter)

@@ -122,8 +122,6 @@ static int m_desktopHeightPixels = 0;
 static double m_scaledDensity = 0;
 static double m_density = 1.0;
 
-static volatile bool m_pauseApplication;
-
 static AndroidAssetsFileEngineHandler *m_androidAssetsFileEngineHandler = nullptr;
 
 
@@ -514,7 +512,7 @@ static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring para
     if (m_applicationParams.length()) {
         // Obtain a handle to the main library (the library that contains the main() function).
         // This library should already be loaded, and calling dlopen() will just return a reference to it.
-        m_mainLibraryHnd = dlopen(m_applicationParams.first().data(), 0);
+        m_mainLibraryHnd = dlopen(m_applicationParams.constFirst().data(), 0);
         if (Q_UNLIKELY(!m_mainLibraryHnd)) {
             qCritical() << "dlopen failed:" << dlerror();
             return false;
@@ -550,8 +548,11 @@ static void quitQtAndroidPlugin(JNIEnv *env, jclass /*clazz*/)
 
 static void terminateQt(JNIEnv *env, jclass /*clazz*/)
 {
-    sem_wait(&m_terminateSemaphore);
-    sem_destroy(&m_terminateSemaphore);
+    // QAndroidEventDispatcherStopper is stopped when the user uses the task manager to kill the application
+    if (!QAndroidEventDispatcherStopper::instance()->stopped()) {
+        sem_wait(&m_terminateSemaphore);
+        sem_destroy(&m_terminateSemaphore);
+    }
     env->DeleteGlobalRef(m_applicationClass);
     env->DeleteGlobalRef(m_classLoaderObject);
     if (m_resourcesObj)
@@ -571,8 +572,11 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
     m_androidPlatformIntegration = nullptr;
     delete m_androidAssetsFileEngineHandler;
     m_androidAssetsFileEngineHandler = nullptr;
-    sem_post(&m_exitSemaphore);
-    pthread_join(m_qtAppThread, nullptr);
+
+    if (!QAndroidEventDispatcherStopper::instance()->stopped()) {
+        sem_post(&m_exitSemaphore);
+        pthread_join(m_qtAppThread, nullptr);
+    }
 }
 
 static void setSurface(JNIEnv *env, jobject /*thiz*/, jint id, jobject jSurface, jint w, jint h)
@@ -629,6 +633,11 @@ static void updateWindow(JNIEnv */*env*/, jobject /*thiz*/)
     if (QGuiApplication::instance() != nullptr) {
         const auto tlw = QGuiApplication::topLevelWindows();
         for (QWindow *w : tlw) {
+
+            // Skip non-platform windows, e.g., offscreen windows.
+            if (!w->handle())
+                continue;
+
             QRect availableGeometry = w->screen()->availableGeometry();
             if (w->geometry().width() > 0 && w->geometry().height() > 0 && availableGeometry.width() > 0 && availableGeometry.height() > 0)
                 QWindowSystemInterface::handleExposeEvent(w, QRegion(QRect(QPoint(), w->geometry().size())));
@@ -666,11 +675,6 @@ static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state
         QAndroidEventDispatcherStopper::instance()->goingToStop(true);
         QCoreApplication::processEvents();
         QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(state));
-        {
-            AndroidDeadlockProtector protector;
-            if (protector.acquire())
-                QWindowSystemInterface::flushWindowSystemEvents();
-        }
         if (state == Qt::ApplicationSuspended)
             QAndroidEventDispatcherStopper::instance()->stopAll();
     } else {
@@ -840,6 +844,11 @@ QT_END_NAMESPACE
 
 Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
 {
+    static bool initialized = false;
+    if (initialized)
+        return JNI_VERSION_1_6;
+    initialized = true;
+
     QT_USE_NAMESPACE
     typedef union {
         JNIEnv *nativeEnvironment;

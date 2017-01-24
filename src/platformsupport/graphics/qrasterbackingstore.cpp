@@ -39,6 +39,7 @@
 
 #include "qrasterbackingstore_p.h"
 
+#include <QtGui/qbackingstore.h>
 #include <QtGui/qpainter.h>
 
 QT_BEGIN_NAMESPACE
@@ -62,11 +63,18 @@ void QRasterBackingStore::resize(const QSize &size, const QRegion &staticContent
     if (m_image.size() == effectiveBufferSize)
         return;
 
-    QImage::Format format = window()->format().hasAlpha() ? QImage::Format_ARGB32_Premultiplied : QImage::Format_RGB32;
-    m_image = QImage(effectiveBufferSize, format);
+    m_image = QImage(effectiveBufferSize, format());
     m_image.setDevicePixelRatio(windowDevicePixelRatio);
-    if (format == QImage::Format_ARGB32_Premultiplied)
+    if (m_image.format() == QImage::Format_ARGB32_Premultiplied)
         m_image.fill(Qt::transparent);
+}
+
+QImage::Format QRasterBackingStore::format() const
+{
+    if (window()->format().hasAlpha())
+        return QImage::Format_ARGB32_Premultiplied;
+    else
+        return QImage::Format_RGB32;
 }
 
 QPaintDevice *QRasterBackingStore::paintDevice()
@@ -89,7 +97,7 @@ bool QRasterBackingStore::scroll(const QRegion &region, int dx, int dy)
     const qreal devicePixelRatio = m_image.devicePixelRatio();
     const QPoint delta(dx * devicePixelRatio, dy * devicePixelRatio);
 
-    foreach (const QRect &rect, region.rects())
+    for (const QRect &rect : region)
         qt_scrollRectInImage(m_image, QRect(rect.topLeft() * devicePixelRatio, rect.size() * devicePixelRatio), delta);
 
     return true;
@@ -97,13 +105,17 @@ bool QRasterBackingStore::scroll(const QRegion &region, int dx, int dy)
 
 void QRasterBackingStore::beginPaint(const QRegion &region)
 {
+    // Keep backing store device pixel ratio in sync with window
+    if (m_image.devicePixelRatio() != window()->devicePixelRatio())
+        resize(backingStore()->size(), backingStore()->staticContents());
+
     if (!m_image.hasAlphaChannel())
         return;
 
     QPainter painter(&m_image);
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     const QColor blank = Qt::transparent;
-    foreach (const QRect &rect, region.rects())
+    for (const QRect &rect : region)
         painter.fillRect(rect, blank);
 }
 

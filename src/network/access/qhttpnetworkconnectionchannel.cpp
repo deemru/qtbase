@@ -47,10 +47,12 @@
 
 #ifndef QT_NO_HTTP
 
+#include <private/qhttp2protocolhandler_p.h>
 #include <private/qhttpprotocolhandler_p.h>
 #include <private/qspdyprotocolhandler_p.h>
 
 #ifndef QT_NO_SSL
+#    include <private/qsslsocket_p.h>
 #    include <QtNetwork/qsslkey.h>
 #    include <QtNetwork/qsslcipher.h>
 #    include <QtNetwork/qsslconfiguration.h>
@@ -177,8 +179,11 @@ void QHttpNetworkConnectionChannel::init()
         if (!sslConfiguration.isNull())
            sslSocket->setSslConfiguration(sslConfiguration);
     } else {
-#endif // QT_NO_SSL
-        protocolHandler.reset(new QHttpProtocolHandler(this));
+#endif // !QT_NO_SSL
+        if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2)
+            protocolHandler.reset(new QHttp2ProtocolHandler(this));
+        else
+            protocolHandler.reset(new QHttpProtocolHandler(this));
 #ifndef QT_NO_SSL
     }
 #endif
@@ -331,7 +336,7 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
             priv->phase = QAuthenticatorPrivate::Start;
 
         QString connectHost = connection->d_func()->hostName;
-        qint16 connectPort = connection->d_func()->port;
+        quint16 connectPort = connection->d_func()->port;
 
 #ifndef QT_NO_NETWORKPROXY
         // HTTPS always use transparent proxy.
@@ -833,10 +838,17 @@ void QHttpNetworkConnectionChannel::_q_connected()
 #endif
     } else {
         state = QHttpNetworkConnectionChannel::IdleState;
-        if (!reply)
-            connection->d_func()->dequeueRequest(socket);
-        if (reply)
-            sendRequest();
+        if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2) {
+            if (spdyRequestsToSend.count() > 0) {
+                // wait for data from the server first (e.g. initial window, max concurrent requests)
+                QMetaObject::invokeMethod(connection, "_q_startNextRequest", Qt::QueuedConnection);
+            }
+        } else {
+            if (!reply)
+                connection->d_func()->dequeueRequest(socket);
+            if (reply)
+                sendRequest();
+        }
     }
 }
 
@@ -970,8 +982,12 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
         }
     } while (!connection->d_func()->highPriorityQueue.isEmpty()
              || !connection->d_func()->lowPriorityQueue.isEmpty());
+
+    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2
 #ifndef QT_NO_SSL
-    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY) {
+        || connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY
+#endif
+       ) {
         QList<HttpMessagePair> spdyPairs = spdyRequestsToSend.values();
         for (int a = 0; a < spdyPairs.count(); ++a) {
             // emit error for all replies
@@ -980,7 +996,6 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
             emit currentReply->finishedWithError(errorCode, errorString);
         }
     }
-#endif // QT_NO_SSL
 
     // send the next request
     QMetaObject::invokeMethod(that, "_q_startNextRequest", Qt::QueuedConnection);
@@ -1002,19 +1017,19 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
 #ifndef QT_NO_NETWORKPROXY
 void QHttpNetworkConnectionChannel::_q_proxyAuthenticationRequired(const QNetworkProxy &proxy, QAuthenticator* auth)
 {
+    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2
 #ifndef QT_NO_SSL
-    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY) {
+        || connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY
+#endif
+        ) {
         connection->d_func()->emitProxyAuthenticationRequired(this, proxy, auth);
     } else { // HTTP
-#endif // QT_NO_SSL
         // Need to dequeue the request before we can emit the error.
         if (!reply)
             connection->d_func()->dequeueRequest(socket);
         if (reply)
             connection->d_func()->emitProxyAuthenticationRequired(this, proxy, auth);
-#ifndef QT_NO_SSL
     }
-#endif // QT_NO_SSL
 }
 #endif
 
@@ -1022,6 +1037,19 @@ void QHttpNetworkConnectionChannel::_q_uploadDataReadyRead()
 {
     if (reply)
         sendRequest();
+}
+
+void QHttpNetworkConnectionChannel::emitFinishedWithError(QNetworkReply::NetworkError error,
+                                                          const char *message)
+{
+    if (reply)
+        emit reply->finishedWithError(error, QHttpNetworkConnectionChannel::tr(message));
+    QList<HttpMessagePair> spdyPairs = spdyRequestsToSend.values();
+    for (int a = 0; a < spdyPairs.count(); ++a) {
+        QHttpNetworkReply *currentReply = spdyPairs.at(a).second;
+        Q_ASSERT(currentReply);
+        emit currentReply->finishedWithError(error, QHttpNetworkConnectionChannel::tr(message));
+    }
 }
 
 #ifndef QT_NO_SSL
@@ -1032,7 +1060,7 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
 
     if (!protocolHandler) {
         switch (sslSocket->sslConfiguration().nextProtocolNegotiationStatus()) {
-        case QSslConfiguration::NextProtocolNegotiationNegotiated: /* fall through */
+        case QSslConfiguration::NextProtocolNegotiationNegotiated:
         case QSslConfiguration::NextProtocolNegotiationUnsupported: {
             QByteArray nextProtocol = sslSocket->sslConfiguration().nextNegotiatedProtocol();
             if (nextProtocol == QSslConfiguration::NextProtocolHttp1_1) {
@@ -1043,11 +1071,16 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
                 // no need to re-queue requests, if SPDY was enabled on the request it
                 // has gone to the SPDY queue already
                 break;
+            } else if (nextProtocol == QSslConfiguration::ALPNProtocolHTTP2) {
+                protocolHandler.reset(new QHttp2ProtocolHandler(this));
+                connection->setConnectionType(QHttpNetworkConnection::ConnectionTypeHTTP2);
+                break;
             } else {
                 emitFinishedWithError(QNetworkReply::SslHandshakeFailedError,
                                       "detected unknown Next Protocol Negotiation protocol");
                 break;
             }
+            Q_FALLTHROUGH();
         }
         case QSslConfiguration::NextProtocolNegotiationNone:
             protocolHandler.reset(new QHttpProtocolHandler(this));
@@ -1066,16 +1099,19 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
     state = QHttpNetworkConnectionChannel::IdleState;
     pendingEncrypt = false;
 
-    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY) {
+    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeSPDY ||
+        connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2) {
         // we call setSpdyWasUsed(true) on the replies in the SPDY handler when the request is sent
-        if (spdyRequestsToSend.count() > 0)
+        if (spdyRequestsToSend.count() > 0) {
             // wait for data from the server first (e.g. initial window, max concurrent requests)
             QMetaObject::invokeMethod(connection, "_q_startNextRequest", Qt::QueuedConnection);
+        }
     } else { // HTTP
         if (!reply)
             connection->d_func()->dequeueRequest(socket);
         if (reply) {
             reply->setSpdyWasUsed(false);
+            Q_ASSERT(reply->d_func()->connectionChannel == this);
             emit reply->encrypted();
         }
         if (reply)
@@ -1092,19 +1128,6 @@ void QHttpNetworkConnectionChannel::requeueSpdyRequests()
     spdyRequestsToSend.clear();
 }
 
-void QHttpNetworkConnectionChannel::emitFinishedWithError(QNetworkReply::NetworkError error,
-                                                          const char *message)
-{
-    if (reply)
-        emit reply->finishedWithError(error, QHttpNetworkConnectionChannel::tr(message));
-    QList<HttpMessagePair> spdyPairs = spdyRequestsToSend.values();
-    for (int a = 0; a < spdyPairs.count(); ++a) {
-        QHttpNetworkReply *currentReply = spdyPairs.at(a).second;
-        Q_ASSERT(currentReply);
-        emit currentReply->finishedWithError(error, QHttpNetworkConnectionChannel::tr(message));
-    }
-}
-
 void QHttpNetworkConnectionChannel::_q_sslErrors(const QList<QSslError> &errors)
 {
     if (!socket)
@@ -1115,8 +1138,6 @@ void QHttpNetworkConnectionChannel::_q_sslErrors(const QList<QSslError> &errors)
     connection->d_func()->pauseConnection();
     if (pendingEncrypt && !reply)
         connection->d_func()->dequeueRequest(socket);
-    if (reply) // a reply was actually dequeued.
-        reply->d_func()->connectionChannel = this; // set correct channel like in sendRequest() and queueRequest();
     if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP) {
         if (reply)
             emit reply->sslErrors(errors);

@@ -57,11 +57,13 @@ private slots:
     void basics_data();
     void basics();
     void operators();
+    void nullptrOps();
     void swap();
     void moveSemantics();
     void useOfForwardDeclared();
     void memoryManagement();
     void dropLastReferenceOfForwardDeclared();
+    void nonVirtualDestructors();
     void lock();
     void downCast();
     void functionCallDownCast();
@@ -362,6 +364,50 @@ void tst_QSharedPointer::operators()
     QCOMPARE(qHash(p2), qHash(p2.data()));
 }
 
+void tst_QSharedPointer::nullptrOps()
+{
+    QSharedPointer<char> p1(nullptr);
+    QSharedPointer<char> p2 = nullptr;
+    QSharedPointer<char> null;
+
+    QVERIFY(p1 == null);
+    QVERIFY(p1 == nullptr);
+    QVERIFY(nullptr == p1);
+    QVERIFY(!p1);
+    QVERIFY(!p1.data());
+    QVERIFY(p2 == null);
+    QVERIFY(p2 == nullptr);
+    QVERIFY(nullptr == p2);
+    QVERIFY(!p2);
+    QVERIFY(!p2.data());
+    QVERIFY(p1 == p2);
+
+    QSharedPointer<char> p3 = p1;
+    QVERIFY(p3 == p1);
+    QVERIFY(p3 == null);
+    QVERIFY(p3 == nullptr);
+    QVERIFY(nullptr == p3);
+    QVERIFY(!p3.data());
+
+    p3 = nullptr;
+
+    // check for non-ambiguity
+    QSharedPointer<char> p1_zero(0);
+    QSharedPointer<char> p2_zero = 0;
+
+    p3 = 0;
+
+    QSharedPointer<char> p4(new char);
+    QVERIFY(p4);
+    QVERIFY(p4.data());
+    QVERIFY(p4 != nullptr);
+    QVERIFY(nullptr != p4);
+    QVERIFY(p4 != p1);
+    QVERIFY(p4 != p2);
+    QVERIFY(p4 != null);
+    QVERIFY(p4 != p3);
+}
+
 void tst_QSharedPointer::swap()
 {
     QSharedPointer<int> p1, p2(new int(42)), control = p2;
@@ -576,6 +622,56 @@ void tst_QSharedPointer::dropLastReferenceOfForwardDeclared()
     forwardDeclaredDestructorRunCount = 0;
     delete forwardPointer();
     QCOMPARE(forwardDeclaredDestructorRunCount, 1);
+}
+
+// NVD for "non-virtual destructor"
+struct NVDData
+{
+    static int destructorCounter;
+    ~NVDData() { ++destructorCounter; }
+
+    int dummy;
+};
+int NVDData::destructorCounter;
+
+struct NVDDerivedData : NVDData
+{
+    static int destructorCounter;
+    ~NVDDerivedData() { ++destructorCounter; }
+};
+int NVDDerivedData::destructorCounter;
+
+void tst_QSharedPointer::nonVirtualDestructors()
+{
+    NVDData::destructorCounter = NVDDerivedData::destructorCounter = 0;
+    {
+        QSharedPointer<NVDData> ptr(new NVDData);
+    }
+    QCOMPARE(NVDData::destructorCounter, 1);
+    QCOMPARE(NVDDerivedData::destructorCounter, 0);
+
+    NVDData::destructorCounter = NVDDerivedData::destructorCounter = 0;
+    {
+        QSharedPointer<NVDDerivedData> ptr(new NVDDerivedData);
+    }
+    QCOMPARE(NVDData::destructorCounter, 1);
+    QCOMPARE(NVDDerivedData::destructorCounter, 1);
+
+    NVDData::destructorCounter = NVDDerivedData::destructorCounter = 0;
+    {
+        QSharedPointer<NVDData> bptr;
+        QSharedPointer<NVDDerivedData> ptr(new NVDDerivedData);
+        bptr = ptr;
+    }
+    QCOMPARE(NVDData::destructorCounter, 1);
+    QCOMPARE(NVDDerivedData::destructorCounter, 1);
+
+    NVDData::destructorCounter = NVDDerivedData::destructorCounter = 0;
+    {
+        QSharedPointer<NVDData> ptr(new NVDDerivedData);
+    }
+    QCOMPARE(NVDData::destructorCounter, 1);
+    QCOMPARE(NVDDerivedData::destructorCounter, 1);
 }
 
 void tst_QSharedPointer::lock()
@@ -1310,6 +1406,18 @@ template<typename T> int CustomDeleter<T>::callCount = 0;
 void tst_QSharedPointer::customDeleter()
 {
     {
+        QSharedPointer<Data> ptr(0, &Data::doDelete);
+        QSharedPointer<Data> ptr2(0, &Data::alsoDelete);
+        QSharedPointer<Data> ptr3(0, &Data::virtualDelete);
+    }
+    safetyCheck();
+    {
+        QSharedPointer<Data> ptr(nullptr, &Data::doDelete);
+        QSharedPointer<Data> ptr2(nullptr, &Data::alsoDelete);
+        QSharedPointer<Data> ptr3(nullptr, &Data::virtualDelete);
+    }
+    safetyCheck();
+    {
         QSharedPointer<Data> ptr(new Data, &Data::doDelete);
         QSharedPointer<Data> ptr2(new Data, &Data::alsoDelete);
         QSharedPointer<Data> ptr3(new Data, &Data::virtualDelete);
@@ -1492,6 +1600,33 @@ void tst_QSharedPointer::customDeleter()
     QCOMPARE(refcount, 2);
     safetyCheck();
 
+    CustomDeleter<NVDData> nvdeleter;
+    nvdeleter.callCount = 0;
+    {
+        QSharedPointer<NVDData> ptr(new NVDData, nvdeleter);
+    }
+    QCOMPARE(nvdeleter.callCount, 1);
+    safetyCheck();
+
+    CustomDeleter<NVDDerivedData> nvderiveddeleter;
+    nvdeleter.callCount = 0;
+    nvderiveddeleter.callCount = 0;
+    {
+        QSharedPointer<NVDDerivedData> ptr(new NVDDerivedData, nvderiveddeleter);
+    }
+    QCOMPARE(nvdeleter.callCount, 0);
+    QCOMPARE(nvderiveddeleter.callCount, 1);
+    safetyCheck();
+
+    nvdeleter.callCount = 0;
+    nvderiveddeleter.callCount = 0;
+    {
+        QSharedPointer<NVDData> ptr(new NVDDerivedData, nvderiveddeleter);
+    }
+    QCOMPARE(nvdeleter.callCount, 0);
+    QCOMPARE(nvderiveddeleter.callCount, 1);
+    safetyCheck();
+
     // a custom deleter with a different pointer parameter
     {
         QSharedPointer<char> ptr(static_cast<char *>(malloc(1)), free);
@@ -1603,9 +1738,6 @@ void tst_QSharedPointer::creating()
 
 void tst_QSharedPointer::creatingVariadic()
 {
-#if !defined(Q_COMPILER_RVALUE_REFS) || !defined(Q_COMPILER_VARIADIC_TEMPLATES)
-    QSKIP("This compiler is not in C++11 mode or it doesn't support rvalue refs and variadic templates");
-#else
     int i = 42;
 
     {
@@ -1633,12 +1765,10 @@ void tst_QSharedPointer::creatingVariadic()
         QCOMPARE(ptr->i, 2);
         QCOMPARE(ptr->ptr, (void*)0);
 
-#ifdef Q_COMPILER_NULLPTR
         NoDefaultConstructor2(nullptr, 3); // control check
         ptr = QSharedPointer<NoDefaultConstructor2>::create(nullptr, 3);
         QCOMPARE(ptr->i, 3);
         QCOMPARE(ptr->ptr, (void*)nullptr);
-#endif
     }
     {
         NoDefaultConstructorRef1 x(i); // control check
@@ -1674,7 +1804,6 @@ void tst_QSharedPointer::creatingVariadic()
         QCOMPARE(ptr->str, QString("bytearray"));
         QCOMPARE(ptr->i, 42);
     }
-#endif
 }
 
 void tst_QSharedPointer::creatingQObject()
@@ -1771,13 +1900,11 @@ void tst_QSharedPointer::threadStressTest_data()
     QTest::newRow("1+1") << 1 << 1;
 
     QTest::newRow("2+10") << 2 << 10;
-#ifndef Q_OS_WINCE
-    // Windows CE cannot run this many threads
+
     QTest::newRow("5+10") << 5 << 10;
     QTest::newRow("5+30") << 5 << 30;
 
     QTest::newRow("100+100") << 100 << 100;
-#endif
 }
 
 void tst_QSharedPointer::threadStressTest()
@@ -1811,11 +1938,7 @@ void tst_QSharedPointer::threadStressTest()
 
         base.clear();
 
-#ifdef Q_OS_WINCE
-        srand(QDateTime::currentDateTime().toTime_t());
-#else
         srand(time(NULL));
-#endif
         // start threads
         for (int i = 0; i < allThreads.count(); ++i)
             if (allThreads[i]) allThreads[i]->start();

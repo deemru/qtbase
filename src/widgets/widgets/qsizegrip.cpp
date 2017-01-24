@@ -52,7 +52,7 @@
 #include "qdebug.h"
 #include <QDesktopWidget>
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qt_mac_p.h>
 #endif
 
@@ -82,7 +82,7 @@ public:
     Qt::Corner m_corner;
     bool gotMousePress;
     QPointer<QWidget> tlw;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     void updateMacSizer(bool hide) const;
 #endif
     Qt::Corner corner() const;
@@ -120,7 +120,7 @@ public:
         updateTopLevelWidget();
         if (tlw && showSizeGrip) {
             Qt::WindowStates sizeGripNotVisibleState = Qt::WindowFullScreen;
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
             sizeGripNotVisibleState |= Qt::WindowMaximized;
 #endif
             // Don't show the size grip if the tlw is maximized or in full screen mode.
@@ -142,7 +142,7 @@ QSizeGripPrivate::QSizeGripPrivate()
 {
 }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 void QSizeGripPrivate::updateMacSizer(bool hide) const
 {
     Q_Q(const QSizeGrip);
@@ -184,9 +184,12 @@ Qt::Corner QSizeGripPrivate::corner() const
     Put this widget anywhere in a widget tree and the user can use it
     to resize the top-level window or any widget with the Qt::SubWindow
     flag set. Generally, this should be in the lower right-hand corner.
+
     Note that QStatusBar already uses this widget, so if you have a
     status bar (e.g., you are using QMainWindow), then you don't need
-    to use this widget explicitly.
+    to use this widget explicitly. The same goes for QDialog, for which
+    you can just call \l {QDialog::setSizeGripEnabled()}
+    {QDialog::setSizeGripEnabled()}.
 
     On some platforms the size grip automatically hides itself when the
     window is shown full screen or maximised.
@@ -225,7 +228,7 @@ void QSizeGripPrivate::init()
     Q_Q(QSizeGrip);
     m_corner = q->isLeftToRight() ? Qt::BottomRightCorner : Qt::BottomLeftCorner;
 
-#if !defined(QT_NO_CURSOR) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if !defined(QT_NO_CURSOR) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
     q->setCursor(m_corner == Qt::TopLeftCorner || m_corner == Qt::BottomRightCorner
                  ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
 #endif
@@ -438,7 +441,7 @@ void QSizeGrip::moveEvent(QMoveEvent * /*moveEvent*/)
         return;
 
     d->m_corner = d->corner();
-#if !defined(QT_NO_CURSOR) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if !defined(QT_NO_CURSOR) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
     setCursor(d->m_corner == Qt::TopLeftCorner || d->m_corner == Qt::BottomRightCorner
               ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
 #endif
@@ -449,7 +452,7 @@ void QSizeGrip::moveEvent(QMoveEvent * /*moveEvent*/)
 */
 void QSizeGrip::showEvent(QShowEvent *showEvent)
 {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     d_func()->updateMacSizer(false);
 #endif
     QWidget::showEvent(showEvent);
@@ -460,7 +463,7 @@ void QSizeGrip::showEvent(QShowEvent *showEvent)
 */
 void QSizeGrip::hideEvent(QHideEvent *hideEvent)
 {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     d_func()->updateMacSizer(true);
 #endif
     QWidget::hideEvent(hideEvent);
@@ -484,7 +487,7 @@ bool QSizeGrip::eventFilter(QObject *o, QEvent *e)
         return QWidget::eventFilter(o, e);
     }
     Qt::WindowStates sizeGripNotVisibleState = Qt::WindowFullScreen;
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
     sizeGripNotVisibleState |= Qt::WindowMaximized;
 #endif
     // Don't show the size grip if the tlw is maximized or in full screen mode.

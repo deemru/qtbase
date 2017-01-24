@@ -52,7 +52,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtCore/private/qglobal_p.h>
 #include <QtCore/qhash.h>
 #include <QtCore/QWaitCondition>
 
@@ -65,7 +65,7 @@ class QReadWriteLockPrivate
 public:
     QReadWriteLockPrivate(bool isRecursive = false)
         : readerCount(0), writerCount(0), waitingReaders(0), waitingWriters(0),
-        recursive(isRecursive), id(0) {}
+        recursive(isRecursive), id(0), currentWriter(nullptr) {}
 
     QMutex mutex;
     QWaitCondition writerCond;

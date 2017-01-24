@@ -41,7 +41,6 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTextStream>
-#include <QFutureSynchronizer>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <QtTest/QtTest>
@@ -116,7 +115,7 @@ Q_CONSTRUCTOR_FUNCTION(initializeLang)
 
 static QString seedAndTemplate()
 {
-    qsrand(QDateTime::currentDateTimeUtc().toTime_t());
+    qsrand(QDateTime::currentSecsSinceEpoch());
     return QDir::tempPath() + "/tst_qmimedatabase-XXXXXX";
 }
 
@@ -127,6 +126,7 @@ tst_QMimeDatabase::tst_QMimeDatabase()
 
 void tst_QMimeDatabase::initTestCase()
 {
+    QLocale::setDefault(QLocale::c());
     QVERIFY2(m_temporaryDir.isValid(), qPrintable(m_temporaryDir.errorString()));
     QStandardPaths::setTestModeEnabled(true);
     m_localMimeDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/mime";
@@ -443,6 +443,21 @@ void tst_QMimeDatabase::icons()
     QCOMPARE(pub.name(), QString::fromLatin1("application/epub+zip"));
     QCOMPARE(pub.iconName(), QString::fromLatin1("application-epub+zip"));
     QCOMPARE(pub.genericIconName(), QString::fromLatin1("x-office-document"));
+}
+
+void tst_QMimeDatabase::comment()
+{
+    struct RestoreLocale
+    {
+        ~RestoreLocale() { QLocale::setDefault(QLocale::c()); }
+    } restoreLocale;
+
+    QLocale::setDefault(QLocale("de"));
+    QMimeDatabase db;
+    QMimeType directory = db.mimeTypeForName(QStringLiteral("inode/directory"));
+    QCOMPARE(directory.comment(), QStringLiteral("Ordner"));
+    QLocale::setDefault(QLocale("fr"));
+    QCOMPARE(directory.comment(), QStringLiteral("dossier"));
 }
 
 // In here we do the tests that need some content in a temporary file.
@@ -828,18 +843,18 @@ void tst_QMimeDatabase::findByFile()
 
 void tst_QMimeDatabase::fromThreads()
 {
-    QThreadPool::globalInstance()->setMaxThreadCount(20);
+    QThreadPool tp;
+    tp.setMaxThreadCount(20);
     // Note that data-based tests cannot be used here (QTest::fetchData asserts).
-    QFutureSynchronizer<void> sync;
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::mimeTypeForName));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::aliases));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::allMimeTypes));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::icons));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::inheritance));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::knownSuffix));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::mimeTypeForFileWithContent));
-    sync.addFuture(QtConcurrent::run(this, &tst_QMimeDatabase::allMimeTypes)); // a second time
-    // sync dtor blocks waiting for finished
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::mimeTypeForName);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::aliases);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::allMimeTypes);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::icons);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::inheritance);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::knownSuffix);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::mimeTypeForFileWithContent);
+    QtConcurrent::run(&tp, this, &tst_QMimeDatabase::allMimeTypes); // a second time
+    QVERIFY(tp.waitForDone(60000));
 }
 
 #ifndef QT_NO_PROCESS

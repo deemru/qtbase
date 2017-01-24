@@ -45,6 +45,7 @@ private slots:
     void sizeWhenReserved();
     void free();
     void reserveAndRead();
+    void reserveAndReadInPacketMode();
     void reserveFrontAndRead();
     void chop();
     void ungetChar();
@@ -57,6 +58,12 @@ private slots:
 void tst_QRingBuffer::constructing()
 {
     QRingBuffer ringBuffer;
+
+    const int chunkSize = ringBuffer.chunkSize();
+    ringBuffer.setChunkSize(0);
+    QCOMPARE(ringBuffer.chunkSize(), Q_INT64_C(0));
+    ringBuffer.setChunkSize(chunkSize);
+    QCOMPARE(ringBuffer.chunkSize(), chunkSize);
 
     QCOMPARE(ringBuffer.size(), Q_INT64_C(0));
     QVERIFY(ringBuffer.isEmpty());
@@ -206,9 +213,9 @@ void tst_QRingBuffer::free()
     ringBuffer.append(QByteArray("01234", 5));
 
     ringBuffer.free(1);
-    QCOMPARE(ringBuffer.size(), Q_INT64_C(4095 + 2048 + 5));
+    QCOMPARE(ringBuffer.size(), Q_INT64_C(4095) + 2048 + 5);
     ringBuffer.free(4096);
-    QCOMPARE(ringBuffer.size(), Q_INT64_C(2047 + 5));
+    QCOMPARE(ringBuffer.size(), Q_INT64_C(2047) + 5);
     ringBuffer.free(48);
     ringBuffer.free(2000);
     QCOMPARE(ringBuffer.size(), Q_INT64_C(4));
@@ -235,6 +242,25 @@ void tst_QRingBuffer::reserveAndRead()
         QCOMPARE(ba.count(char(i)), i);
     }
     QCOMPARE(ringBuffer.size(), Q_INT64_C(0));
+}
+
+void tst_QRingBuffer::reserveAndReadInPacketMode()
+{
+    QRingBuffer ringBuffer(0);
+    // try to allocate 255 buffers
+    for (int i = 1; i < 256; ++i) {
+        char *ringPos = ringBuffer.reserve(i);
+        QVERIFY(ringPos);
+    }
+
+    // count and check the size of stored buffers
+    int buffersCount = 0;
+    while (!ringBuffer.isEmpty()) {
+        QByteArray ba = ringBuffer.read();
+        ++buffersCount;
+        QCOMPARE(ba.size(), buffersCount);
+    }
+    QCOMPARE(buffersCount, 255);
 }
 
 void tst_QRingBuffer::reserveFrontAndRead()
@@ -268,9 +294,9 @@ void tst_QRingBuffer::chop()
     ringBuffer.reserve(4096);
 
     ringBuffer.chop(1);
-    QCOMPARE(ringBuffer.size(), Q_INT64_C(5 + 2048 + 4095));
+    QCOMPARE(ringBuffer.size(), Q_INT64_C(5) + 2048 + 4095);
     ringBuffer.chop(4096);
-    QCOMPARE(ringBuffer.size(), Q_INT64_C(5 + 2047));
+    QCOMPARE(ringBuffer.size(), Q_INT64_C(5) + 2047);
     ringBuffer.chop(48);
     ringBuffer.chop(2000);
     QCOMPARE(ringBuffer.size(), Q_INT64_C(4));

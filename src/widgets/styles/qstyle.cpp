@@ -104,7 +104,7 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     The style gets all the information it needs to render the
     graphical element from the QStyleOption class. The widget is
     passed as the last argument in case the style needs it to perform
-    special effects (such as animated default buttons on OS X),
+    special effects (such as animated default buttons on \macos),
     but it isn't mandatory. In fact, QStyle can be used to draw on any
     paint device (not just widgets), in which case the widget argument
     is a zero pointer.
@@ -203,7 +203,7 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     QStyle gets all the information it needs to render the graphical
     element from QStyleOption. The widget is passed as the last
     argument in case the style needs it to perform special effects
-    (such as animated default buttons on OS X), but it isn't
+    (such as animated default buttons on \macos), but it isn't
     mandatory. In fact, you can use QStyle to draw on any paint
     device, not just widgets, by setting the QPainter properly.
 
@@ -733,7 +733,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
 
     \value State_None Indicates that the widget does not have a state.
     \value State_Active Indicates that the widget is active.
-    \value State_AutoRaise Used to indicate if auto-raise appearance should be usd on a tool button.
+    \value State_AutoRaise Used to indicate if auto-raise appearance should be used on a tool button.
     \value State_Children Used to indicate if an item view branch has children.
     \value State_DownArrow Used to indicate if a down arrow should be visible on the widget.
     \value State_Editing Used to indicate if an editor is opened on the widget.
@@ -1494,6 +1494,11 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value PM_HeaderDefaultSectionSizeVertical The default size of sections
            in a vertical header. This enum value has been introduced in Qt 5.5.
 
+    \value PM_TitleBarButtonIconSize The size of button icons on a title bar.
+           This enum value has been introduced in Qt 5.8.
+    \value PM_TitleBarButtonSize The size of buttons on a title bar.
+           This enum value has been introduced in Qt 5.8.
+
     \value PM_CustomBase Base value for custom pixel metrics.  Custom
     values must be greater than this value.
 
@@ -1731,7 +1736,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
         desktop platforms.
 
     \value SH_Menu_SubMenuUniDirection Since Qt 5.5. If the cursor has
-        to move towards the submenu (like it is on OS X), or if the
+        to move towards the submenu (like it is on \macos), or if the
         cursor can move in any direction as long as it reaches the
         submenu before the sloppy timeout.
 

@@ -113,10 +113,10 @@ int QBlittablePlatformPixmap::metric(QPaintDevice::PaintDeviceMetric metric) con
         return qRound(h * 25.4 / qt_defaultDpiY());
     case QPaintDevice::PdmDepth:
         return 32;
-    case QPaintDevice::PdmDpiX: // fall-through
+    case QPaintDevice::PdmDpiX:
     case QPaintDevice::PdmPhysicalDpiX:
         return qt_defaultDpiX();
-    case QPaintDevice::PdmDpiY: // fall-through
+    case QPaintDevice::PdmDpiY:
     case QPaintDevice::PdmPhysicalDpiY:
         return qt_defaultDpiY();
     case QPaintDevice::PdmDevicePixelRatio:
@@ -152,7 +152,7 @@ void QBlittablePlatformPixmap::fill(const QColor &color)
         uint pixel = qPremultiply(color.rgba());
         const QPixelLayout *layout = &qPixelLayouts[blittable()->lock()->format()];
         Q_ASSERT(layout->convertFromARGB32PM);
-        layout->convertFromARGB32PM(&pixel, &pixel, 1, layout, 0);
+        layout->convertFromARGB32PM(&pixel, &pixel, 1, 0, 0);
 
         //so premultiplied formats are supported and ARGB32 and RGB32
         blittable()->lock()->fill(pixel);
@@ -298,10 +298,8 @@ QRectF QBlittablePlatformPixmap::clipAndTransformRect(const QRectF &rect) const
             if (clipData->hasRectClip) {
                 transformationRect &= clipData->clipRect;
             } else if (clipData->hasRegionClip) {
-                const QVector<QRect> rects = clipData->clipRegion.rects();
-                for (int i = 0; i < rects.size(); i++) {
-                    transformationRect &= rects.at(i);
-                }
+                for (const QRect &rect : clipData->clipRegion)
+                    transformationRect &= rect;
             }
         }
     }

@@ -1,4 +1,6 @@
 TEMPLATE=subdirs
+QT_FOR_CONFIG += gui-private
+
 SUBDIRS=\
    # atwrapper \ # QTBUG-19452
    compiler \
@@ -21,7 +23,6 @@ SUBDIRS=\
    qsharedpointer_and_qwidget \
    qprocess_and_guieventloop \
    qtokenautomaton \
-   windowsmobile \
    toolsupport \
 
 !qtHaveModule(gui): SUBDIRS -= \
@@ -52,9 +53,9 @@ cross_compile: SUBDIRS -= \
    atwrapper \
    compiler
 
-wince*|!contains(QT_CONFIG, accessibility): SUBDIRS -= qaccessibility
+!qtConfig(accessibility): SUBDIRS -= qaccessibility
 
-!contains(QT_CONFIG, accessibility-atspi-bridge): SUBDIRS -= qaccessibilitylinux
+!qtConfig(accessibility-atspi-bridge): SUBDIRS -= qaccessibilitylinux
 
 !mac: SUBDIRS -= \
            macgui \
@@ -62,7 +63,7 @@ wince*|!contains(QT_CONFIG, accessibility): SUBDIRS -= qaccessibility
            macplist \
            qaccessibilitymac
 
-!embedded|wince: SUBDIRS -= \
+!embedded: SUBDIRS -= \
            qdirectpainter
 
 winrt: SUBDIRS -= \

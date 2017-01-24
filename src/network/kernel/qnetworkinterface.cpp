@@ -365,7 +365,7 @@ void QNetworkAddressEntry::setBroadcast(const QHostAddress &newBroadcast)
     Not all operating systems support reporting all features. Only the
     IPv4 addresses are guaranteed to be listed by this class in all
     platforms. In particular, IPv6 address listing is only supported
-    on Windows, Linux, OS X and the BSDs.
+    on Windows, Linux, \macos and the BSDs.
 
     \sa QNetworkAddressEntry
 */
@@ -536,7 +536,7 @@ QList<QNetworkAddressEntry> QNetworkInterface::addressEntries() const
         QNetworkInterface::interfaceFromName(name).index()
     \endcode
 
-    \sa interfaceFromName(), interfaceNameFromIndex()
+    \sa interfaceFromName(), interfaceNameFromIndex(), QNetworkDatagram::interfaceIndex()
 */
 int QNetworkInterface::interfaceIndexFromName(const QString &name)
 {
@@ -596,7 +596,7 @@ QNetworkInterface QNetworkInterface::interfaceFromIndex(int index)
         QNetworkInterface::interfaceFromIndex(index).name()
     \endcode
 
-    \sa interfaceFromIndex(), interfaceIndexFromName()
+    \sa interfaceFromIndex(), interfaceIndexFromName(), QNetworkDatagram::interfaceIndex()
 */
 QString QNetworkInterface::interfaceNameFromIndex(int index)
 {

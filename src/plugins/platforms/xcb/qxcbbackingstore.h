@@ -63,8 +63,8 @@ public:
     void composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
                          QPlatformTextureList *textures, QOpenGLContext *context,
                          bool translucentBackground) Q_DECL_OVERRIDE;
-    QImage toImage() const Q_DECL_OVERRIDE;
 #endif
+    QImage toImage() const Q_DECL_OVERRIDE;
 
     QPlatformGraphicsBuffer *graphicsBuffer() const Q_DECL_OVERRIDE;
 

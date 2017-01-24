@@ -70,7 +70,7 @@
 #include <private/qapplication_p.h>
 #include <private/qlayoutengine_p.h>
 #include <private/qwidgetresizehandler_p.h>
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #   include <private/qcore_mac_p.h>
 #   include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -221,11 +221,10 @@ public:
     }
     void setGeometry(const QRect&r) Q_DECL_OVERRIDE
     {
+        static_cast<QDockWidgetGroupWindow *>(parent())->destroyOrHideIfEmpty();
         QDockAreaLayoutInfo *li = layoutInfo();
-        if (li->isEmpty()) {
-            static_cast<QDockWidgetGroupWindow *>(parent())->destroyIfEmpty();
+        if (li->isEmpty())
             return;
-        }
         int fw = frameWidth();
         li->reparentWidgets(parentWidget());
         li->rect = r.adjusted(fw, fw, -fw, -fw);
@@ -277,6 +276,10 @@ bool QDockWidgetGroupWindow::event(QEvent *e)
     case QEvent::ChildAdded:
         if (qobject_cast<QDockWidget *>(static_cast<QChildEvent*>(e)->child()))
             adjustFlags();
+        break;
+    case QEvent::LayoutRequest:
+        // We might need to show the widget again
+        destroyOrHideIfEmpty();
         break;
     default:
         break;
@@ -331,34 +334,43 @@ QDockWidget *QDockWidgetGroupWindow::topDockWidget() const
 }
 
 /*! \internal
-    Destroy this window if there is no more QDockWidget in it.
+    Destroy or hide this window if there is no more QDockWidget in it.
+    Otherwise make sure it is shown.
  */
-void QDockWidgetGroupWindow::destroyIfEmpty()
+void QDockWidgetGroupWindow::destroyOrHideIfEmpty()
 {
-    if (layoutInfo()->isEmpty()) {
-        // Make sure to reparent the possibly floating or hidden QDockWidgets to the parent
-        foreach (QDockWidget *dw,
-                 findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
-            bool wasFloating = dw->isFloating();
-            bool wasHidden = dw->isHidden();
-            dw->setParent(parentWidget());
-            if (wasFloating) {
-                dw->setFloating(true);
-            } else {
-                // maybe it was hidden, we still have to put it back in the main layout.
-                QMainWindowLayout *ml = qt_mainwindow_layout(static_cast<QMainWindow*>(parentWidget()));
-                Qt::DockWidgetArea area = ml->dockWidgetArea(this);
-                if (area == Qt::NoDockWidgetArea)
-                    area = Qt::LeftDockWidgetArea;
-                static_cast<QMainWindow*>(parentWidget())->addDockWidget(area, dw);
-            }
-            if (!wasHidden)
-                dw->show();
-        }
-        foreach (QTabBar *tb, findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly))
-            tb->setParent(parentWidget());
-        deleteLater();
+    if (!layoutInfo()->isEmpty()) {
+        show(); // It might have been hidden,
+        return;
     }
+    // There might still be placeholders
+    if (!layoutInfo()->item_list.isEmpty()) {
+        hide();
+        return;
+    }
+
+    // Make sure to reparent the possibly floating or hidden QDockWidgets to the parent
+    foreach (QDockWidget *dw, findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
+        bool wasFloating = dw->isFloating();
+        bool wasHidden = dw->isHidden();
+        dw->setParent(parentWidget());
+        if (wasFloating) {
+            dw->setFloating(true);
+        } else {
+            // maybe it was hidden, we still have to put it back in the main layout.
+            QMainWindowLayout *ml =
+                qt_mainwindow_layout(static_cast<QMainWindow *>(parentWidget()));
+            Qt::DockWidgetArea area = ml->dockWidgetArea(this);
+            if (area == Qt::NoDockWidgetArea)
+                area = Qt::LeftDockWidgetArea;
+            static_cast<QMainWindow *>(parentWidget())->addDockWidget(area, dw);
+        }
+        if (!wasHidden)
+            dw->show();
+    }
+    foreach (QTabBar *tb, findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly))
+        tb->setParent(parentWidget());
+    deleteLater();
 }
 
 /*! \internal
@@ -1117,11 +1129,11 @@ void QMainWindowLayout::removeToolBar(QToolBar *toolbar)
         QObject::disconnect(parentWidget(), SIGNAL(toolButtonStyleChanged(Qt::ToolButtonStyle)),
                    toolbar, SLOT(_q_updateToolButtonStyle(Qt::ToolButtonStyle)));
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         if (usesHIToolBar(toolbar)) {
             removeFromMacToolbar(toolbar);
         } else
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
         {
             removeWidget(toolbar);
         }
@@ -1136,7 +1148,7 @@ void QMainWindowLayout::addToolBar(Qt::ToolBarArea area,
                                    bool)
 {
     validateToolBarArea(area);
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if ((area == Qt::TopToolBarArea)
             && layoutState.mainWindow->unifiedTitleAndToolBarOnMac()) {
         insertIntoMacToolbar(0, toolbar);
@@ -1162,11 +1174,11 @@ void QMainWindowLayout::addToolBar(Qt::ToolBarArea area,
 */
 void QMainWindowLayout::insertToolBar(QToolBar *before, QToolBar *toolbar)
 {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (usesHIToolBar(before)) {
         insertIntoMacToolbar(before, toolbar);
     } else
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
     {
         addChildWidget(toolbar);
         QLayoutItem * item = layoutState.toolBarAreaLayout.insertToolBar(before, toolbar);
@@ -1195,7 +1207,7 @@ Qt::ToolBarArea QMainWindowLayout::toolBarArea(QToolBar *toolbar) const
         case QInternal::BottomDock: return Qt::BottomToolBarArea;
         default: break;
     }
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (pos == QInternal::DockCount) {
         if (qtoolbarsInUnifiedToolbarList.contains(toolbar))
             return Qt::TopToolBarArea;
@@ -1218,7 +1230,7 @@ void QMainWindowLayout::getStyleOptionInfo(QStyleOptionToolBar *option, QToolBar
 void QMainWindowLayout::toggleToolBarsVisible()
 {
     bool updateNonUnifiedParts = true;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if (layoutState.mainWindow->unifiedTitleAndToolBarOnMac()) {
         // If we hit this case, someone has pressed the "toolbar button" which will
         // toggle the unified toolbar visibility, because that's what the user wants.
@@ -1686,7 +1698,11 @@ void QMainWindowLayout::tabChanged()
     QDockAreaLayoutInfo *info = dockInfo(tb);
     if (info == 0)
         return;
-    info->apply(false);
+
+    QDockWidget *activated = info->apply(false);
+
+    if (activated)
+        emit static_cast<QMainWindow *>(parentWidget())->tabifiedDockWidgetActivated(activated);
 
     if (QWidget *w = centralWidget())
         w->raise();
@@ -1860,7 +1876,7 @@ QSize QMainWindowLayout::minimumSize() const
         const QSize sbMin = statusbar ? statusbar->minimumSize() : QSize(0, 0);
         minSize = QSize(qMax(sbMin.width(), minSize.width()),
                         sbMin.height() + minSize.height());
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         const QSize storedSize = minSize;
         int minWidth = 0;
         foreach (QToolBar *toolbar, qtoolbarsInUnifiedToolbarList) {
@@ -2089,7 +2105,7 @@ void QMainWindowLayout::animationFinished(QWidget *widget)
                 item.subinfo->reparentWidgets(parentWidget());
                 item.subinfo->setTabBarShape(parentInfo->tabBarShape);
             }
-            dwgw->destroyIfEmpty();
+            dwgw->destroyOrHideIfEmpty();
         }
 
         if (QDockWidget *dw = qobject_cast<QDockWidget*>(widget)) {
@@ -2170,7 +2186,7 @@ QMainWindowLayout::QMainWindowLayout(QMainWindow *mainwindow, QLayout *parentLay
 #endif // QT_NO_DOCKWIDGET
     , widgetAnimator(this)
     , pluggingWidget(0)
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     , blockVisiblityCheck(false)
 #endif
 {
@@ -2197,7 +2213,7 @@ QMainWindowLayout::~QMainWindowLayout()
     layoutState.deleteAllLayoutItems();
     layoutState.deleteCentralWidgetItem();
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     cleanUpMacToolbarItems();
 #endif
 
@@ -2380,13 +2396,10 @@ void QMainWindowLayout::hover(QLayoutItem *widgetItem, const QPoint &mousePos)
             QWidget *w = qobject_cast<QWidget*>(c);
             if (!w)
                 continue;
-            if (w == widget)
-                continue;
-            if (!w->isTopLevel() || !w->isVisible() || w->isMinimized())
-                continue;
             if (!qobject_cast<QDockWidget*>(w) && !qobject_cast<QDockWidgetGroupWindow *>(w))
                 continue;
-            candidates << w;
+            if (w != widget && w->isTopLevel() && w->isVisible() && !w->isMinimized())
+                candidates << w;
             if (QDockWidgetGroupWindow *group = qobject_cast<QDockWidgetGroupWindow *>(w)) {
                 // Sometimes, there are floating QDockWidget that have a QDockWidgetGroupWindow as a parent.
                 foreach (QObject *c, group->children()) {
@@ -2568,7 +2581,7 @@ bool QMainWindowLayout::restoreState(QDataStream &stream)
 // HIToolbar.
 bool QMainWindowLayout::usesHIToolBar(QToolBar *toolbar) const
 {
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
     Q_UNUSED(toolbar);
     return false;
 #else

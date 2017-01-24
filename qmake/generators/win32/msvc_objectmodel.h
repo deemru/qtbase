@@ -52,7 +52,8 @@ enum DotNET {
     NET2010 = 0xa0,
     NET2012 = 0xb0,
     NET2013 = 0xc0,
-    NET2015 = 0xd0
+    NET2015 = 0xd0,
+    NET2017 = 0xe0
 };
 
 /*
@@ -276,6 +277,10 @@ enum inlineExpansionOption {
     expandOnlyInline,
     expandAnySuitable,
     expandDefault // Not useful number, but stops the output
+};
+enum linkerDebugOption {
+    linkerDebugOptionNone,
+    linkerDebugOptionFastLink
 };
 enum linkIncrementalType {
     linkIncrementalDefault,
@@ -590,6 +595,7 @@ public:
     QStringList             ForceSymbolReferences;
     QString                 FunctionOrder;
     triState                GenerateDebugInformation;
+    linkerDebugOption       DebugInfoOption;
     triState                GenerateMapFile;
     qlonglong               HeapCommitSize;
     qlonglong               HeapReserveSize;
@@ -860,7 +866,6 @@ class VCConfiguration
 public:
     // Functions
     VCConfiguration();
-    ~VCConfiguration(){}
 
     bool                    suppressUnknownOptionWarnings;
     DotNET                  CompilerVersion;
@@ -936,7 +941,6 @@ class VCFilter
 public:
     // Functions
     VCFilter();
-    ~VCFilter(){}
 
     void addFile(const QString& filename);
     void addFile(const VCFilterFile& fileInfo);
@@ -962,7 +966,7 @@ public:
     VCCLCompilerTool        CompilerTool;
 };
 
-typedef QList<VCFilter> VCFilterList;
+typedef QVector<VCFilter> VCFilterList;
 class VCProjectSingleConfig
 {
 public:
@@ -976,9 +980,6 @@ public:
         Resources,
         Extras
     };
-    // Functions
-    VCProjectSingleConfig(){}
-    ~VCProjectSingleConfig(){}
 
     // Variables
     QString                 Name;
@@ -1009,6 +1010,7 @@ public:
     const VCFilter &filterByName(const QString &name) const;
     const VCFilter &filterForExtraCompiler(const QString &compilerName) const;
 };
+Q_DECLARE_TYPEINFO(VCProjectSingleConfig, Q_MOVABLE_TYPE);
 
 // Tree & Flat view of files --------------------------------------------------
 class VCFilter;

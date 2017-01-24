@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include <QtCore/qsize.h>
 #include <QtGui/private/qpixmap_blitter_p.h>
 
@@ -63,7 +64,7 @@ class QBlittablePrivate;
 
 class Q_GUI_EXPORT QBlittable
 {
-    Q_DECLARE_PRIVATE(QBlittable);
+    Q_DECLARE_PRIVATE(QBlittable)
 public:
     enum Capability {
 

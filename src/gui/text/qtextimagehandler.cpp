@@ -61,10 +61,10 @@ static QString resolveFileName(QString fileName, QUrl *url, qreal targetDevicePi
     // Also, QFile{Info}::exists works only on filepaths (not urls)
 
     if (url->isValid()) {
-      if (url->scheme() == QLatin1Literal("qrc")) {
+      if (url->scheme() == QLatin1String("qrc")) {
         fileName = fileName.right(fileName.length() - 3);
       }
-      else if (url->scheme() == QLatin1Literal("file")) {
+      else if (url->scheme() == QLatin1String("file")) {
         fileName = url->toLocalFile();
       }
     }
@@ -111,7 +111,7 @@ static QPixmap getPixmap(QTextDocument *doc, const QTextImageFormat &format, con
         doc->addResource(QTextDocument::ImageResource, url, pm);
     }
 
-    if (name.contains(QStringLiteral("@2x")))
+    if (name.contains(QLatin1String("@2x")))
         pm.setDevicePixelRatio(sourcePixelRatio);
 
     return pm;

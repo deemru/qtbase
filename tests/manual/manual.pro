@@ -2,8 +2,10 @@ TEMPLATE=subdirs
 
 SUBDIRS = bearerex \
 filetest \
+embeddedintoforeignwindow \
 foreignwindows \
 gestures \
+highdpi \
 inputmethodhints \
 keypadnavigation \
 lance \
@@ -51,19 +53,15 @@ dialogs \
 windowtransparency \
 unc
 
-!contains(QT_CONFIG, openssl):!contains(QT_CONFIG, openssl-linked):SUBDIRS -= qssloptions
+!qtConfig(openssl):!qtConfig(openssl-linked): SUBDIRS -= qssloptions
 
-contains(QT_CONFIG, opengl) {
+qtConfig(opengl) {
     SUBDIRS += qopengltextureblitter
-    contains(QT_CONFIG, egl): SUBDIRS += qopenglcontext
+    qtConfig(egl): SUBDIRS += qopenglcontext
 }
 
-win32 {
-    SUBDIRS -= network_remote_stresstest network_stresstest
-    # disable some tests on wince because of missing dependencies
-    wince: SUBDIRS -= lance windowmodality
-}
+win32: SUBDIRS -= network_remote_stresstest network_stresstest
 
 lessThan(QT_MAJOR_VERSION, 5): SUBDIRS -= bearerex lance qnetworkaccessmanager/qget qmimedatabase qnetworkreply \
 qpainfo qscreen  socketengine xembed-raster xembed-widgets windowtransparency \
-foreignwindows
+embeddedintoforeignwindow foreignwindows

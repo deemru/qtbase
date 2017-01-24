@@ -54,6 +54,8 @@
 #include <private/qobject_p.h>
 #include <QtCore/qabstractstate.h>
 
+QT_REQUIRE_CONFIG(statemachine);
+
 QT_BEGIN_NAMESPACE
 
 class QStateMachine;
@@ -94,4 +96,4 @@ public:
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QABSTRACTSTATE_P_H

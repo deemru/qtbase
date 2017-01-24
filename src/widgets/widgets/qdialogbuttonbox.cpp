@@ -124,7 +124,7 @@ QT_BEGIN_NAMESPACE
     \endtable
 
     Additionally, button boxes that contain only buttons with ActionRole or
-    HelpRole can be considered modeless and have an alternate look on OS X:
+    HelpRole can be considered modeless and have an alternate look on \macos:
 
     \table
     \row \li modeless horizontal MacLayout
@@ -411,7 +411,7 @@ QPushButton *QDialogButtonBoxPrivate::createButton(QDialogButtonBox::StandardBut
     else
         addButton(button, static_cast<QDialogButtonBox::ButtonRole>(role), doLayout);
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     // Since mnemonics is off by default on Mac, we add a Cmd-D
     // shortcut here to e.g. make the "Don't Save" button work nativly:
     if (sbutton == QDialogButtonBox::Discard)
@@ -462,9 +462,8 @@ void QDialogButtonBoxPrivate::retranslateStrings()
     \sa orientation, addButton()
 */
 QDialogButtonBox::QDialogButtonBox(QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(Qt::Horizontal), parent, 0)
+    : QDialogButtonBox(Qt::Horizontal, parent)
 {
-    d_func()->initLayout();
 }
 
 /*!
@@ -487,10 +486,8 @@ QDialogButtonBox::QDialogButtonBox(Qt::Orientation orientation, QWidget *parent)
     \sa orientation, addButton()
 */
 QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(Qt::Horizontal), parent, 0)
+    : QDialogButtonBox(buttons, Qt::Horizontal, parent)
 {
-    d_func()->initLayout();
-    d_func()->createStandardButtons(buttons);
 }
 
 /*!
@@ -501,9 +498,8 @@ QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, QWidget *parent)
 */
 QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, Qt::Orientation orientation,
                                    QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(orientation), parent, 0)
+    : QDialogButtonBox(orientation, parent)
 {
-    d_func()->initLayout();
     d_func()->createStandardButtons(buttons);
 }
 
@@ -583,7 +579,7 @@ QDialogButtonBox::~QDialogButtonBox()
     contained in the button box.
 
     \value WinLayout Use a policy appropriate for applications on Windows.
-    \value MacLayout Use a policy appropriate for applications on OS X.
+    \value MacLayout Use a policy appropriate for applications on \macos.
     \value KdeLayout Use a policy appropriate for applications on KDE.
     \value GnomeLayout Use a policy appropriate for applications on GNOME.
 

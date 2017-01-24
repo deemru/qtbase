@@ -83,6 +83,7 @@ class QTouchDevice;
 class QWinRTCursor;
 class QWinRTInputContext;
 class QWinRTScreenPrivate;
+class QWinRTWindow;
 class QWinRTScreen : public QPlatformScreen
 {
 public:
@@ -104,17 +105,27 @@ public:
     Qt::ScreenOrientation orientation() const Q_DECL_OVERRIDE;
 
     QWindow *topWindow() const;
+    QWindow *windowAt(const QPoint &pos);
     void addWindow(QWindow *window);
     void removeWindow(QWindow *window);
     void raise(QWindow *window);
     void lower(QWindow *window);
 
-    void updateWindowTitle();
+    bool setMouseGrabWindow(QWinRTWindow *window, bool grab);
+    QWinRTWindow* mouseGrabWindow() const;
+
+    bool setKeyboardGrabWindow(QWinRTWindow *window, bool grab);
+    QWinRTWindow* keyboardGrabWindow() const;
+
+    void updateWindowTitle(const QString &title);
 
     ABI::Windows::UI::Core::ICoreWindow *coreWindow() const;
     ABI::Windows::UI::Xaml::IDependencyObject *canvas() const;
 
     void initialize();
+
+    void setCursorRect(const QRectF &cursorRect);
+    void setKeyboardRect(const QRectF &keyboardRect);
 
 private:
     void handleExpose();
@@ -140,6 +151,7 @@ private:
 #endif
 
     QScopedPointer<QWinRTScreenPrivate> d_ptr;
+    QRectF mCursorRect;
     Q_DECLARE_PRIVATE(QWinRTScreen)
 };
 

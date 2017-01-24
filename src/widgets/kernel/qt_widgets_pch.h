@@ -47,10 +47,10 @@
 
 // from corelib/global/qt_pch.h
 #if defined __cplusplus
-#include <qglobal.h>
+#include <qtwidgetsglobal.h>
 
 
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
 # define _POSIX_
 # include <limits.h>
 # undef _POSIX_

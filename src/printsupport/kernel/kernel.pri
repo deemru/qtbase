@@ -11,6 +11,7 @@ HEADERS += \
         $$PWD/qplatformprintdevice.h \
         $$PWD/qplatformprintplugin.h \
         $$PWD/qplatformprintersupport.h \
+        $$PWD/qtprintsupportglobal_p.h \
         $$PWD/qtprintsupportglobal.h
 
 SOURCES += \
@@ -29,10 +30,10 @@ win32 {
                 $$PWD/qprintengine_win_p.h
         SOURCES += \
                 $$PWD/qprintengine_win.cpp
-        LIBS_PRIVATE += -lwinspool -lcomdlg32 -lgdi32 -luser32
+        !winrt: LIBS_PRIVATE += -lwinspool -lcomdlg32 -lgdi32 -luser32
 }
 
-unix:!mac:contains(QT_CONFIG, cups): {
+unix:!darwin:qtConfig(cups) {
         SOURCES += $$PWD/qcups.cpp
         HEADERS += $$PWD/qcups_p.h
 }

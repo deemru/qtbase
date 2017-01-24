@@ -47,6 +47,7 @@
 #include <qvector.h>
 #include <qstack.h>
 #include <qbitarray.h>
+#include <qdatetime.h>
 
 #include <limits.h>
 
@@ -363,7 +364,7 @@ quintptr QPersistentModelIndex::internalId() const
     Returns the parent QModelIndex for this persistent index, or an invalid
     QModelIndex if it has no parent.
 
-    \sa child(), sibling(), model()
+    \sa sibling(), model()
 */
 QModelIndex QPersistentModelIndex::parent() const
 {
@@ -376,7 +377,7 @@ QModelIndex QPersistentModelIndex::parent() const
     Returns the sibling at \a row and \a column or an invalid QModelIndex if
     there is no sibling at this position.
 
-    \sa parent(), child()
+    \sa parent()
 */
 
 QModelIndex QPersistentModelIndex::sibling(int row, int column) const
@@ -386,7 +387,12 @@ QModelIndex QPersistentModelIndex::sibling(int row, int column) const
     return QModelIndex();
 }
 
+#if QT_DEPRECATED_SINCE(5, 8)
 /*!
+    \obsolete
+
+    Use QAbstractItemModel::index() instead.
+
     Returns the child of the model index that is stored in the given \a row
     and \a column.
 
@@ -396,9 +402,10 @@ QModelIndex QPersistentModelIndex::sibling(int row, int column) const
 QModelIndex QPersistentModelIndex::child(int row, int column) const
 {
     if (d)
-        return d->index.child(row, column);
+        return d->index.model()->index(row, column, d->index);
     return QModelIndex();
 }
+#endif
 
 /*!
     Returns the data for the given \a role for the item referred to by the
@@ -545,6 +552,43 @@ Q_GLOBAL_STATIC(DefaultRoleNames, qDefaultRoleNames)
 const QHash<int,QByteArray> &QAbstractItemModelPrivate::defaultRoleNames()
 {
     return *qDefaultRoleNames();
+}
+
+bool QAbstractItemModelPrivate::isVariantLessThan(const QVariant &left, const QVariant &right,
+                                                  Qt::CaseSensitivity cs, bool isLocaleAware)
+{
+    if (left.userType() == QVariant::Invalid)
+        return false;
+    if (right.userType() == QVariant::Invalid)
+        return true;
+    switch (left.userType()) {
+    case QVariant::Int:
+        return left.toInt() < right.toInt();
+    case QVariant::UInt:
+        return left.toUInt() < right.toUInt();
+    case QVariant::LongLong:
+        return left.toLongLong() < right.toLongLong();
+    case QVariant::ULongLong:
+        return left.toULongLong() < right.toULongLong();
+    case QMetaType::Float:
+        return left.toFloat() < right.toFloat();
+    case QVariant::Double:
+        return left.toDouble() < right.toDouble();
+    case QVariant::Char:
+        return left.toChar() < right.toChar();
+    case QVariant::Date:
+        return left.toDate() < right.toDate();
+    case QVariant::Time:
+        return left.toTime() < right.toTime();
+    case QVariant::DateTime:
+        return left.toDateTime() < right.toDateTime();
+    case QVariant::String:
+    default:
+        if (isLocaleAware)
+            return left.toString().localeAwareCompare(right.toString()) < 0;
+        else
+            return left.toString().compare(right.toString(), cs) < 0;
+    }
 }
 
 
@@ -1061,11 +1105,15 @@ void QAbstractItemModel::resetInternalData()
     Returns the sibling at \a row and \a column. If there is no sibling at this
     position, an invalid QModelIndex is returned.
 
-    \sa parent(), child()
+    \sa parent()
 */
 
 /*!
     \fn QModelIndex QModelIndex::child(int row, int column) const
+
+    \obsolete
+
+    Use QAbstractItemModel::index() instead.
 
     Returns the child of the model index that is stored in the given \a row and
     \a column.
@@ -1115,7 +1163,7 @@ void QAbstractItemModel::resetInternalData()
     Returns the parent of the model index, or QModelIndex() if it has no
     parent.
 
-    \sa child(), sibling(), model()
+    \sa sibling(), model()
 */
 
 /*!

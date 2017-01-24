@@ -33,6 +33,7 @@
 #include <qregexp.h>
 #include <qcryptographichash.h>
 #include <qdebug.h>
+#include <qsettings.h>
 #include <qstring.h>
 #include <stdlib.h>
 #include <time.h>
@@ -488,6 +489,32 @@ static QString xcodeFiletypeForFilename(const QString &filename)
         return QStringLiteral("text");
 
     return QString();
+}
+
+static bool compareProvisioningTeams(const QVariantMap &a, const QVariantMap &b)
+{
+    int aFree = a.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    int bFree = b.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    return aFree < bFree;
+}
+
+static QList<QVariantMap> provisioningTeams()
+{
+    const QSettings xcodeSettings(
+        QDir::homePath() + QLatin1String("/Library/Preferences/com.apple.dt.Xcode.plist"),
+        QSettings::NativeFormat);
+    const QVariantMap teamMap = xcodeSettings.value(QLatin1String("IDEProvisioningTeams")).toMap();
+    QList<QVariantMap> flatTeams;
+    for (QVariantMap::const_iterator it = teamMap.begin(), end = teamMap.end(); it != end; ++it) {
+        const QString emailAddress = it.key();
+        QVariantMap team = it.value().toMap();
+        team[QLatin1String("emailAddress")] = emailAddress;
+        flatTeams.append(team);
+    }
+
+    // Sort teams so that Free Provisioning teams come last
+    std::sort(flatTeams.begin(), flatTeams.end(), ::compareProvisioningTeams);
+    return flatTeams;
 }
 
 bool
@@ -1089,7 +1116,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
     // Copy Bundle Data
     if (!project->isEmpty("QMAKE_BUNDLE_DATA")) {
         ProStringList bundle_file_refs;
-        bool ios = project->isActiveConfig("ios");
+        bool osx = project->isActiveConfig("osx");
 
         //all bundle data
         const ProStringList &bundle_data = project->values("QMAKE_BUNDLE_DATA");
@@ -1117,8 +1144,8 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                   << "\t\t};\n";
             }
 
-            if (copyBundleResources && ((ios && path.isEmpty())
-                                        || (!ios && path == QLatin1String("Contents/Resources")))) {
+            if (copyBundleResources && ((!osx && path.isEmpty())
+                                        || (osx && path == QLatin1String("Contents/Resources")))) {
                 for (const ProString &s : qAsConst(bundle_files))
                     bundle_resources_files << s;
             } else {
@@ -1336,7 +1363,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
 
         ProString targetName = project->first("QMAKE_ORIG_TARGET");
         ProString testHost = "$(BUILT_PRODUCTS_DIR)/" + targetName + ".app/";
-        if (!project->isActiveConfig("ios"))
+        if (project->isActiveConfig("osx"))
             testHost.append("Contents/MacOS/");
         testHost.append(targetName);
 
@@ -1403,11 +1430,17 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
         QString configName = (as_release ? "Release" : "Debug");
 
         QMap<QString, QString> settings;
+        if (!project->isActiveConfig("no_xcode_development_team")) {
+            const QList<QVariantMap> teams = provisioningTeams();
+            if (!teams.isEmpty()) {
+                // first suitable team we find is the one we'll use by default
+                settings.insert("DEVELOPMENT_TEAM",
+                    teams.first().value(QLatin1String("teamID")).toString());
+            }
+        }
         settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
-        // Bitcode is only supported with a deployment target >= iOS 6.0.
-        // Disable it for now, and consider switching it on when later
-        // bumping the deployment target.
-        settings.insert("ENABLE_BITCODE", "NO");
+        // required for tvOS (and watchos), optional on iOS (deployment target >= iOS 6.0)
+        settings.insert("ENABLE_BITCODE", project->isActiveConfig("bitcode") ? "YES" : "NO");
         settings.insert("GCC_GENERATE_DEBUGGING_SYMBOLS", as_release ? "NO" : "YES");
         if(!as_release)
             settings.insert("GCC_OPTIMIZATION_LEVEL", "0");
@@ -1537,6 +1570,10 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                     t << "\t\t\t\t" << writeSettings("MACOSX_DEPLOYMENT_TARGET", project->first("QMAKE_MACOSX_DEPLOYMENT_TARGET")) << ";\n";
                 if (!project->isEmpty("QMAKE_IOS_DEPLOYMENT_TARGET"))
                     t << "\t\t\t\t" << writeSettings("IPHONEOS_DEPLOYMENT_TARGET", project->first("QMAKE_IOS_DEPLOYMENT_TARGET")) << ";\n";
+                if (!project->isEmpty("QMAKE_TVOS_DEPLOYMENT_TARGET"))
+                    t << "\t\t\t\t" << writeSettings("APPLETVOS_DEPLOYMENT_TARGET", project->first("QMAKE_TVOS_DEPLOYMENT_TARGET")) << ";\n";
+                if (!project->isEmpty("QMAKE_WATCHOS_DEPLOYMENT_TARGET"))
+                    t << "\t\t\t\t" << writeSettings("WATCHOS_DEPLOYMENT_TARGET", project->first("QMAKE_WATCHOS_DEPLOYMENT_TARGET")) << ";\n";
 
                 if (!project->isEmpty("QMAKE_XCODE_CODE_SIGN_IDENTITY"))
                     t << "\t\t\t\t" << writeSettings("CODE_SIGN_IDENTITY", project->first("QMAKE_XCODE_CODE_SIGN_IDENTITY")) << ";\n";
@@ -1826,7 +1863,7 @@ ProjectBuilderMakefileGenerator::pbuilderVersion() const
                     CFStringRef str = CFStringRef(CFBundleGetValueForInfoDictionaryKey(bundle,
                                                               CFSTR("CFBundleShortVersionString")));
                     if (str) {
-                        QStringList versions = QCFString::toQString(str).split(QLatin1Char('.'));
+                        QStringList versions = QString::fromCFString(str).split(QLatin1Char('.'));
                         int versionMajor = versions.at(0).toInt();
                         int versionMinor = versions.at(1).toInt();
                         if (versionMajor >= 3) {

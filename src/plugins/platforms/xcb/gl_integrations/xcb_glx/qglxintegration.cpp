@@ -51,7 +51,7 @@
 #include <QtGui/QOffscreenSurface>
 
 #include "qglxintegration.h"
-#include <QtPlatformSupport/private/qglxconvenience_p.h>
+#include <QtGlxSupport/private/qglxconvenience_p.h>
 #include <QtPlatformHeaders/QGLXNativeContext>
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
@@ -678,8 +678,11 @@ void QGLXContext::queryDummyContext()
     }
 
     QOpenGLContext context;
-    context.create();
-    context.makeCurrent(surface.data());
+    if (!context.create() || !context.makeCurrent(surface.data())) {
+        qWarning("QGLXContext: Failed to create dummy context");
+        m_supportsThreading = false;
+        return;
+    }
 
     m_supportsThreading = true;
 

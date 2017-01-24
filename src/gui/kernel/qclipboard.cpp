@@ -67,7 +67,7 @@ QT_BEGIN_NAMESPACE
     Drop}.
 
     There is a single QClipboard object in an application, accessible
-    as QApplication::clipboard().
+    as QGuiApplication::clipboard().
 
     Example:
     \snippet code/src_gui_kernel_qclipboard.cpp 0
@@ -116,28 +116,28 @@ QT_BEGIN_NAMESPACE
 
     \endlist
 
-    \section1 Notes for OS X Users
+    \section1 Notes for \macos Users
 
-    OS X supports a separate find buffer that holds the current
+    \macos supports a separate find buffer that holds the current
     search string in Find operations. This find clipboard can be accessed
     by specifying the FindBuffer mode.
 
-    \section1 Notes for Windows and OS X Users
+    \section1 Notes for Windows and \macos Users
 
     \list
 
-    \li Windows and OS X do not support the global mouse
+    \li Windows and \macos do not support the global mouse
     selection; they only supports the global clipboard, i.e. they
     only add text to the clipboard when an explicit copy or cut is
     made.
 
-    \li Windows and OS X does not have the concept of ownership;
+    \li Windows and \macos does not have the concept of ownership;
     the clipboard is a fully global resource so all applications are
     notified of changes.
 
     \endlist
 
-    \sa QApplication
+    \sa QGuiApplication
 */
 
 /*!
@@ -147,7 +147,7 @@ QT_BEGIN_NAMESPACE
 
     Do not call this function.
 
-    Call QApplication::clipboard() instead to get a pointer to the
+    Call QGuiApplication::clipboard() instead to get a pointer to the
     application's global clipboard object.
 
     There is only one clipboard in the window system, and creating
@@ -165,7 +165,7 @@ QClipboard::QClipboard(QObject *parent)
 
     Destroys the clipboard.
 
-    You should never delete the clipboard. QApplication will do this
+    You should never delete the clipboard. QGuiApplication will do this
     when the application terminates.
 */
 QClipboard::~QClipboard()
@@ -187,7 +187,7 @@ QClipboard::~QClipboard()
 
     This signal is emitted when the clipboard data is changed.
 
-    On OS X and with Qt version 4.3 or higher, clipboard
+    On \macos and with Qt version 4.3 or higher, clipboard
     changes made by other applications will only be detected
     when the application is activated.
 
@@ -199,7 +199,7 @@ QClipboard::~QClipboard()
 
     This signal is emitted when the selection is changed. This only
     applies to windowing systems that support selections, e.g. X11.
-    Windows and OS X don't support selections.
+    Windows and \macos don't support selections.
 
     \sa dataChanged(), findBufferChanged(), changed()
 */
@@ -209,7 +209,7 @@ QClipboard::~QClipboard()
     \since 4.2
 
     This signal is emitted when the find buffer is changed. This only
-    applies to OS X.
+    applies to \macos.
 
     With Qt version 4.3 or higher, clipboard changes made by other
     applications will only be detected when the application is activated.
@@ -232,7 +232,7 @@ QClipboard::~QClipboard()
     systems with a global mouse selection (e.g. X11).
 
     \value FindBuffer indicates that data should be stored and retrieved from
-    the Find buffer. This mode is used for holding search strings on OS X.
+    the Find buffer. This mode is used for holding search strings on \macos.
 
     \omitvalue LastMode
 
@@ -425,8 +425,9 @@ void QClipboard::setPixmap(const QPixmap &pixmap, Mode mode)
 /*!
     \fn QMimeData *QClipboard::mimeData(Mode mode) const
 
-    Returns a reference to a QMimeData representation of the current
-    clipboard data.
+    Returns a pointer to a QMimeData representation of the current
+    clipboard data (can be NULL if the given \a mode is not
+    supported by the platform).
 
     The \a mode argument is used to control which part of the system
     clipboard is used.  If \a mode is QClipboard::Clipboard, the
@@ -437,6 +438,10 @@ void QClipboard::setPixmap(const QPixmap &pixmap, Mode mode)
 
     The text(), image(), and pixmap() functions are simpler
     wrappers for retrieving text, image, and pixmap data.
+
+    \note The pointer returned might become invalidated when the contents
+    of the clipboard changes; either by calling one of the setter functions
+    or externally by the system clipboard changing.
 
     \sa setMimeData()
 */
@@ -553,7 +558,7 @@ bool QClipboard::ownsFindBuffer() const
 bool QClipboard::supportsMode(Mode mode) const
 {
     QPlatformClipboard *clipboard = QGuiApplicationPrivate::platformIntegration()->clipboard();
-    return clipboard->supportsMode(mode);
+    return clipboard && clipboard->supportsMode(mode);
 }
 
 /*!
@@ -565,7 +570,7 @@ bool QClipboard::supportsMode(Mode mode) const
 bool QClipboard::ownsMode(Mode mode) const
 {
     QPlatformClipboard *clipboard = QGuiApplicationPrivate::platformIntegration()->clipboard();
-    return clipboard->ownsMode(mode);
+    return clipboard && clipboard->ownsMode(mode);
 }
 
 /*!

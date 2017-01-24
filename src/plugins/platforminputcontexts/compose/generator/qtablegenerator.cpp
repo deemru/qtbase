@@ -112,15 +112,15 @@ static QByteArray localHostName()
 */
 static QComposeCacheFileHeader readFileMetadata(const QString &path)
 {
-    QComposeCacheFileHeader info;
-    info.reserved = 0;
-    info.fileSize = 0;
+    quint64 fileSize = 0;
+    qint64 lastModified = 0;
     const QByteArray pathBytes = QFile::encodeName(path);
     QT_STATBUF st;
-    if (QT_STAT(pathBytes.data(), &st) != 0)
-        return info;
-    info.lastModified = st.st_mtime;
-    info.fileSize = st.st_size;
+    if (QT_STAT(pathBytes.data(), &st) == 0) {
+        lastModified = st.st_mtime;
+        fileSize = st.st_size;
+    }
+    QComposeCacheFileHeader info = { 0, 0, fileSize, lastModified };
     return info;
 }
 
@@ -255,6 +255,7 @@ void TableGenerator::initPossibleLocations()
     // never meant for external software to parse compose tables directly. Best we
     // can do is to hardcode search paths. To add an extra system path use
     // the QTCOMPOSE environment variable
+    m_possibleLocations.reserve(7);
     if (qEnvironmentVariableIsSet("QTCOMPOSE"))
         m_possibleLocations.append(QString::fromLocal8Bit(qgetenv("QTCOMPOSE")));
     m_possibleLocations.append(QStringLiteral("/usr/share/X11/locale"));
@@ -278,7 +279,7 @@ QString TableGenerator::findComposeFile()
 
     // check if user’s home directory has a file named .XCompose
     if (cleanState()) {
-        QString path = qgetenv("HOME") + QStringLiteral("/.XCompose");
+        QString path = qgetenv("HOME") + QLatin1String("/.XCompose");
         if (QFile::exists(path))
             return path;
     }
@@ -645,6 +646,6 @@ void TableGenerator::orderComposeTable()
     // Stable-sorting to ensure that the item that appeared before the other in the
     // original container will still appear first after the sort. This property is
     // needed to handle the cases when user re-defines already defined key sequence
-    std::stable_sort(m_composeTable.begin(), m_composeTable.end(), Compare());
+    std::stable_sort(m_composeTable.begin(), m_composeTable.end(), ByKeys());
 }
 

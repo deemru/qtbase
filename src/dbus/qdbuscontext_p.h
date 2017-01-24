@@ -52,7 +52,7 @@
 #ifndef QDBUSCONTEXT_P_H
 #define QDBUSCONTEXT_P_H
 
-#include <QtCore/qglobal.h>
+#include <QtDBus/private/qtdbusglobal_p.h>
 
 #ifndef QT_NO_DBUS
 

@@ -5,12 +5,13 @@ SOURCES  += ../tst_qnetworkreply.cpp
 TARGET = ../tst_qnetworkreply
 
 QT = core-private network-private testlib
+QT_FOR_CONFIG += gui-private
 RESOURCES += ../qnetworkreply.qrc
 
 TESTDATA += ../empty ../rfc3252.txt ../resource ../bigfile ../*.jpg ../certs \
             ../index.html ../smb-file.txt
 
-contains(QT_CONFIG,xcb): CONFIG+=insignificant_test  # unstable, QTBUG-21102
+qtConfig(xcb): CONFIG+=insignificant_test  # unstable, QTBUG-21102
 win32:CONFIG += insignificant_test # QTBUG-24226
 
 !winrt: TEST_HELPER_INSTALLS = ../echo/echo

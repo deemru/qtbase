@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtCore/private/qglobal_p.h>
 #include <qjsondocument.h>
 #include <qvarlengtharray.h>
 
@@ -107,7 +108,12 @@ private:
     inline int reserveSpace(int space) {
         if (current + space >= dataLength) {
             dataLength = 2*dataLength + space;
-            data = (char *)realloc(data, dataLength);
+            char *newData = (char *)realloc(data, dataLength);
+            if (!newData) {
+                lastError = QJsonParseError::DocumentTooLarge;
+                return -1;
+            }
+            data = newData;
         }
         int pos = current;
         current += space;

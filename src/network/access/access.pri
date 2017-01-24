@@ -37,7 +37,9 @@ HEADERS += \
     access/qnetworkdiskcache.h \
     access/qhttpthreaddelegate_p.h \
     access/qhttpmultipart.h \
-    access/qhttpmultipart_p.h
+    access/qhttpmultipart_p.h \
+    access/qnetworkfile_p.h \
+    access/qhttp2protocolhandler_p.h
 
 SOURCES += \
     access/qftp.cpp \
@@ -68,18 +70,11 @@ SOURCES += \
     access/qabstractnetworkcache.cpp \
     access/qnetworkdiskcache.cpp \
     access/qhttpthreaddelegate.cpp \
-    access/qhttpmultipart.cpp
+    access/qhttpmultipart.cpp \
+    access/qnetworkfile.cpp \
+    access/qhttp2protocolhandler.cpp
 
 mac: LIBS_PRIVATE += -framework Security
 
-ios {
-    HEADERS += \
-        access/qnetworkreplynsurlconnectionimpl_p.h
-
-    OBJECTIVE_SOURCES += \
-        access/qnetworkreplynsurlconnectionimpl.mm
-
-    LIBS_PRIVATE += -framework Foundation
-}
-
 include($$PWD/../../3rdparty/zlib_dependency.pri)
+include($$PWD/http2/http2.pri)

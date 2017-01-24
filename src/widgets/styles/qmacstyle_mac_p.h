@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QtWidgets/qcommonstyle.h>
 
 QT_BEGIN_NAMESPACE
@@ -133,7 +134,7 @@ private:
     friend bool qt_mac_buttonIsRenderedFlat(const QPushButton *pushButton, const QStyleOptionButton *option);
 };
 
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 
 QT_END_NAMESPACE
 

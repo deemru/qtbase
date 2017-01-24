@@ -42,7 +42,7 @@
 
 #include <QtCore/QMutex>
 #include <QtCore/QSemaphore>
-#include <QtPlatformSupport/private/qunixeventdispatcher_qpa_p.h>
+#include <QtEventDispatcherSupport/private/qunixeventdispatcher_qpa_p.h>
 
 class QAndroidEventDispatcher : public QUnixEventDispatcherQPA
 {
@@ -56,7 +56,7 @@ public:
     void goingToStop(bool stop);
 
 protected:
-    bool processEvents(QEventLoop::ProcessEventsFlags flags);
+    bool processEvents(QEventLoop::ProcessEventsFlags flags) override;
 
 private:
     QAtomicInt m_stopRequest;

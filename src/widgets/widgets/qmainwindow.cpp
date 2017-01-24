@@ -61,7 +61,7 @@
 #ifdef Q_OS_OSX
 #include <qpa/qplatformnativeinterface.h>
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qt_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 QT_BEGIN_NAMESPACE
@@ -80,7 +80,7 @@ public:
 #ifdef Q_OS_OSX
             , useUnifiedToolBar(false)
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
             , useHIToolBar(false)
             , activateUnifiedToolbarAfterFullScreen(false)
 #endif
@@ -95,7 +95,7 @@ public:
 #ifdef Q_OS_OSX
     bool useUnifiedToolBar;
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     bool useHIToolBar;
     bool activateUnifiedToolbarAfterFullScreen;
 #endif
@@ -326,7 +326,7 @@ void QMainWindowPrivate::init()
     direction.
 
     Two dock widgets may also be stacked on top of each other. A
-    QTabBar is then used to select which of the widgets that should be
+    QTabBar is then used to select which of the widgets should be
     displayed.
 
     We give an example of how to create and add dock widgets to a
@@ -376,6 +376,18 @@ void QMainWindowPrivate::init()
 
     \sa setToolButtonStyle()
 */
+
+#ifndef QT_NO_DOCKWIDGET
+/*!
+    \fn void QMainWindow::tabifiedDockWidgetActivated(QDockWidget *dockWidget)
+
+    This signal is emitted when the tabified dock widget is activated by
+    selecting the tab. The activated dock widget is passed in \a dockWidget.
+
+    \since 5.8
+    \sa tabifyDockWidget(), tabifiedDockWidgets()
+*/
+#endif
 
 /*!
     Constructs a QMainWindow with the given \a parent and the specified
@@ -670,8 +682,10 @@ QWidget *QMainWindow::takeCentralWidget()
 {
     Q_D(QMainWindow);
     QWidget *oldcentralwidget = d->layout->centralWidget();
-    oldcentralwidget->setParent(0);
-    d->layout->setCentralWidget(0);
+    if (oldcentralwidget) {
+        oldcentralwidget->setParent(0);
+        d->layout->setCentralWidget(0);
+    }
     return oldcentralwidget;
 }
 
@@ -1098,7 +1112,7 @@ void QMainWindow::addDockWidget(Qt::DockWidgetArea area, QDockWidget *dockwidget
     d_func()->layout->removeWidget(dockwidget); // in case it was already in here
     addDockWidget(area, dockwidget, orientation);
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC     //drawer support
+#if 0 // Used to be included in Qt4 for Q_WS_MAC     //drawer support
     QMacAutoReleasePool pool;
     extern bool qt_mac_is_macdrawer(const QWidget *); //qwidget_mac.cpp
     if (qt_mac_is_macdrawer(dockwidget)) {
@@ -1502,7 +1516,7 @@ bool QMainWindow::event(QEvent *event)
             if (!d->explicitIconSize)
                 setIconSize(QSize());
             break;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         case QEvent::Show:
             if (unifiedTitleAndToolBarOnMac())
                 d->layout->syncUnifiedToolbarVisibility();
@@ -1521,7 +1535,7 @@ bool QMainWindow::event(QEvent *event)
                 }
             }
             break;
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 #if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
        case QEvent::CursorChange:
            // CursorChange events are triggered as mouse moves to new widgets even
@@ -1547,7 +1561,7 @@ bool QMainWindow::event(QEvent *event)
 
 /*!
     \property QMainWindow::unifiedTitleAndToolBarOnMac
-    \brief whether the window uses the unified title and toolbar look on OS X
+    \brief whether the window uses the unified title and toolbar look on \macos
 
     Note that the Qt 5 implementation has several limitations compared to Qt 4:
     \list
@@ -1577,7 +1591,7 @@ void QMainWindow::setUnifiedTitleAndToolBarOnMac(bool set)
     }
 #endif
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     Q_D(QMainWindow);
     if (!isWindow() || d->useHIToolBar == set || QSysInfo::MacintoshVersion < QSysInfo::MV_10_3)
         return;
@@ -1612,7 +1626,7 @@ bool QMainWindow::unifiedTitleAndToolBarOnMac() const
 #ifdef Q_OS_OSX
     return d_func()->useUnifiedToolBar;
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     return d_func()->useHIToolBar && !testAttribute(Qt::WA_MacBrushedMetal) && !(windowFlags() & Qt::FramelessWindowHint);
 #endif
     return false;
@@ -1717,10 +1731,20 @@ QMenu *QMainWindow::createPopupMenu()
         menu = new QMenu(this);
         for (int i = 0; i < dockwidgets.size(); ++i) {
             QDockWidget *dockWidget = dockwidgets.at(i);
-            if (dockWidget->parentWidget() == this
-                && !d->layout->layoutState.dockAreaLayout.indexOf(dockWidget).isEmpty()) {
-                menu->addAction(dockwidgets.at(i)->toggleViewAction());
+            // filter to find out if we own this QDockWidget
+            if (dockWidget->parentWidget() == this) {
+                if (d->layout->layoutState.dockAreaLayout.indexOf(dockWidget).isEmpty())
+                    continue;
+            } else if (QDockWidgetGroupWindow *dwgw =
+                           qobject_cast<QDockWidgetGroupWindow *>(dockWidget->parentWidget())) {
+                if (dwgw->parentWidget() != this)
+                    continue;
+                if (dwgw->layoutInfo()->indexOf(dockWidget).isEmpty())
+                    continue;
+            } else {
+                continue;
             }
+            menu->addAction(dockwidgets.at(i)->toggleViewAction());
         }
         menu->addSeparator();
     }

@@ -27,9 +27,6 @@
 ****************************************************************************/
 #include <QtTest/QtTest>
 #include <QtXml/QtXml>
-#if defined(Q_OS_WINCE)
-#include <QtGui/QFontDatabase>
-#endif
 #include <QtGui/QFontInfo>
 #include <QtGui/QFontMetrics>
 
@@ -38,10 +35,6 @@
 class tst_QCssParser : public QObject
 {
     Q_OBJECT
-
-public slots:
-    void initTestCase();
-    void cleanupTestCase();
 
 private slots:
     void scanner_data();
@@ -85,41 +78,16 @@ private slots:
     void extractBorder();
     void noTextDecoration();
     void quotedAndUnquotedIdentifiers();
-
-private:
-#if defined(Q_OS_WINCE)
-    int m_timesFontId;
-#endif
 };
-
-void tst_QCssParser::initTestCase()
-{
-#if defined(Q_OS_WINCE)
-    QFontDatabase fontDB;
-    m_timesFontId = -1;
-    if (!fontDB.families().contains("Times New Roman")) {
-        m_timesFontId = QFontDatabase::addApplicationFont("times.ttf");
-        QVERIFY(m_timesFontId != -1);
-    }
-#endif
-}
-
-void tst_QCssParser::cleanupTestCase()
-{
-#if defined(Q_OS_WINCE)
-    if (m_timesFontId != -1)
-        QFontDatabase::removeApplicationFont(m_timesFontId);
-#endif
-}
 
 void tst_QCssParser::scanner_data()
 {
     QTest::addColumn<QString>("input");
     QTest::addColumn<QString>("output");
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) || defined(Q_OS_WINRT)
     QDir d(":/");
-#elif !defined(Q_OS_IRIX) && !defined(Q_OS_WINCE)
+#elif !defined(Q_OS_IRIX)
     QDir d(SRCDIR);
 #else
     QDir d(QDir::current());
@@ -145,10 +113,14 @@ static const char *tokenName(QCss::TokenType t)
         case QCss::CDC: return "CDC";
         case QCss::INCLUDES: return "INCLUDES";
         case QCss::DASHMATCH: return "DASHMATCH";
+        case QCss::BEGINSWITH: return "BEGINSWITH";
+        case QCss::ENDSWITH: return "ENDSWITH";
+        case QCss::CONTAINS: return "CONTAINS";
         case QCss::LBRACE: return "LBRACE";
         case QCss::PLUS: return "PLUS";
         case QCss::GREATER: return "GREATER";
         case QCss::COMMA: return "COMMA";
+        case QCss::TILDE: return "TILDE";
         case QCss::STRING: return "STRING";
         case QCss::INVALID: return "INVALID";
         case QCss::IDENT: return "IDENT";
@@ -509,7 +481,7 @@ void tst_QCssParser::selector_data()
         QCss::BasicSelector basic;
 
         basic.elementName = "p";
-        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfPreceeds;
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfDirectAdjecent;
         sel.basicSelectors << basic;
 
         basic = QCss::BasicSelector();
@@ -601,14 +573,29 @@ void tst_QCssParser::selector_data()
         QCss::BasicSelector basic;
 
         basic.elementName = "e";
-        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfPreceeds;
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfDirectAdjecent;
         sel.basicSelectors << basic;
 
         basic.elementName = "f";
         basic.relationToNext = QCss::BasicSelector::NoRelation;
         sel.basicSelectors << basic;
 
-        QTest::newRow("precede") << QString("e + f") << sel;
+        QTest::newRow("lastsibling") << QString("e + f") << sel;
+    }
+
+    {
+        QCss::Selector sel;
+        QCss::BasicSelector basic;
+
+        basic.elementName = "e";
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfIndirectAdjecent;
+        sel.basicSelectors << basic;
+
+        basic.elementName = "f";
+        basic.relationToNext = QCss::BasicSelector::NoRelation;
+        sel.basicSelectors << basic;
+
+        QTest::newRow("previoussibling") << QString("e ~ f") << sel;
     }
 
     {
@@ -647,11 +634,11 @@ void tst_QCssParser::selector_data()
         QCss::AttributeSelector attrSel;
         attrSel.name = "foo";
         attrSel.value = "warning";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchIncludes;
         basic.attributeSelectors << attrSel;
         sel.basicSelectors << basic;
 
-        QTest::newRow("attr-contains") << QString("e[foo~=\"warning\"]") << sel;
+        QTest::newRow("attr-includes") << QString("e[foo~=\"warning\"]") << sel;
     }
 
     {
@@ -662,11 +649,26 @@ void tst_QCssParser::selector_data()
         QCss::AttributeSelector attrSel;
         attrSel.name = "lang";
         attrSel.value = "en";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchBeginsWith;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchDashMatch;
         basic.attributeSelectors << attrSel;
         sel.basicSelectors << basic;
 
-        QTest::newRow("attr-contains") << QString("e[lang|=\"en\"]") << sel;
+        QTest::newRow("attr-dash") << QString("e[lang|=\"en\"]") << sel;
+    }
+
+    {
+        QCss::Selector sel;
+        QCss::BasicSelector basic;
+
+        basic.elementName = "e";
+        QCss::AttributeSelector attrSel;
+        attrSel.name = "foo";
+        attrSel.value = "warning";
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        basic.attributeSelectors << attrSel;
+        sel.basicSelectors << basic;
+
+        QTest::newRow("attr-contains") << QString("e[foo*=\"warning\"]") << sel;
     }
 
     {
@@ -677,7 +679,7 @@ void tst_QCssParser::selector_data()
 
         QCss::AttributeSelector attrSel;
         attrSel.name = "class";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchIncludes;
         attrSel.value = "warning";
         basic.attributeSelectors.append(attrSel);
 
@@ -842,6 +844,7 @@ void tst_QCssParser::colorValue_data()
     QTest::newRow("hsla") << "color: hsva(10, 20, 30, 40)" << QColor::fromHsv(10, 20, 30, 40);
     QTest::newRow("invalid1") << "color: rgb(why, does, it, always, rain, on, me)" << QColor();
     QTest::newRow("invalid2") << "color: rgba(i, meant, norway)" << QColor();
+    QTest::newRow("invalid3") << "color: rgb(21)" << QColor();
     QTest::newRow("role") << "color: palette(base)" << qApp->palette().color(QPalette::Base);
     QTest::newRow("role2") << "color: palette( window-text ) " << qApp->palette().color(QPalette::WindowText);
     QTest::newRow("transparent") << "color: transparent" << QColor(Qt::transparent);
@@ -999,11 +1002,20 @@ void tst_QCssParser::styleSelector_data()
     QTest::newRow("attrmatch") << true << QString("[foo=bar]") << QString("<p foo=\"bar\" />") << QString();
     QTest::newRow("noattrmatch") << false << QString("[foo=bar]") << QString("<p foo=\"xyz\" />") << QString();
 
-    QTest::newRow("contains") << true << QString("[foo~=bar]") << QString("<p foo=\"baz bleh bar\" />") << QString();
-    QTest::newRow("notcontains") << false << QString("[foo~=bar]") << QString("<p foo=\"test\" />") << QString();
+    QTest::newRow("includes") << true << QString("[foo~=bar]") << QString("<p foo=\"baz bleh bar\" />") << QString();
+    QTest::newRow("notincludes") << false << QString("[foo~=bar]") << QString("<p foo=\"bazblehbar\" />") << QString();
 
-    QTest::newRow("beingswith") << true << QString("[foo|=bar]") << QString("<p foo=\"bar-bleh\" />") << QString();
-    QTest::newRow("notbeingswith") << false << QString("[foo|=bar]") << QString("<p foo=\"bleh-bar\" />") << QString();
+    QTest::newRow("dashmatch") << true << QString("[foo|=bar]") << QString("<p foo=\"bar-bleh\" />") << QString();
+    QTest::newRow("nodashmatch") << false << QString("[foo|=bar]") << QString("<p foo=\"barbleh\" />") << QString();
+
+    QTest::newRow("beginswith") << true << QString("[foo^=bar]") << QString("<p foo=\"barbleh\" />") << QString();
+    QTest::newRow("nobeginswith") << false << QString("[foo^=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
+
+    QTest::newRow("endswith") << true << QString("[foo$=bar]") << QString("<p foo=\"barbar\" />") << QString();
+    QTest::newRow("noendswith") << false << QString("[foo$=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
+
+    QTest::newRow("contains") << true << QString("[foo*=bar]") << QString("<p foo=\"blehbarbleh\" />") << QString();
+    QTest::newRow("nocontains") << false << QString("[foo*=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
 
     QTest::newRow("attr2") << true << QString("[bar=foo]") << QString("<p bleh=\"bar\" bar=\"foo\" />") << QString();
 
@@ -1084,9 +1096,18 @@ void tst_QCssParser::styleSelector_data()
                                      << QString("<p1 /><p2 />")
                                      << QString("p2");
 
-    QTest::newRow("noprevioussibling") << false << QString("p2 + p1")
+    QTest::newRow("notprevioussibling") << false << QString("p2 + p1")
                                      << QString("<p1 /><p2 />")
                                      << QString("p2");
+
+    QTest::newRow("anyprevioussibling") << true << QString("p1 ~ p3")
+                                     << QString("<p1 /><p2 /><p3 />")
+                                     << QString("p3");
+
+    QTest::newRow("noprevioussibling") << false << QString("p3 ~ p2")
+                                     << QString("<p1 /><p2 /><p3 />")
+                                     << QString("p3");
+
 
     QTest::newRow("ancestry_firstmismatch") << false << QString("parent child[foo=bar]")
                                             << QString("<parent><child /></parent>")

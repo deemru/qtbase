@@ -1082,7 +1082,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(QGraphicsAnchorLayoutP
             if (candidates.isEmpty())
                 after = (beforeSequence == adjacents.last() ? adjacents.first() : adjacents.last());
             else
-                after = (candidates.last() == adjacents.last() ? adjacents.first() : adjacents.last());
+                after = (candidates.constLast() == adjacents.last() ? adjacents.first() : adjacents.last());
 
             // ### At this point we assumed that candidates will not contain 'after', this may not hold
             // when simplifying FLOATing anchors.
@@ -1134,9 +1134,9 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(QGraphicsAnchorLayoutP
 
         // One restriction we have is to not simplify half of an anchor and let the other half
         // unsimplified. So we remove center edges before and after the sequence.
-        const AnchorData *firstAnchor = g.edgeData(beforeSequence, candidates.first());
+        const AnchorData *firstAnchor = g.edgeData(beforeSequence, candidates.constFirst());
         if (firstAnchor->isCenterAnchor) {
-            beforeSequence = candidates.first();
+            beforeSequence = candidates.constFirst();
             candidates.remove(0);
 
             // If there's not candidates to be simplified, leave.
@@ -1144,9 +1144,9 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(QGraphicsAnchorLayoutP
                 continue;
         }
 
-        const AnchorData *lastAnchor = g.edgeData(candidates.last(), afterSequence);
+        const AnchorData *lastAnchor = g.edgeData(candidates.constLast(), afterSequence);
         if (lastAnchor->isCenterAnchor) {
-            afterSequence = candidates.last();
+            afterSequence = candidates.constLast();
             candidates.remove(candidates.count() - 1);
 
             if (candidates.isEmpty())
@@ -2096,7 +2096,7 @@ QList<AnchorData *> getVariables(const QList<QSimplexConstraint *> &constraints)
 void QGraphicsAnchorLayoutPrivate::calculateGraphs(
     QGraphicsAnchorLayoutPrivate::Orientation orientation)
 {
-#if defined(QT_DEBUG) || defined(Q_AUTOTEST_EXPORT)
+#if defined(QT_DEBUG) || defined(QT_BUILD_INTERNAL)
     lastCalculationUsedSimplex[orientation] = false;
 #endif
 
@@ -2249,7 +2249,7 @@ bool QGraphicsAnchorLayoutPrivate::calculateTrunk(Orientation orientation, const
         sizeHints[orientation][Qt::MaximumSize] = ad->sizeAtMaximum;
     }
 
-#if defined(QT_DEBUG) || defined(Q_AUTOTEST_EXPORT)
+#if defined(QT_DEBUG) || defined(QT_BUILD_INTERNAL)
     lastCalculationUsedSimplex[orientation] = needsSimplex;
 #endif
 

@@ -117,7 +117,7 @@ static inline int stretchFromFcWidth(int fcwidth)
     return qtstretch;
 }
 
-static const char *specialLanguages[] = {
+static const char specialLanguages[][6] = {
     "", // Unknown
     "", // Inherited
     "", // Common
@@ -251,12 +251,12 @@ static const char *specialLanguages[] = {
     "", // OldHungarian
     ""  // SignWriting
 };
-Q_STATIC_ASSERT(sizeof(specialLanguages) / sizeof(const char *) == QChar::ScriptCount);
+Q_STATIC_ASSERT(sizeof specialLanguages / sizeof *specialLanguages == QChar::ScriptCount);
 
 // this could become a list of all languages used for each writing
 // system, instead of using the single most common language.
-static const char *languageForWritingSystem[] = {
-    0,     // Any
+static const char languageForWritingSystem[][6] = {
+    "",     // Any
     "en",  // Latin
     "el",  // Greek
     "ru",  // Cyrillic
@@ -286,25 +286,25 @@ static const char *languageForWritingSystem[] = {
     "ja",  // Japanese
     "ko",  // Korean
     "vi",  // Vietnamese
-    0, // Symbol
+    "", // Symbol
     "sga", // Ogham
     "non", // Runic
     "man" // N'Ko
 };
-Q_STATIC_ASSERT(sizeof(languageForWritingSystem) / sizeof(const char *) == QFontDatabase::WritingSystemsCount);
+Q_STATIC_ASSERT(sizeof languageForWritingSystem / sizeof *languageForWritingSystem == QFontDatabase::WritingSystemsCount);
 
 #if FC_VERSION >= 20297
 // Newer FontConfig let's us sort out fonts that report certain scripts support,
 // but no open type tables for handling them correctly.
 // Check the reported script presence in the FC_CAPABILITY's "otlayout:" section.
-static const char *capabilityForWritingSystem[] = {
-    0,     // Any
-    0,  // Latin
-    0,  // Greek
-    0,  // Cyrillic
-    0,  // Armenian
-    0,  // Hebrew
-    0,  // Arabic
+static const char capabilityForWritingSystem[][5] = {
+    "",     // Any
+    "",  // Latin
+    "",  // Greek
+    "",  // Cyrillic
+    "",  // Armenian
+    "",  // Hebrew
+    "",  // Arabic
     "syrc",  // Syriac
     "thaa",  // Thaana
     "deva",  // Devanagari
@@ -317,20 +317,20 @@ static const char *capabilityForWritingSystem[] = {
     "knda",  // Kannada
     "mlym",  // Malayalam
     "sinh",  // Sinhala
-    0,  // Thai
-    0,  // Lao
+    "",  // Thai
+    "",  // Lao
     "tibt",  // Tibetan
     "mymr",  // Myanmar
-    0,  // Georgian
+    "",  // Georgian
     "khmr",  // Khmer
-    0, // SimplifiedChinese
-    0, // TraditionalChinese
-    0,  // Japanese
-    0,  // Korean
-    0,  // Vietnamese
-    0, // Symbol
-    0, // Ogham
-    0, // Runic
+    "", // SimplifiedChinese
+    "", // TraditionalChinese
+    "",  // Japanese
+    "",  // Korean
+    "",  // Vietnamese
+    "", // Symbol
+    "", // Ogham
+    "", // Runic
     "nko " // N'Ko
 };
 Q_STATIC_ASSERT(sizeof(capabilityForWritingSystem) / sizeof(*capabilityForWritingSystem) == QFontDatabase::WritingSystemsCount);
@@ -362,9 +362,16 @@ static const char *getFcFamilyForStyleHint(const QFont::StyleHint style)
     return stylehint;
 }
 
+static inline bool requiresOpenType(int writingSystem)
+{
+    return ((writingSystem >= QFontDatabase::Syriac && writingSystem <= QFontDatabase::Sinhala)
+            || writingSystem == QFontDatabase::Khmer || writingSystem == QFontDatabase::Nko);
+}
+
 static void populateFromPattern(FcPattern *pattern)
 {
     QString familyName;
+    QString familyNameLang;
     FcChar8 *value = 0;
     int weight_value;
     int slant_value;
@@ -381,6 +388,9 @@ static void populateFromPattern(FcPattern *pattern)
         return;
 
     familyName = QString::fromUtf8((const char *)value);
+
+    if (FcPatternGetString(pattern, FC_FAMILYLANG, 0, &value) == FcResultMatch)
+        familyNameLang = QString::fromUtf8((const char *)value);
 
     slant_value = FC_SLANT_ROMAN;
     weight_value = FC_WEIGHT_REGULAR;
@@ -426,7 +436,7 @@ static void populateFromPattern(FcPattern *pattern)
                 FcLangResult langRes = FcLangSetHasLang(langset, lang);
                 if (langRes != FcLangDifferentLang) {
 #if FC_VERSION >= 20297
-                    if (capabilityForWritingSystem[j] != Q_NULLPTR) {
+                    if (*capabilityForWritingSystem[j] && requiresOpenType(j)) {
                         if (cap == Q_NULLPTR)
                             capRes = FcPatternGetString(pattern, FC_CAPABILITY, 0, &cap);
                         if (capRes == FcResultMatch && strstr(reinterpret_cast<const char *>(cap), capabilityForWritingSystem[j]) == 0)
@@ -471,14 +481,36 @@ static void populateFromPattern(FcPattern *pattern)
     QPlatformFontDatabase::registerFont(familyName,styleName,QLatin1String((const char *)foundry_value),weight,style,stretch,antialias,scalable,pixel_size,fixedPitch,writingSystems,fontFile);
 //        qDebug() << familyName << (const char *)foundry_value << weight << style << &writingSystems << scalable << true << pixel_size;
 
-    for (int k = 1; FcPatternGetString(pattern, FC_FAMILY, k, &value) == FcResultMatch; ++k)
-        QPlatformFontDatabase::registerAliasToFontFamily(familyName, QString::fromUtf8((const char *)value));
+    for (int k = 1; FcPatternGetString(pattern, FC_FAMILY, k, &value) == FcResultMatch; ++k) {
+        const QString altFamilyName = QString::fromUtf8((const char *)value);
+        // Extra family names can be aliases or subfamilies.
+        // If it is a subfamily, register it as a separate font, so only members of the subfamily are
+        // matched when the subfamily is requested.
+        QString altStyleName;
+        if (FcPatternGetString(pattern, FC_STYLE, k, &value) == FcResultMatch)
+            altStyleName = QString::fromUtf8((const char *)value);
+        else
+            altStyleName = styleName;
+
+        QString altFamilyNameLang;
+        if (FcPatternGetString(pattern, FC_FAMILYLANG, k, &value) == FcResultMatch)
+            altFamilyNameLang = QString::fromUtf8((const char *)value);
+        else
+            altFamilyNameLang = familyNameLang;
+
+        if (familyNameLang == altFamilyNameLang && altStyleName != styleName) {
+            FontFile *altFontFile = new FontFile(*fontFile);
+            QPlatformFontDatabase::registerFont(altFamilyName, altStyleName, QLatin1String((const char *)foundry_value),weight,style,stretch,antialias,scalable,pixel_size,fixedPitch,writingSystems,altFontFile);
+        } else {
+            QPlatformFontDatabase::registerAliasToFontFamily(familyName, altFamilyName);
+        }
+    }
 
 }
 
 void QFontconfigDatabase::populateFontDatabase()
 {
-    FcInitReinitialize();
+    FcInit();
     FcFontSet  *fonts;
 
     {
@@ -488,7 +520,7 @@ void QFontconfigDatabase::populateFontDatabase()
             FC_FAMILY, FC_STYLE, FC_WEIGHT, FC_SLANT,
             FC_SPACING, FC_FILE, FC_INDEX,
             FC_LANG, FC_CHARSET, FC_FOUNDRY, FC_SCALABLE, FC_PIXEL_SIZE,
-            FC_WIDTH,
+            FC_WIDTH, FC_FAMILYLANG,
 #if FC_VERSION >= 20297
             FC_CAPABILITY,
 #endif
@@ -540,6 +572,12 @@ void QFontconfigDatabase::populateFontDatabase()
 //    QFont font("Sans Serif");
 //    font.setPointSize(9);
 //    QApplication::setFont(font);
+}
+
+void QFontconfigDatabase::invalidate()
+{
+    // Clear app fonts.
+    FcConfigAppFontClear(0);
 }
 
 QFontEngineMulti *QFontconfigDatabase::fontEngineMulti(QFontEngine *fontEngine, QChar::Script script)

@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qmath.h"
 #include "QtGui/qcolor.h"
 #include "QtGui/qpainter.h"
@@ -335,6 +335,8 @@ struct QSpanData
         QGradientData gradient;
         QTextureData texture;
     };
+    QExplicitlySharedDataPointer<const QSharedData> cachedGradient;
+
 
     void init(QRasterBuffer *rb, const QRasterPaintEngine *pe);
     void setup(const QBrush &brush, int alpha, QPainter::CompositionMode compositionMode);
@@ -636,6 +638,22 @@ static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
 }
 #endif
 
+static Q_ALWAYS_INLINE void blend_pixel(quint32 &dst, const quint32 src)
+{
+    if (src >= 0xff000000)
+        dst = src;
+    else if (src != 0)
+        dst = src + BYTE_MUL(dst, qAlpha(~src));
+}
+
+static Q_ALWAYS_INLINE void blend_pixel(quint32 &dst, const quint32 src, const int const_alpha)
+{
+    if (src != 0) {
+        const quint32 s = BYTE_MUL(src, const_alpha);
+        dst = s + BYTE_MUL(dst, qAlpha(~s));
+    }
+}
+
 #if defined(__SSE2__)
 static Q_ALWAYS_INLINE uint interpolate_4_pixels_sse2(__m128i vt, __m128i vb, uint distx, uint disty)
 {
@@ -760,6 +778,7 @@ static Q_ALWAYS_INLINE uint BYTE_MUL_RGB16_32(uint x, uint a) {
     return t;
 }
 
+// qt_div_255 is a fast rounded division by 255 using an approximation that is accurate for all positive 16-bit integers
 static Q_DECL_CONSTEXPR Q_ALWAYS_INLINE int qt_div_255(int x) { return (x + (x>>8) + 0x80) >> 8; }
 static Q_DECL_CONSTEXPR Q_ALWAYS_INLINE uint qt_div_65535(uint x) { return (x + (x>>16) + 0x8000U) >> 16; }
 
@@ -1171,11 +1190,15 @@ inline int comp_func_Plus_one_pixel(uint d, const uint s)
 #undef MIX
 #undef AMIX
 
-struct QPixelLayout;
+struct QDitherInfo {
+    int x;
+    int y;
+};
+
 typedef const uint *(QT_FASTCALL *ConvertFunc)(uint *buffer, const uint *src, int count,
-                                               const QPixelLayout *layout, const QRgb *clut);
+                                               const QVector<QRgb> *clut, QDitherInfo *dither);
 typedef const QRgba64 *(QT_FASTCALL *ConvertFunc64)(QRgba64 *buffer, const uint *src, int count,
-                                                    const QPixelLayout *layout, const QRgb *clut);
+                                                    const QVector<QRgb> *clut, QDitherInfo *dither);
 
 struct QPixelLayout
 {

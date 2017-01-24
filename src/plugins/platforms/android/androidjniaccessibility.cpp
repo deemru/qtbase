@@ -41,7 +41,7 @@
 #include "androidjnimain.h"
 #include "qandroidplatformintegration.h"
 #include "qpa/qplatformaccessibility.h"
-#include <QtPlatformSupport/private/qaccessiblebridgeutils_p.h>
+#include <QtAccessibilitySupport/private/qaccessiblebridgeutils_p.h>
 #include "qguiapplication.h"
 #include "qwindow.h"
 #include "qrect.h"
@@ -54,7 +54,6 @@
 
 static const char m_qtTag[] = "Qt A11Y";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
-static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
 QT_BEGIN_NAMESPACE
 

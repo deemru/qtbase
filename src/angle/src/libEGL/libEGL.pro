@@ -1,10 +1,10 @@
-CONFIG += installed
 include(../common/common.pri)
 DEF_FILE_TARGET=$${TARGET}
 TARGET=$$qtLibraryTarget($${LIBEGL_NAME})
 winrt: LIBS_PRIVATE += -ld3d11
 
-LIBS_PRIVATE += -ldxguid -L$$QT_BUILD_TREE/lib -l$$qtLibraryTarget($${LIBGLESV2_NAME})
+LIBS_PRIVATE += -ldxguid
+QMAKE_USE_PRIVATE += $${LIBGLESV2_NAME}
 
 DEFINES += GL_APICALL= GL_GLEXT_PROTOTYPES= EGLAPI= LIBEGL_IMPLEMENTATION
 

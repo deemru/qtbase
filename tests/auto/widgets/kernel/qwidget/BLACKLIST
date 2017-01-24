@@ -3,6 +3,7 @@
 ubuntu-14.04
 [saveRestoreGeometry]
 ubuntu-14.04
+ubuntu-16.04
 [restoreVersion1Geometry]
 ubuntu-14.04
 osx
@@ -53,6 +54,7 @@ osx
 osx
 [maskedUpdate]
 osx
+opensuse-42.1
 [hideWhenFocusWidgetIsChild]
 osx-10.10
 [hideOpaqueChildWhileHidden]

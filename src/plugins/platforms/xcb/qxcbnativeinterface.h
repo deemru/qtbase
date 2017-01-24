@@ -53,7 +53,6 @@ class QWidget;
 class QXcbScreen;
 class QXcbConnection;
 class QXcbNativeInterfaceHandler;
-class QDBusMenuConnection;
 
 class Q_XCB_EXPORT QXcbNativeInterface : public QPlatformNativeInterface
 {
@@ -73,7 +72,6 @@ public:
         RootWindow,
         ScreenSubpixelType,
         ScreenAntialiasingEnabled,
-        NoFontHinting,
         AtspiBus,
         CompositingEnabled
     };

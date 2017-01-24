@@ -340,8 +340,8 @@ void QAbstractItemViewPrivate::_q_scrollerStateChanged()
     This enum indicates how the view responds to user selections:
 
     \value SingleSelection  When the user selects an item, any already-selected
-    item becomes unselected, and the user cannot unselect the selected item by
-    clicking on it.
+    item becomes unselected. It is possible for the user to deselect the selected
+    item.
 
     \value ContiguousSelection When the user selects an item in the usual way,
     the selection is cleared and the new item selected. However, if the user
@@ -788,8 +788,10 @@ void QAbstractItemView::setSelectionModel(QItemSelectionModel *selectionModel)
     QModelIndex oldCurrentIndex;
 
     if (d->selectionModel) {
-        oldSelection = d->selectionModel->selection();
-        oldCurrentIndex = d->selectionModel->currentIndex();
+        if (d->selectionModel->model() == selectionModel->model()) {
+            oldSelection = d->selectionModel->selection();
+            oldCurrentIndex = d->selectionModel->currentIndex();
+        }
 
         disconnect(d->selectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
                    this, SLOT(selectionChanged(QItemSelection,QItemSelection)));
@@ -1784,13 +1786,18 @@ void QAbstractItemView::mousePressEvent(QMouseEvent *event)
         d->autoScroll = false;
         d->selectionModel->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
         d->autoScroll = autoScroll;
-        QRect rect(visualRect(d->currentSelectionStartIndex).center(), pos);
         if (command.testFlag(QItemSelectionModel::Toggle)) {
             command &= ~QItemSelectionModel::Toggle;
             d->ctrlDragSelectionFlag = d->selectionModel->isSelected(index) ? QItemSelectionModel::Deselect : QItemSelectionModel::Select;
             command |= d->ctrlDragSelectionFlag;
         }
-        setSelection(rect, command);
+
+        if ((command & QItemSelectionModel::Current) == 0) {
+            setSelection(QRect(pos, QSize(1, 1)), command);
+        } else {
+            QRect rect(visualRect(d->currentSelectionStartIndex).center(), pos);
+            setSelection(rect, command);
+        }
 
         // signal handlers may change the model
         emit pressed(index);
@@ -2471,10 +2478,12 @@ void QAbstractItemView::keyPressEvent(QKeyEvent *event)
         break;
 #endif
     default: {
+#ifndef QT_NO_SHORTCUT
        if (event == QKeySequence::SelectAll && selectionMode() != NoSelection) {
             selectAll();
             break;
         }
+#endif
 #ifdef Q_OS_OSX
         if (event->key() == Qt::Key_O && event->modifiers() & Qt::ControlModifier && currentIndex().isValid()) {
             emit activated(currentIndex());
@@ -2604,12 +2613,11 @@ QModelIndexList QAbstractItemView::selectedIndexes() const
     QModelIndexList indexes;
     if (d->selectionModel) {
         indexes = d->selectionModel->selectedIndexes();
-        QList<QModelIndex>::iterator it = indexes.begin();
-        while (it != indexes.end())
-            if (isIndexHidden(*it))
-                it = indexes.erase(it);
-            else
-                ++it;
+        auto isHidden = [this](const QModelIndex &idx) {
+            return isIndexHidden(idx);
+        };
+        const auto end = indexes.end();
+        indexes.erase(std::remove_if(indexes.begin(), end, isHidden), end);
     }
     return indexes;
 }
@@ -3671,6 +3679,9 @@ void QAbstractItemView::startDrag(Qt::DropActions supportedActions)
             defaultDropAction = Qt::CopyAction;
         if (drag->exec(supportedActions, defaultDropAction) == Qt::MoveAction)
             d->clearOrRemove();
+        // Reset the drop indicator
+        d->dropIndicatorRect = QRect();
+        d->dropIndicatorPosition = OnItem;
     }
 }
 #endif // QT_NO_DRAGANDDROP
@@ -3687,7 +3698,7 @@ QStyleOptionViewItem QAbstractItemView::viewOptions() const
     option.state &= ~QStyle::State_MouseOver;
     option.font = font();
 
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
     // On mac the focus appearance follows window activation
     // not widget activation
     if (!hasFocus())
@@ -3869,7 +3880,7 @@ void QAbstractItemView::doAutoScroll()
     int horizontalValue = horizontalScroll->value();
 
     QPoint pos = d->viewport->mapFromGlobal(QCursor::pos());
-    QRect area = static_cast<QAbstractItemView*>(d->viewport)->d_func()->clipRect(); // access QWidget private by bending C++ rules
+    QRect area = QWidgetPrivate::get(d->viewport)->clipRect();
 
     // do the scrolling if we are in the scroll margins
     if (pos.y() - area.top() < margin)
@@ -4321,6 +4332,12 @@ const QEditorInfo & QAbstractItemViewPrivate::editorForIndex(const QModelIndex &
         return nullInfo;
 
     return it.value();
+}
+
+bool QAbstractItemViewPrivate::hasEditor(const QModelIndex &index) const
+{
+    // Search's implicit cast (QModelIndex to QPersistentModelIndex) is slow; use cheap pre-test to avoid when we can.
+    return !indexEditorHash.isEmpty() && indexEditorHash.contains(index);
 }
 
 QModelIndex QAbstractItemViewPrivate::indexForEditor(QWidget *editor) const

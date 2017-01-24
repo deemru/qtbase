@@ -51,12 +51,13 @@
 // We mean it.
 //
 
+#include <QtPrintSupport/private/qtprintsupportglobal_p.h>
 #include <QtPrintSupport/qprinter.h>
 
 #include <QtCore/qstring.h>
 #include <QtCore/qlist.h>
 
-#if (defined Q_OS_MAC && !defined Q_OS_IOS) || (defined Q_OS_UNIX && !defined QT_NO_CUPS)
+#if (defined Q_OS_OSX) || (defined Q_OS_UNIX && !defined QT_NO_CUPS)
 #include <cups/ppd.h>  // Use for type defs only, don't want to actually link in main module
 #endif
 
@@ -244,7 +245,7 @@ public:
         return QByteArray();
     }
 
-#if (defined Q_OS_MAC && !defined Q_OS_IOS) || (defined Q_OS_UNIX && !defined QT_NO_CUPS)
+#if (defined Q_OS_OSX) || (defined Q_OS_UNIX && !defined QT_NO_CUPS)
 
     // PPD utilities shared by CUPS and Mac plugins requiring CUPS headers
     // May turn into a proper internal QPpd class if enough shared between Mac and CUPS,

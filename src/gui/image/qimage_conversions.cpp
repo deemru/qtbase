@@ -108,7 +108,7 @@ void qGamma_correct_back_to_linear_cs(QImage *image)
 
 // The drawhelper conversions from/to RGB32 are passthroughs which is not always correct for general image conversion.
 static const uint *QT_FASTCALL convertRGB32FromARGB32PM(uint *buffer, const uint *src, int count,
-                                                        const QPixelLayout *, const QRgb *)
+                                                        const QVector<QRgb> *, QDitherInfo *)
 {
     for (int i = 0; i < count; ++i)
         buffer[i] = 0xff000000 | qUnpremultiply(src[i]);
@@ -116,7 +116,7 @@ static const uint *QT_FASTCALL convertRGB32FromARGB32PM(uint *buffer, const uint
 }
 
 static const uint *QT_FASTCALL convertRGB32ToARGB32PM(uint *buffer, const uint *src, int count,
-                                                      const QPixelLayout *, const QRgb *)
+                                                      const QVector<QRgb> *, QDitherInfo *)
 {
     for (int i = 0; i < count; ++i)
         buffer[i] = 0xff000000 |src[i];
@@ -124,16 +124,18 @@ static const uint *QT_FASTCALL convertRGB32ToARGB32PM(uint *buffer, const uint *
 }
 
 #ifdef QT_COMPILER_SUPPORTS_SSE4_1
-extern const uint *QT_FASTCALL convertRGB32FromARGB32PM_sse4(uint *buffer, const uint *src, int count, const QPixelLayout *, const QRgb *);
+extern const uint *QT_FASTCALL convertRGB32FromARGB32PM_sse4(uint *buffer, const uint *src, int count,
+                                                             const QVector<QRgb> *, QDitherInfo *);
 #endif
 
-void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags flags)
 {
     // Cannot be used with indexed formats.
     Q_ASSERT(dest->format > QImage::Format_Indexed8);
     Q_ASSERT(src->format > QImage::Format_Indexed8);
     const int buffer_size = 2048;
-    uint buffer[buffer_size];
+    uint buf[buffer_size];
+    uint *buffer = buf;
     const QPixelLayout *srcLayout = &qPixelLayouts[src->format];
     const QPixelLayout *destLayout = &qPixelLayouts[dest->format];
     const uchar *srcData = src->data;
@@ -158,15 +160,26 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
                 convertFromARGB32PM = convertRGB32FromARGB32PM;
         }
     }
+    QDitherInfo dither;
+    QDitherInfo *ditherPtr = 0;
+    if ((flags & Qt::PreferDither) && (flags & Qt::Dither_Mask) != Qt::ThresholdDither)
+        ditherPtr = &dither;
 
     for (int y = 0; y < src->height; ++y) {
+        dither.y = y;
         int x = 0;
         while (x < src->width) {
-            int l = qMin(src->width - x, buffer_size);
+            dither.x = x;
+            int l = src->width - x;
+            if (destLayout->bpp == QPixelLayout::BPP32)
+                buffer = reinterpret_cast<uint *>(destData) + x;
+            else
+                l = qMin(l, buffer_size);
             const uint *ptr = fetch(buffer, srcData, x, l);
-            ptr = convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
-            ptr = convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
-            store(destData, ptr, x, l);
+            ptr = convertToARGB32PM(buffer, ptr, l, 0, ditherPtr);
+            ptr = convertFromARGB32PM(buffer, ptr, l, 0, ditherPtr);
+            if (ptr != reinterpret_cast<uint *>(destData))
+                store(destData, ptr, x, l);
             x += l;
         }
         srcData += src->bytes_per_line;
@@ -174,7 +187,7 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
     }
 }
 
-bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::ImageConversionFlags)
+bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::ImageConversionFlags flags)
 {
     // Cannot be used with indexed formats or between formats with different pixel depths.
     Q_ASSERT(dst_format > QImage::Format_Indexed8);
@@ -207,14 +220,20 @@ bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::Im
                 convertFromARGB32PM = convertRGB32FromARGB32PM;
         }
     }
+    QDitherInfo dither;
+    QDitherInfo *ditherPtr = 0;
+    if ((flags & Qt::PreferDither) && (flags & Qt::Dither_Mask) != Qt::ThresholdDither)
+        ditherPtr = &dither;
 
     for (int y = 0; y < data->height; ++y) {
+        dither.y = y;
         int x = 0;
         while (x < data->width) {
+            dither.x = x;
             int l = qMin(data->width - x, buffer_size);
             const uint *ptr = fetch(buffer, srcData, x, l);
-            ptr = convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
-            ptr = convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
+            ptr = convertToARGB32PM(buffer, ptr, l, 0, ditherPtr);
+            ptr = convertFromARGB32PM(buffer, ptr, l, 0, ditherPtr);
             // The conversions might be passthrough and not use the buffer, in that case we are already done.
             if (srcData != (const uchar*)ptr)
                 store(srcData, ptr, x, l);
@@ -769,8 +788,8 @@ static bool convert_A2RGB30_PM_to_ARGB_inplace(QImageData *data, Qt::ImageConver
 static bool convert_indexed8_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
-    if (!data->own_data)
-        return false;
+    Q_ASSERT(data->own_data);
+
     const int depth = 32;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -823,8 +842,8 @@ static bool convert_indexed8_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConve
 static bool convert_indexed8_to_ARGB_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
-    if (!data->own_data)
-        return false;
+    Q_ASSERT(data->own_data);
+
     const int depth = 32;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -874,8 +893,7 @@ static bool convert_indexed8_to_ARGB_inplace(QImageData *data, Qt::ImageConversi
 static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversionFlags flags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
-    if (!data->own_data)
-        return false;
+    Q_ASSERT(data->own_data);
 
     if (data->has_alpha_clut) {
         for (int i = 0; i < data->colortable.size(); ++i)
@@ -892,8 +910,8 @@ static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversio
 static bool convert_indexed8_to_RGB16_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
-    if (!data->own_data)
-        return false;
+    Q_ASSERT(data->own_data);
+
     const int depth = 16;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -912,12 +930,12 @@ static bool convert_indexed8_to_RGB16_inplace(QImageData *data, Qt::ImageConvers
     const int dest_pad = (dst_bytes_per_line >> 1) - width;
 
     quint16 colorTableRGB16[256];
-    if (data->colortable.isEmpty()) {
+    const int tableSize = data->colortable.size();
+    if (tableSize == 0) {
         for (int i = 0; i < 256; ++i)
             colorTableRGB16[i] = qConvertRgb32To16(qRgb(i, i, i));
     } else {
         // 1) convert the existing colors to RGB16
-        const int tableSize = data->colortable.size();
         for (int i = 0; i < tableSize; ++i)
             colorTableRGB16[i] = qConvertRgb32To16(data->colortable.at(i));
         data->colortable = QVector<QRgb>();
@@ -949,8 +967,8 @@ static bool convert_indexed8_to_RGB16_inplace(QImageData *data, Qt::ImageConvers
 static bool convert_RGB_to_RGB16_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_RGB32);
-    if (!data->own_data)
-        return false;
+    Q_ASSERT(data->own_data);
+
     const int depth = 16;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;

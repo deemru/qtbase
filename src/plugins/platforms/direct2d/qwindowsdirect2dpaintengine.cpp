@@ -45,8 +45,8 @@
 #include "qwindowsdirect2dbitmap.h"
 #include "qwindowsdirect2ddevicecontext.h"
 
-#include "qwindowsfontengine.h"
-#include "qwindowsfontdatabase.h"
+#include <QtFontDatabaseSupport/private/qwindowsfontdatabase_p.h>
+#include <QtFontDatabaseSupport/private/qwindowsfontengine_p.h>
 #include "qwindowsintegration.h"
 
 #include <QtCore/QtMath>
@@ -563,7 +563,7 @@ public:
             if (newPen.widthF() <= 1.0)
                 props.startCap = props.endCap = props.dashCap = D2D1_CAP_STYLE_FLAT;
 
-            // fall through
+            Q_FALLTHROUGH();
         default:
             props.dashStyle = D2D1_DASH_STYLE_CUSTOM;
             break;
@@ -1037,7 +1037,7 @@ public:
         if (fontFace)
             return fontFace;
 
-        LOGFONT lf = QWindowsFontDatabase::fontDefToLOGFONT(fontDef);
+        LOGFONT lf = QWindowsFontDatabase::fontDefToLOGFONT(fontDef, QString());
 
         // Get substitute name
         static const char keyC[] = "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes";

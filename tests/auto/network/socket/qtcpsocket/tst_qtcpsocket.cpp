@@ -673,6 +673,12 @@ void tst_QTcpSocket::bindThenResolveHost()
 
     const quint16 port = 80;
     socket->connectToHost(hostName, port);
+    // Additionally, initiate a delayed close before the socket connects
+    // to ensure that we don't lose the socket engine in HostLookupState.
+    // After a connection has been established, socket should send all
+    // the pending data and close the socket engine automatically.
+    QVERIFY(socket->putChar(0));
+    socket->close();
     QVERIFY2(socket->waitForConnected(), (hostName.toLocal8Bit() + ": " + QByteArray::number(port) + ' '
                                           + QtNetworkSettings::msgSocketError(*socket)).constData());
 
@@ -1212,6 +1218,12 @@ void tst_QTcpSocket::connectDisconnectConnectDisconnect()
     for (int i = 0; i < 3; ++i) {
         QCOMPARE(socket->state(), QTcpSocket::UnconnectedState);
         QCOMPARE(socket->socketType(), QTcpSocket::TcpSocket);
+
+        QCOMPARE(socket->socketDescriptor(), qintptr(-1));
+        QCOMPARE(int(socket->localPort()), 0);
+        QCOMPARE(socket->localAddress(), QHostAddress());
+        QCOMPARE(int(socket->peerPort()), 0);
+        QCOMPARE(socket->peerAddress(), QHostAddress());
 
         socket->connectToHost(QtNetworkSettings::serverName(), 143);
         QVERIFY(socket->waitForReadyRead(10000));
@@ -2239,7 +2251,8 @@ void tst_QTcpSocket::abortiveClose()
     enterLoop(10);
     QVERIFY(server.hasPendingConnections());
 
-    QVERIFY(tmpSocket = server.nextPendingConnection());
+    tmpSocket = server.nextPendingConnection();
+    QVERIFY(tmpSocket != nullptr);
 
     qRegisterMetaType<QAbstractSocket::SocketError>("QAbstractSocket::SocketError");
     QSignalSpy readyReadSpy(clientSocket, SIGNAL(readyRead()));

@@ -46,6 +46,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <limits.h>
 #if defined(_MSC_VER) && _MSC_VER >= 1400
 #include <share.h>
 #endif
@@ -911,9 +912,10 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
 
     debug_msg(2, "findMocs: %s", file->file.local().toLatin1().constData());
     int line_count = 1;
-    bool ignore[2] = { false, false }; // [0] for Q_OBJECT, [1] for Q_GADGET
+    bool ignore[3] = { false, false, false }; // [0] for Q_OBJECT, [1] for Q_GADGET, [2] for Q_NAMESPACE
  /* qmake ignore Q_GADGET */
  /* qmake ignore Q_OBJECT */
+ /* qmake ignore Q_NAMESPACE */
     for(int x = 0; x < buffer_len; x++) {
 #define SKIP_BSNL(pos) skipEscapedLineEnds(buffer, buffer_len, (pos), &line_count)
         x = SKIP_BSNL(x);
@@ -946,6 +948,12 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
                                           file->file.real().toLatin1().constData(), line_count);
                                 x += 20;
                                 ignore[1] = true;
+                            } else if (buffer_len >= (x + 23) &&
+                                      !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE", 23)) {
+                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE\"",
+                                          file->file.real().toLatin1().constData(), line_count);
+                                x += 23;
+                                ignore[2] = true;
                             }
                         } else if (buffer[x] == '*') {
                             extralines = 0;
@@ -973,15 +981,17 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
             int morelines = 0;
             int y = skipEscapedLineEnds(buffer, buffer_len, x + 1, &morelines);
             if (buffer[y] == 'Q') {
-                static const char interesting[][9] = { "Q_OBJECT", "Q_GADGET" };
-                for (int interest = 0; interest < 2; ++interest) {
+                static const char interesting[][12] = { "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE"};
+                for (int interest = 0; interest < 3; ++interest) {
                     if (ignore[interest])
                         continue;
 
                     int matchlen = 0, extralines = 0;
+                    size_t needle_len = strlen(interesting[interest]);
+                    Q_ASSERT(needle_len <= INT_MAX);
                     if (matchWhileUnsplitting(buffer, buffer_len, y,
                                               interesting[interest],
-                                              strlen(interesting[interest]),
+                                              static_cast<int>(needle_len),
                                               &matchlen, &extralines)
                         && y + matchlen < buffer_len
                         && !isCWordChar(buffer[y + matchlen])) {

@@ -64,18 +64,30 @@ private slots:
     void aliases();
     void fallbackFonts();
 
+    void condensedFontWidth();
+    void condensedFontMatching();
+
+    void rasterFonts();
+    void smoothFonts();
+
 private:
-    const QString m_testFont;
+    QString m_ledFont;
+    QString m_testFont;
+    QString m_testFontCondensed;
 };
 
 tst_QFontDatabase::tst_QFontDatabase()
-    : m_testFont(QFINDTESTDATA("LED_REAL.TTF"))
 {
 }
 
 void tst_QFontDatabase::initTestCase()
 {
+    m_ledFont = QFINDTESTDATA("LED_REAL.TTF");
+    m_testFont = QFINDTESTDATA("testfont.ttf");
+    m_testFontCondensed = QFINDTESTDATA("testfont_condensed.ttf");
+    QVERIFY(!m_ledFont.isEmpty());
     QVERIFY(!m_testFont.isEmpty());
+    QVERIFY(!m_testFontCondensed.isEmpty());
 }
 
 void tst_QFontDatabase::styles_data()
@@ -207,13 +219,13 @@ void tst_QFontDatabase::addAppFont()
 
     int id;
     if (useMemoryFont) {
-        QFile fontfile(m_testFont);
+        QFile fontfile(m_ledFont);
         fontfile.open(QIODevice::ReadOnly);
         QByteArray fontdata = fontfile.readAll();
         QVERIFY(!fontdata.isEmpty());
         id = QFontDatabase::addApplicationFontFromData(fontdata);
     } else {
-        id = QFontDatabase::addApplicationFont(m_testFont);
+        id = QFontDatabase::addApplicationFont(m_ledFont);
     }
 #if defined(Q_OS_HPUX) && defined(QT_NO_FONTCONFIG)
     // Documentation says that X11 systems that don't have fontconfig
@@ -273,6 +285,85 @@ void tst_QFontDatabase::fallbackFonts()
         QCOMPARE(run.glyphIndexes().size(), 1);
         QVERIFY(run.glyphIndexes().at(0) != 0);
     }
+}
+
+static QString testString()
+{
+    return QStringLiteral("foo bar");
+}
+
+void tst_QFontDatabase::condensedFontWidth()
+{
+    QFontDatabase db;
+    QFontDatabase::addApplicationFont(m_testFont);
+    QFontDatabase::addApplicationFont(m_testFontCondensed);
+
+    QVERIFY(db.hasFamily("QtBidiTestFont"));
+    if (!db.hasFamily("QtBidiTestFontCondensed"))
+        QSKIP("This platform doesn't support font sub-family names (QTBUG-55625)");
+
+    // Test we really get a condensed font, and a not renormalized one (QTBUG-48043):
+    QFont testFont("QtBidiTestFont");
+    QFont testFontCondensed("QtBidiTestFontCondensed");
+    QFontMetrics fmTF(testFont);
+    QFontMetrics fmTFC(testFontCondensed);
+    QVERIFY(fmTF.width(testString()) > fmTFC.width(testString()));
+
+}
+
+void tst_QFontDatabase::condensedFontMatching()
+{
+    QFontDatabase db;
+    QFontDatabase::removeAllApplicationFonts();
+    QFontDatabase::addApplicationFont(m_testFontCondensed);
+    if (!db.hasFamily("QtBidiTestFont"))
+        QSKIP("This platform doesn't support preferred font family names (QTBUG-53478)");
+    QFontDatabase::addApplicationFont(m_testFont);
+
+    // Test we correctly get the condensed font using different font matching methods:
+    QFont tfcByStretch("QtBidiTestFont");
+    tfcByStretch.setStretch(QFont::Condensed);
+    QFont tfcByStyleName("QtBidiTestFont");
+    tfcByStyleName.setStyleName("Condensed");
+
+#ifdef Q_OS_WIN
+    QEXPECT_FAIL("","No matching of sub-family by stretch on Windows", Continue);
+#endif
+
+    QCOMPARE(QFontMetrics(tfcByStretch).width(testString()),
+             QFontMetrics(tfcByStyleName).width(testString()));
+
+    if (!db.hasFamily("QtBidiTestFontCondensed"))
+        QSKIP("This platform doesn't support font sub-family names (QTBUG-55625)");
+
+    QFont tfcBySubfamilyName("QtBidiTestFontCondensed");
+    QCOMPARE(QFontMetrics(tfcByStyleName).width(testString()),
+             QFontMetrics(tfcBySubfamilyName).width(testString()));
+}
+
+void tst_QFontDatabase::rasterFonts()
+{
+    QFont font(QLatin1String("Fixedsys"), 1000);
+    QFontInfo fontInfo(font);
+
+    if (fontInfo.family() != font.family())
+        QSKIP("Fixedsys font not available.");
+
+    QVERIFY(!QFontDatabase().isSmoothlyScalable(font.family()));
+    QVERIFY(fontInfo.pointSize() != font.pointSize());
+}
+
+void tst_QFontDatabase::smoothFonts()
+{
+    QFont font(QLatin1String("Arial"), 1000);
+    QFontInfo fontInfo(font);
+
+    if (fontInfo.family() != font.family())
+        QSKIP("Arial font not available.");
+
+    // Smooth and bitmap scaling are mutually exclusive
+    QVERIFY(QFontDatabase().isSmoothlyScalable(font.family()));
+    QVERIFY(!QFontDatabase().isBitmapScalable(font.family()));
 }
 
 QTEST_MAIN(tst_QFontDatabase)

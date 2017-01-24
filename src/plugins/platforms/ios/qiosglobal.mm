@@ -58,26 +58,7 @@ bool isQtApplication()
     return isQt;
 }
 
-CGRect toCGRect(const QRectF &rect)
-{
-    return CGRectMake(rect.x(), rect.y(), rect.width(), rect.height());
-}
-
-QRectF fromCGRect(const CGRect &rect)
-{
-    return QRectF(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
-}
-
-CGPoint toCGPoint(const QPointF &point)
-{
-    return CGPointMake(point.x(), point.y());
-}
-
-QPointF fromCGPoint(const CGPoint &point)
-{
-    return QPointF(point.x, point.y);
-}
-
+#ifndef Q_OS_TVOS
 Qt::ScreenOrientation toQtScreenOrientation(UIDeviceOrientation uiDeviceOrientation)
 {
     Qt::ScreenOrientation qtOrientation;
@@ -124,6 +105,7 @@ UIDeviceOrientation fromQtScreenOrientation(Qt::ScreenOrientation qtOrientation)
     }
     return uiOrientation;
 }
+#endif
 
 int infoPlistValue(NSString* key, int defaultValue)
 {
@@ -131,6 +113,8 @@ int infoPlistValue(NSString* key, int defaultValue)
     NSNumber* value = [bundle objectForInfoDictionaryKey:key];
     return value ? [value intValue] : defaultValue;
 }
+
+QT_END_NAMESPACE
 
 // -------------------------------------------------------------------------
 
@@ -181,6 +165,8 @@ int infoPlistValue(NSString* key, int defaultValue)
         event.firstResponder = [self isFirstResponder] ? self : nil;
 }
 @end
+
+QT_BEGIN_NAMESPACE
 
 FirstResponderCandidate::FirstResponderCandidate(UIResponder *responder)
     : QScopedValueRollback<UIResponder *>(s_firstResponderCandidate, responder)

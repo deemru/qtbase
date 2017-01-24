@@ -47,13 +47,14 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <private/qtcpsocket_p.h>
 #include "qsslkey.h"
 #include "qsslconfiguration_p.h"
@@ -89,11 +90,7 @@ QT_BEGIN_NAMESPACE
 #endif
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-#if defined(Q_OS_WINCE)
-    typedef HCERTSTORE (WINAPI *PtrCertOpenSystemStoreW)(LPCSTR, DWORD, HCRYPTPROV_LEGACY, DWORD, const void*);
-#else
     typedef HCERTSTORE (WINAPI *PtrCertOpenSystemStoreW)(HCRYPTPROV_LEGACY, LPCWSTR);
-#endif
     typedef PCCERT_CONTEXT (WINAPI *PtrCertFindCertificateInStore)(HCERTSTORE, DWORD, DWORD, DWORD, const void*, PCCERT_CONTEXT);
     typedef BOOL (WINAPI *PtrCertCloseStore)(HCERTSTORE, DWORD);
 #endif // Q_OS_WIN && !Q_OS_WINRT
@@ -193,6 +190,7 @@ public:
 
     virtual qint64 peek(char *data, qint64 maxSize) Q_DECL_OVERRIDE;
     virtual QByteArray peek(qint64 maxSize) Q_DECL_OVERRIDE;
+    bool flush() Q_DECL_OVERRIDE;
 
     // Platform specific functions
     virtual void startClientEncryption() = 0;

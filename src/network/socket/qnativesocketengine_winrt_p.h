@@ -50,9 +50,12 @@
 //
 // We mean it.
 //
+
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <QtCore/QEventLoop>
 #include <QtCore/QBuffer>
 #include <QtCore/QMutex>
+#include <QtCore/QAtomicInteger>
 #include "QtNetwork/qhostaddress.h"
 #include "private/qabstractsocketengine_p.h"
 #include <wrl.h>
@@ -61,6 +64,7 @@
 QT_BEGIN_NAMESPACE
 
 class QNativeSocketEnginePrivate;
+class SocketEngineWorker;
 
 struct WinRtDatagram {
     QByteArray data;
@@ -135,11 +139,18 @@ signals:
     void connectionReady();
     void readReady();
     void writeReady();
+    void newDatagramReceived(const WinRtDatagram &datagram);
 
 private slots:
     void establishRead();
+    void handleNewDatagrams(const QList<WinRtDatagram> &datagram);
+    void handleNewData(const QVector<QByteArray> &data);
+    void handleTcpError(QAbstractSocket::SocketError error);
 
 private:
+    Q_INVOKABLE void putIntoPendingDatagramsList(const QList<WinRtDatagram> &datagrams);
+    Q_INVOKABLE void putIntoPendingData(const QVector<QByteArray> &data);
+
     Q_DECLARE_PRIVATE(QNativeSocketEngine)
     Q_DISABLE_COPY(QNativeSocketEngine)
 };
@@ -152,6 +163,7 @@ public:
     ~QNativeSocketEnginePrivate();
 
     qintptr socketDescriptor;
+    SocketEngineWorker *worker;
 
     bool notifyOnRead, notifyOnWrite, notifyOnException;
     QAtomicInt closingDown;
@@ -205,11 +217,21 @@ private:
         { return reinterpret_cast<ABI::Windows::Networking::Sockets::IDatagramSocket *>(socketDescriptor); }
     Microsoft::WRL::ComPtr<ABI::Windows::Networking::Sockets::IStreamSocketListener> tcpListener;
     Microsoft::WRL::ComPtr<ABI::Windows::Foundation::IAsyncAction> connectOp;
-    Microsoft::WRL::ComPtr<ABI::Windows::Foundation::IAsyncOperationWithProgress<ABI::Windows::Storage::Streams::IBuffer *, UINT32>> readOp;
-    QBuffer readBytes;
-    QMutex readMutex;
 
+    // In case of TCP readMutex protects readBytes and bytesAvailable. In case of UDP it is
+    // pendingDatagrams. They are written inside native callbacks (handleReadyRead and
+    // handleNewDatagrams/putIntoPendingDatagramsList)
+    mutable QMutex readMutex;
+
+    // Protected by readMutex. Written in handleReadyRead (native callback)
+    QAtomicInteger<int> bytesAvailable;
+
+    // Protected by readMutex. Written in handleNewData/putIntoPendingData (native callback)
+    QVector<QByteArray> pendingData;
+
+    // Protected by readMutex. Written in handleNewDatagrams/putIntoPendingDatagramsList
     QList<WinRtDatagram> pendingDatagrams;
+
     QList<ABI::Windows::Networking::Sockets::IStreamSocket *> pendingConnections;
     QList<ABI::Windows::Networking::Sockets::IStreamSocket *> currentConnections;
     QEventLoop eventLoop;
@@ -220,11 +242,11 @@ private:
                               ABI::Windows::Networking::Sockets::IDatagramSocketMessageReceivedEventArgs *args);
     HRESULT handleClientConnection(ABI::Windows::Networking::Sockets::IStreamSocketListener *tcpListener,
                                    ABI::Windows::Networking::Sockets::IStreamSocketListenerConnectionReceivedEventArgs *args);
-    HRESULT handleConnectToHost(ABI::Windows::Foundation::IAsyncAction *, ABI::Windows::Foundation::AsyncStatus);
-    void handleConnectionEstablished(ABI::Windows::Foundation::IAsyncAction *action);
-    HRESULT handleReadyRead(ABI::Windows::Foundation::IAsyncOperationWithProgress<ABI::Windows::Storage::Streams::IBuffer *, UINT32> *asyncInfo, ABI::Windows::Foundation::AsyncStatus);
+    HRESULT handleConnectOpFinished(ABI::Windows::Foundation::IAsyncAction *, ABI::Windows::Foundation::AsyncStatus);
 };
 
 QT_END_NAMESPACE
+
+Q_DECLARE_METATYPE(WinRtDatagram)
 
 #endif // QNATIVESOCKETENGINE_WINRT_P_H

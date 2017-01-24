@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #if !defined(QT_NO_GRAPHICSVIEW)
 
@@ -114,8 +114,8 @@ private:
     int m_numSortedElements;
 };
 
-#endif // QT_NO_GRAPHICSVIEW
-
 QT_END_NAMESPACE
+
+#endif // QT_NO_GRAPHICSVIEW
 
 #endif // QGRAPHICSSCENELINEARINDEX_H

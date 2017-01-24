@@ -53,6 +53,7 @@
 #ifndef QDBUSCONNECTION_P_H
 #define QDBUSCONNECTION_P_H
 
+#include <QtDBus/private/qtdbusglobal_p.h>
 #include <qdbuserror.h>
 #include <qdbusconnection.h>
 
@@ -279,7 +280,7 @@ public slots:
     void socketWrite(int);
     void objectDestroyed(QObject *o);
     void relaySignal(QObject *obj, const QMetaObject *, int signalId, const QVariantList &args);
-    void addSignalHook(const QString &key, const SignalHook &hook);
+    bool addSignalHook(const QString &key, const SignalHook &hook);
     bool removeSignalHook(const QString &key, const SignalHook &hook);
 
 private slots:
@@ -292,7 +293,7 @@ signals:
     void dispatchStatusChanged();
     void spyHooksFinished(const QDBusMessage &msg);
     void messageNeedsSending(QDBusPendingCallPrivate *pcall, void *msg, int timeout = -1);
-    void signalNeedsConnecting(const QString &key, const QDBusConnectionPrivate::SignalHook &hook);
+    bool signalNeedsConnecting(const QString &key, const QDBusConnectionPrivate::SignalHook &hook);
     bool signalNeedsDisconnecting(const QString &key, const QDBusConnectionPrivate::SignalHook &hook);
     void serviceOwnerChanged(const QString &name, const QString &oldOwner, const QString &newOwner);
     void callWithCallbackFailed(const QDBusError &error, const QDBusMessage &message);
@@ -380,6 +381,25 @@ extern QDBusMessage qDBusPropertySet(const QDBusConnectionPrivate::ObjectTreeNod
                                      const QDBusMessage &msg);
 extern QDBusMessage qDBusPropertyGetAll(const QDBusConnectionPrivate::ObjectTreeNode &node,
                                         const QDBusMessage &msg);
+
+// can be replaced with a lambda in Qt 5.7
+class QDBusConnectionDispatchEnabler : public QObject
+{
+    Q_OBJECT
+    QDBusConnectionPrivate *con;
+public:
+    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
+
+public slots:
+    void execute()
+    {
+        con->setDispatchEnabled(true);
+        if (!con->ref.deref())
+            con->deleteLater();
+        deleteLater();
+    }
+};
+
 #endif // QT_BOOTSTRAPPED
 
 QT_END_NAMESPACE

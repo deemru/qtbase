@@ -108,7 +108,11 @@ void QFactoryLoader::update()
         if (!QDir(path).exists(QLatin1String(".")))
             continue;
 
-        QStringList plugins = QDir(path).entryList(QDir::Files);
+        QStringList plugins = QDir(path).entryList(
+#ifdef Q_OS_WIN
+                    QStringList(QStringLiteral("*.dll")),
+#endif
+                    QDir::Files);
         QLibraryPrivate *library = 0;
 
 #ifdef Q_OS_MAC
@@ -187,10 +191,12 @@ void QFactoryLoader::update()
                     ++keyUsageCount;
                 }
             }
-            if (keyUsageCount || keys.isEmpty())
+            if (keyUsageCount || keys.isEmpty()) {
+                library->setLoadHints(QLibrary::PreventUnloadHint); // once loaded, don't unload
                 d->libraryList += library;
-            else
+            } else {
                 library->release();
+            }
         }
     }
 #else

@@ -40,7 +40,7 @@
 #ifndef QWINDOWSKEYMAPPER_H
 #define QWINDOWSKEYMAPPER_H
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 #include <QtCore/QLocale>
 
@@ -103,6 +103,7 @@ private:
     void deleteLayouts();
 
     QWindow *m_keyGrabber;
+    QChar m_lastHighSurrogate;
     static const size_t NumKeyboardLayoutItems = 256;
     KeyboardLayoutItem keyLayout[NumKeyboardLayoutItems];
 };

@@ -73,8 +73,10 @@ void tst_QClipboard::cleanupTestCase()
 
 void tst_QClipboard::init()
 {
+#ifndef QT_NO_PROCESS
     const QString testdataDir = QFileInfo(QFINDTESTDATA("copier")).absolutePath();
     QVERIFY2(QDir::setCurrent(testdataDir), qPrintable("Could not chdir to " + testdataDir));
+#endif
 }
 
 Q_DECLARE_METATYPE(QClipboard::Mode)
@@ -313,10 +315,6 @@ void tst_QClipboard::setMimeData()
     QMimeData *mimeData = new QMimeData;
     const QString TestName(QLatin1String("tst_QClipboard::setMimeData() mimeData"));
     mimeData->setObjectName(TestName);
-#if defined(Q_OS_WINCE)
-    // need to set text on CE
-    mimeData->setText(QLatin1String("Qt/CE foo"));
-#endif
 
     QGuiApplication::clipboard()->setMimeData(mimeData);
     QCOMPARE(QGuiApplication::clipboard()->mimeData(), (const QMimeData *)mimeData);

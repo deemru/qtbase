@@ -49,6 +49,7 @@
 // source and binary incompatible with future versions of Qt.
 //
 
+#include <QtGui/qtguiglobal.h>
 #include <QtGui/qwindowdefs.h>
 #include <qpa/qplatformscreen.h>
 #include <QtGui/qsurfaceformat.h>
@@ -155,7 +156,8 @@ public:
         MousePressAndHoldInterval,
         TabFocusBehavior,
         ReplayMousePressOutsidePopup,
-        ItemViewActivateItemOnSingleClick
+        ItemViewActivateItemOnSingleClick,
+        UiEffects
     };
 
     virtual QVariant styleHint(StyleHint hint) const;

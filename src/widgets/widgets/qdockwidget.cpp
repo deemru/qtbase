@@ -58,7 +58,7 @@
 
 #include "qdockwidget_p.h"
 #include "qmainwindowlayout_p.h"
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qapplication_p.h>
 #include <private/qt_mac_p.h>
 #include <private/qmacstyle_mac_p.h>
@@ -230,7 +230,7 @@ bool QDockWidgetLayout::nativeWindowDeco() const
  */
 bool QDockWidgetLayout::wmSupportsNativeWindowDeco()
 {
-#if defined(Q_OS_WINCE) || defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID)
     return false;
 #else
     static const bool xcb = !QGuiApplication::platformName().compare(QLatin1String("xcb"), Qt::CaseInsensitive);
@@ -811,7 +811,8 @@ void QDockWidgetPrivate::endDrag(bool abort)
                 } else {
                     setResizerActive(false);
                 }
-                undockedGeometry = q->geometry();
+                if (q->isFloating()) // Might not be floating when dragging a QDockWidgetGroupWindow
+                    undockedGeometry = q->geometry();
                 q->activateWindow();
             } else {
                 // The tab was not plugged back in the QMainWindow but the QDockWidget cannot
@@ -915,7 +916,7 @@ bool QDockWidgetPrivate::mouseMoveEvent(QMouseEvent *event)
             && (event->pos() - state->pressPos).manhattanLength()
                 > QApplication::startDragDistance()) {
             startDrag();
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
             grabMouseWhileInWindow();
 #else
             q->grabMouse();
@@ -965,7 +966,7 @@ void QDockWidgetPrivate::nonClientAreaMouseEvent(QMouseEvent *event)
     QWidget *tl = q->topLevelWidget();
     QRect geo = tl->geometry();
     QRect titleRect = tl->frameGeometry();
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     if ((features & QDockWidget::DockWidgetVerticalTitleBar)) {
         titleRect.setTop(geo.top());
         titleRect.setBottom(geo.bottom());
@@ -1224,10 +1225,8 @@ QDockWidget::QDockWidget(QWidget *parent, Qt::WindowFlags flags)
     \sa setWindowTitle()
 */
 QDockWidget::QDockWidget(const QString &title, QWidget *parent, Qt::WindowFlags flags)
-    : QWidget(*new QDockWidgetPrivate, parent, flags)
+    : QDockWidget(parent, flags)
 {
-    Q_D(QDockWidget);
-    d->init();
     setWindowTitle(title);
 }
 
@@ -1316,7 +1315,9 @@ QDockWidget::DockWidgetFeatures QDockWidget::features() const
 
     By default, this property is \c true.
 
-    \sa isWindow()
+    When this property changes, the \c {topLevelChanged()} signal is emitted.
+
+    \sa isWindow(), topLevelChanged()
 */
 void QDockWidget::setFloating(bool floating)
 {
@@ -1392,8 +1393,6 @@ void QDockWidget::changeEvent(QEvent *event)
                 if (QDockAreaLayoutInfo *info = winLayout->layoutState.dockAreaLayout.info(this))
                     info->updateTabBar();
             }
-            if (QDockWidgetGroupWindow *p = qobject_cast<QDockWidgetGroupWindow *>(parent()))
-                p->adjustFlags();
         }
 #endif // QT_NO_TABBAR
         break;
@@ -1451,8 +1450,6 @@ bool QDockWidget::event(QEvent *event)
     switch (event->type()) {
 #ifndef QT_NO_ACTION
     case QEvent::Hide:
-        if (d->state && d->state->dragging)
-            d->endDrag(true);
         if (layout != 0)
             layout->keepSize(this);
         d->toggleViewAction->setChecked(false);
@@ -1485,9 +1482,6 @@ bool QDockWidget::event(QEvent *event)
         }
         if (!isFloating() && layout != 0 && onTop)
             layout->raise(this);
-        if (QDockWidgetGroupWindow *p = qobject_cast<QDockWidgetGroupWindow *>(parent()))
-            p->adjustFlags();
-
         break;
     }
     case QEvent::WindowActivate:
@@ -1514,7 +1508,7 @@ bool QDockWidget::event(QEvent *event)
         if (d->mouseMoveEvent(static_cast<QMouseEvent *>(event)))
             return true;
         break;
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     case QEvent::Leave:
         if (d->state != 0 && d->state->dragging && !d->state->nca) {
             // This is a workaround for loosing the mouse on Vista.

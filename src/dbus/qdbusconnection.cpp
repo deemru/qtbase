@@ -69,29 +69,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifdef Q_OS_WIN
-static void preventDllUnload();
-#endif
-
 Q_GLOBAL_STATIC(QDBusConnectionManager, _q_manager)
-
-// can be replaced with a lambda in Qt 5.7
-class QDBusConnectionDispatchEnabler : public QObject
-{
-    Q_OBJECT
-    QDBusConnectionPrivate *con;
-public:
-    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
-
-public slots:
-    void execute()
-    {
-        con->setDispatchEnabled(true);
-        if (!con->ref.deref())
-            con->deleteLater();
-        deleteLater();
-    }
-};
 
 struct QDBusConnectionManager::ConnectionRequestData
 {
@@ -161,10 +139,6 @@ QDBusConnectionManager::QDBusConnectionManager()
             this, &QDBusConnectionManager::createServer, Qt::BlockingQueuedConnection);
     moveToThread(this);         // ugly, don't do this in other projects
 
-#ifdef Q_OS_WIN
-    // prevent the library from being unloaded on Windows. See comments in the function.
-    preventDllUnload();
-#endif
     defaultBuses[0] = defaultBuses[1] = Q_NULLPTR;
     start();
 }
@@ -1287,34 +1261,5 @@ QByteArray QDBusConnection::localMachineId()
 */
 
 QT_END_NAMESPACE
-
-#include "qdbusconnection.moc"
-
-#ifdef Q_OS_WIN
-#  include <qt_windows.h>
-
-QT_BEGIN_NAMESPACE
-static void preventDllUnload()
-{
-    // Thread termination is really wacky on Windows. For some reason we don't
-    // understand, exiting from the thread may try to unload the DLL. Since the
-    // QDBusConnectionManager thread runs until the DLL is unloaded, we've got
-    // a deadlock: the main thread is waiting for the manager thread to exit,
-    // but the manager thread is attempting to acquire a lock to unload the DLL.
-    //
-    // We work around the issue by preventing the unload from happening in the
-    // first place.
-    //
-    // For this trick, see
-    // https://blogs.msdn.microsoft.com/oldnewthing/20131105-00/?p=2733
-
-    static HMODULE self;
-    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                      GET_MODULE_HANDLE_EX_FLAG_PIN,
-                      reinterpret_cast<const wchar_t *>(&self), // any address in this DLL
-                      &self);
-}
-QT_END_NAMESPACE
-#endif
 
 #endif // QT_NO_DBUS

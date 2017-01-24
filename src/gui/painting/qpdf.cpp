@@ -1078,9 +1078,8 @@ void QPdfEngine::updateState(const QPaintEngineState &state)
     } else if (flags & DirtyClipRegion) {
         d->clipEnabled = true;
         QPainterPath path;
-        QVector<QRect> rects = state.clipRegion().rects();
-        for (int i = 0; i < rects.size(); ++i)
-            path.addRect(rects.at(i));
+        for (const QRect &rect : state.clipRegion())
+            path.addRect(rect);
         updateClipPath(path, state.clipOperation());
         flags |= DirtyClipPath;
     } else if (flags & DirtyClipEnabled) {
@@ -1675,7 +1674,7 @@ void QPdfEnginePrivate::writePage()
     uint resources = requestObject();
     uint annots = requestObject();
 
-    addXrefEntry(pages.last());
+    addXrefEntry(pages.constLast());
     xprintf("<<\n"
             "/Type /Page\n"
             "/Parent %d 0 R\n"
@@ -1768,7 +1767,7 @@ void QPdfEnginePrivate::writeTail()
             ">>\n"
             "startxref\n%d\n"
             "%%%%EOF\n",
-            xrefPositions.size()-1, info, catalog, xrefPositions.last());
+            xrefPositions.size()-1, info, catalog, xrefPositions.constLast());
 }
 
 int QPdfEnginePrivate::addXrefEntry(int object, bool printostr)
@@ -1925,7 +1924,7 @@ int QPdfEnginePrivate::writeCompressed(const char *src, int len)
 }
 
 int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height, int depth,
-                                  int maskObject, int softMaskObject, bool dct)
+                                  int maskObject, int softMaskObject, bool dct, bool isMono)
 {
     int image = addXrefEntry(-1);
     xprintf("<<\n"
@@ -1935,8 +1934,13 @@ int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height,
             "/Height %d\n", width, height);
 
     if (depth == 1) {
-        xprintf("/ImageMask true\n"
-                "/Decode [1 0]\n");
+        if (!isMono) {
+            xprintf("/ImageMask true\n"
+                    "/Decode [1 0]\n");
+        } else {
+            xprintf("/BitsPerComponent 1\n"
+                    "/ColorSpace /DeviceGray\n");
+        }
     } else {
         xprintf("/BitsPerComponent 8\n"
                 "/ColorSpace %s\n", (depth == 32) ? "/DeviceRGB" : "/DeviceGray");
@@ -2092,7 +2096,7 @@ int QPdfEnginePrivate::generateLinearGradientShader(const QLinearGradient *gradi
         break;
     case QGradient::ReflectSpread:
         reflect = true;
-        // fall through
+        Q_FALLTHROUGH();
     case QGradient::RepeatSpread: {
         // calculate required bounds
         QRectF pageRect = m_pageLayout.fullRectPixels(resolution);
@@ -2155,7 +2159,7 @@ int QPdfEnginePrivate::generateRadialGradientShader(const QRadialGradient *gradi
         break;
     case QGradient::ReflectSpread:
         reflect = true;
-        // fall through
+        Q_FALLTHROUGH();
     case QGradient::RepeatSpread: {
         Q_ASSERT(qFuzzyIsNull(r0)); // QPainter emulates if this is not 0
 
@@ -2454,7 +2458,7 @@ int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, qint64 serial_n
             memcpy(rawdata, image.constScanLine(y), bytesPerLine);
             rawdata += bytesPerLine;
         }
-        object = writeImage(data, w, h, d, 0, 0);
+        object = writeImage(data, w, h, d, 0, 0, false, is_monochrome(img.colorTable()));
     } else {
         QByteArray softMaskData;
         bool dct = false;

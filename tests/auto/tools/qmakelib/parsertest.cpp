@@ -1867,6 +1867,13 @@ void tst_qmakelib::addParseAbuse()
     /*    24 */ /* else branch */ << I(0))
             << "in:1: OR operator without prior condition."
             << false;
+
+    // Token buffer overflow. Verify with Valgrind or asan.
+    QTest::newRow("QTCREATORBUG-16508")
+            << "a{b{c{d{"
+            << TS()
+            << "in:2: Missing closing brace(s)."
+            << false;
 }
 
 void tst_qmakelib::proParser_data()
@@ -1955,7 +1962,7 @@ void tst_qmakelib::proParser()
     handler.setExpectedMessages(msgs.split('\n', QString::SkipEmptyParts));
     QMakeVfs vfs;
     QMakeParser parser(0, &vfs, &handler);
-    ProFile *pro = parser.parsedProBlock(in, "in", 1, QMakeParser::FullGrammar);
+    ProFile *pro = parser.parsedProBlock(QStringRef(&in), "in", 1, QMakeParser::FullGrammar);
     if (handler.printedMessages()) {
         qWarning("Got unexpected message(s)");
         verified = false;

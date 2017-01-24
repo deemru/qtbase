@@ -52,8 +52,7 @@
 //
 
 #include <qglobal.h>
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
+#include <QtEglSupport/private/qt_egl_p.h>
 
 // This provides runtime EGLDevice/Output/Stream support even when eglext.h in
 // the sysroot is not up-to-date.
@@ -139,6 +138,10 @@ typedef EGLBoolean (EGLAPIENTRYP PFNEGLSTREAMCONSUMEROUTPUTEXTPROC) (EGLDisplay 
 #ifndef EGL_EXT_output_drm
 #define EGL_DRM_CRTC_EXT                  0x3234
 #define EGL_DRM_PLANE_EXT                 0x3235
+#endif
+
+#ifndef EGL_PLATFORM_X11_KHR
+#define EGL_PLATFORM_X11_KHR              0x31D5
 #endif
 
 QT_BEGIN_NAMESPACE

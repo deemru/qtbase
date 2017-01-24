@@ -210,6 +210,8 @@ QWindow::~QWindow()
 {
     destroy();
     QGuiApplicationPrivate::window_list.removeAll(this);
+    if (!QGuiApplicationPrivate::is_app_closing)
+        QGuiApplicationPrivate::instance()->modalWindowList.removeOne(this);
 }
 
 void QWindowPrivate::init()
@@ -402,7 +404,7 @@ void QWindowPrivate::create(bool recursive)
         q->parent()->create();
 
     platformWindow = QGuiApplicationPrivate::platformIntegration()->createPlatformWindow(q);
-    Q_ASSERT(platformWindow);
+    Q_ASSERT(platformWindow || q->type() == Qt::ForeignWindow);
 
     if (!platformWindow) {
         qWarning() << "Failed to create platform window for" << q << "with flags" << q->flags();
@@ -1688,11 +1690,9 @@ void QWindow::destroy()
     if (QGuiApplicationPrivate::currentMousePressWindow == this)
         QGuiApplicationPrivate::currentMousePressWindow = parent();
 
-    for (int i = 0; i < QGuiApplicationPrivate::tabletDevicePoints.size(); ++i) {
-        QGuiApplicationPrivate::TabletPointData &pointData = QGuiApplicationPrivate::tabletDevicePoints[i];
-        if (pointData.target == this)
-            pointData.target = parent();
-    }
+    for (int i = 0; i < QGuiApplicationPrivate::tabletDevicePoints.size(); ++i)
+        if (QGuiApplicationPrivate::tabletDevicePoints.at(i).target == this)
+            QGuiApplicationPrivate::tabletDevicePoints[i].target = parent();
 
     bool wasVisible = isVisible();
     d->visibilityOnDestroy = wasVisible && d->platformWindow;
@@ -2175,11 +2175,14 @@ void QWindowPrivate::deliverUpdateRequest()
     Schedules a QEvent::UpdateRequest event to be delivered to this window.
 
     The event is delivered in sync with the display vsync on platforms
-    where this is possible. When driving animations, this function should
-    be called once after drawing has completed.
+    where this is possible. Otherwise, the event is delivered after a
+    delay of 5 ms. The additional time is there to give the event loop
+    a bit of idle time to gather system events, and can be overridden
+    using the QT_QPA_UPDATE_IDLE_TIME environment variable.
 
-    Calling this function multiple times will result in a single event
-    being delivered to the window.
+    When driving animations, this function should be called once after drawing
+    has completed. Calling this function multiple times will result in a single
+    event being delivered to the window.
 
     Subclasses of QWindow should reimplement event(), intercept the event and
     call the application's rendering code, then call the base class
@@ -2195,6 +2198,9 @@ void QWindowPrivate::deliverUpdateRequest()
 */
 void QWindow::requestUpdate()
 {
+    Q_ASSERT_X(QThread::currentThread() == QCoreApplication::instance()->thread(),
+        "QWindow", "Updates can only be scheduled from the GUI (main) thread");
+
     Q_D(QWindow);
     if (d->updateRequestPending || !d->platformWindow)
         return;
@@ -2389,7 +2395,7 @@ void QWindowPrivate::maybeQuitOnLastWindowClosed()
     bool lastWindowClosed = true;
     for (int i = 0; i < list.size(); ++i) {
         QWindow *w = list.at(i);
-        if (!w->isVisible() || w->transientParent())
+        if (!w->isVisible() || w->transientParent() || w->type() == Qt::ToolTip)
             continue;
         lastWindowClosed = false;
         break;
@@ -2434,7 +2440,8 @@ QWindow *QWindowPrivate::topLevelWindow() const
     This can be used, on platforms which support it, to embed a QWindow inside a
     native window, or to embed a native window inside a QWindow.
 
-    If foreign windows are not supported, this function returns 0.
+    If foreign windows are not supported or embedding the native window
+    failed in the platform plugin, this function returns 0.
 
     \note The resulting QWindow should not be used to manipulate the underlying
     native window (besides re-parenting), or to observe state changes of the
@@ -2455,6 +2462,10 @@ QWindow *QWindow::fromWinId(WId id)
     window->setFlags(Qt::ForeignWindow);
     window->setProperty("_q_foreignWinId", QVariant::fromValue(id));
     window->create();
+    if (!window->handle()) {
+        delete window;
+        return nullptr;
+    }
     return window;
 }
 
@@ -2493,6 +2504,9 @@ void QWindowPrivate::_q_clearAlert()
     window, unless an override cursor is set.
     See the \l{Qt::CursorShape}{list of predefined cursor objects} for a
     range of useful shapes.
+
+    If no cursor has been set, or after a call to unsetCursor(), the
+    parent window's cursor is used.
 
     By default, the cursor has the Qt::ArrowCursor shape.
 

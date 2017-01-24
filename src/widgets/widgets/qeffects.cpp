@@ -110,7 +110,7 @@ QAlphaWidget::QAlphaWidget(QWidget* w, Qt::WindowFlags f)
 
 QAlphaWidget::~QAlphaWidget()
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     // Restore user-defined opacity value
     if (widget)
         widget->setWindowOpacity(1);
@@ -144,7 +144,7 @@ void QAlphaWidget::run(int time)
     checkTime.start();
 
     showWidget = true;
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     qApp->installEventFilter(this);
     widget->setWindowOpacity(0.0);
     widget->show();
@@ -202,10 +202,13 @@ bool QAlphaWidget::eventFilter(QObject *o, QEvent *e)
         render();
         break;
     case QEvent::KeyPress: {
+#ifndef QT_NO_SHORTCUT
        QKeyEvent *ke = (QKeyEvent*)e;
        if (ke->matches(QKeySequence::Cancel)) {
            showWidget = false;
-       } else {
+       } else
+#endif
+       {
            duration = 0;
        }
        render();
@@ -251,7 +254,7 @@ void QAlphaWidget::render()
     else
         alpha = 1;
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     if (alpha >= 1 || !showWidget) {
         anim.stop();
         qApp->removeEventFilter(this);
@@ -268,10 +271,6 @@ void QAlphaWidget::render()
 
         if (widget) {
             if (!showWidget) {
-#ifdef Q_OS_WIN
-                setEnabled(true);
-                setFocus();
-#endif // Q_OS_WIN
                 widget->hide();
             } else {
                 //Since we are faking the visibility of the widget
@@ -288,7 +287,7 @@ void QAlphaWidget::render()
         pm = QPixmap::fromImage(mixedImage);
         repaint();
     }
-#endif // defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#endif // defined(Q_OS_WIN)
 }
 
 /*

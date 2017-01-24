@@ -75,25 +75,21 @@ void *qcgl_createNSOpenGLPixelFormat(const QSurfaceFormat &format)
 
     QVector<NSOpenGLPixelFormatAttribute> attrs;
 
-    if (format.swapBehavior() != QSurfaceFormat::SingleBuffer)
+    if (format.swapBehavior() == QSurfaceFormat::DoubleBuffer
+        || format.swapBehavior() == QSurfaceFormat::DefaultSwapBehavior)
         attrs.append(NSOpenGLPFADoubleBuffer);
+    else if (format.swapBehavior() == QSurfaceFormat::TripleBuffer)
+        attrs.append(NSOpenGLPFATripleBuffer);
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) {
-        if (format.profile() == QSurfaceFormat::CoreProfile
-                && ((format.majorVersion() == 3 && format.minorVersion() >= 2)
-                    || format.majorVersion() > 3)) {
-            attrs << NSOpenGLPFAOpenGLProfile;
-            attrs << NSOpenGLProfileVersion3_2Core;
-        } else {
-            attrs << NSOpenGLPFAOpenGLProfile;
-            attrs << NSOpenGLProfileVersionLegacy;
-        }
+    if (format.profile() == QSurfaceFormat::CoreProfile
+            && ((format.majorVersion() == 3 && format.minorVersion() >= 2)
+                || format.majorVersion() > 3)) {
+        attrs << NSOpenGLPFAOpenGLProfile;
+        attrs << NSOpenGLProfileVersion3_2Core;
+    } else {
+        attrs << NSOpenGLPFAOpenGLProfile;
+        attrs << NSOpenGLProfileVersionLegacy;
     }
-#else
-    if (format.profile() == QSurfaceFormat::CoreProfile)
-        qWarning("Mac OSX >= 10.7 is needed for OpenGL Core Profile support");
-#endif
 
     if (format.depthBufferSize() > 0)
         attrs <<  NSOpenGLPFADepthSize << format.depthBufferSize();

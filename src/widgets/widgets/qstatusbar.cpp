@@ -87,7 +87,7 @@ public:
 
     int savedStrut;
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     QPoint dragStart;
 #endif
 
@@ -746,12 +746,9 @@ bool QStatusBar::event(QEvent *e)
 
 // On Mac OS X Leopard it is possible to drag the window by clicking
 // on the tool bar on most applications.
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
     return QWidget::event(e);
 #else
-    if (QSysInfo::MacintoshVersion <= QSysInfo::MV_10_4)
-        return QWidget::event(e);
-
     // Enable drag-click only if the status bar is the status bar for a
     // QMainWindow with a unifed toolbar.
     if (parent() == 0 || qobject_cast<QMainWindow *>(parent()) == 0 ||

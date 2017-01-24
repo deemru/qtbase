@@ -337,9 +337,10 @@ bool QOpenGLShaderPrivate::compile(QOpenGLShader *q)
 
         // Dump the source code if we got it
         if (sourceCodeBuffer) {
-            qWarning("*** Problematic %s shader source code ***", type);
-            qWarning() << qPrintable(QString::fromLatin1(sourceCodeBuffer));
-            qWarning("***");
+            qWarning("*** Problematic %s shader source code ***\n"
+                     "%ls\n"
+                     "***",
+                     type, qUtf16Printable(QString::fromLatin1(sourceCodeBuffer)));
         }
 
         // Cleanup
@@ -431,73 +432,84 @@ static QVersionDirectivePosition findVersionDirectivePosition(const char *source
 {
     Q_ASSERT(source);
 
-    QString working = QString::fromUtf8(source);
-
     // According to the GLSL spec the #version directive must not be
     // preceded by anything but whitespace and comments.
     // In order to not get confused by #version directives within a
-    // multiline comment, we need to run a minimal preprocessor first.
+    // multiline comment, we need to do some minimal comment parsing
+    // while searching for the directive.
     enum {
         Normal,
+        StartOfLine,
+        PreprocessorDirective,
         CommentStarting,
         MultiLineComment,
         SingleLineComment,
         CommentEnding
-    } state = Normal;
+    } state = StartOfLine;
 
-    for (QChar *c = working.begin(); c != working.end(); ++c) {
+    const char *c = source;
+    while (*c) {
         switch (state) {
-        case Normal:
-            if (*c == QLatin1Char('/'))
+        case PreprocessorDirective:
+            if (*c == ' ' || *c == '\t')
+                break;
+            if (!strncmp(c, "version", strlen("version"))) {
+                // Found version directive
+                c += strlen("version");
+                while (*c && *c != '\n')
+                    ++c;
+                int splitPosition = c - source + 1;
+                int linePosition = int(std::count(source, c, '\n')) + 1;
+                return QVersionDirectivePosition(splitPosition, linePosition);
+            } else if (*c == '/')
                 state = CommentStarting;
+            else if (*c == '\n')
+                state = StartOfLine;
+            else
+                state = Normal;
+            break;
+        case StartOfLine:
+            if (*c == ' ' || *c == '\t')
+                break;
+            else if (*c == '#') {
+                state = PreprocessorDirective;
+                break;
+            }
+            state = Normal;
+            // fall through
+        case Normal:
+            if (*c == '/')
+                state = CommentStarting;
+            else if (*c == '\n')
+                state = StartOfLine;
             break;
         case CommentStarting:
-            if (*c == QLatin1Char('*'))
+            if (*c == '*')
                 state = MultiLineComment;
-            else if (*c == QLatin1Char('/'))
+            else if (*c == '/')
                 state = SingleLineComment;
             else
                 state = Normal;
             break;
         case MultiLineComment:
-            if (*c == QLatin1Char('*'))
+            if (*c == '*')
                 state = CommentEnding;
-            else if (*c == QLatin1Char('#'))
-                *c = QLatin1Char('_');
             break;
         case SingleLineComment:
-            if (*c == QLatin1Char('\n'))
+            if (*c == '\n')
                 state = Normal;
-            else if (*c == QLatin1Char('#'))
-                *c = QLatin1Char('_');
             break;
         case CommentEnding:
-            if (*c == QLatin1Char('/')) {
+            if (*c == '/')
                 state = Normal;
-            } else {
-                if (*c == QLatin1Char('#'))
-                    *c = QLatin1Char('_');
-                if (*c != QLatin1Char('*'))
-                    state = MultiLineComment;
-            }
+            else if (*c != QLatin1Char('*'))
+                state = MultiLineComment;
             break;
         }
+        ++c;
     }
 
-    // Search for #version directive
-    int splitPosition = 0;
-    int linePosition = 1;
-
-    static const QRegularExpression pattern(QStringLiteral("^\\s*#\\s*version.*(\\n)?"),
-                                            QRegularExpression::MultilineOption
-                                            | QRegularExpression::OptimizeOnFirstUsageOption);
-    QRegularExpressionMatch match = pattern.match(working);
-    if (match.hasMatch()) {
-        splitPosition = match.capturedEnd();
-        linePosition += int(std::count(working.begin(), working.begin() + splitPosition, QLatin1Char('\n')));
-    }
-
-    return QVersionDirectivePosition(splitPosition, linePosition);
+    return QVersionDirectivePosition(0, 1);
 }
 
 /*!
@@ -522,16 +534,26 @@ bool QOpenGLShader::compileSourceCode(const char *source)
 
         QVarLengthArray<const char *, 5> sourceChunks;
         QVarLengthArray<GLint, 5> sourceChunkLengths;
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
 
         if (versionDirectivePosition.hasPosition()) {
-            // Append source up to #version directive
+            // Append source up to and including the #version directive
             sourceChunks.append(source);
             sourceChunkLengths.append(GLint(versionDirectivePosition.position));
+        } else {
+            // QTBUG-55733: Intel on Windows with Compatibility profile requires a #version always
+            if (ctx->format().profile() == QSurfaceFormat::CompatibilityProfile) {
+                const char *vendor = reinterpret_cast<const char *>(ctx->functions()->glGetString(GL_VENDOR));
+                if (vendor && !strcmp(vendor, "Intel")) {
+                    static const char version110[] = "#version 110\n";
+                    sourceChunks.append(version110);
+                    sourceChunkLengths.append(GLint(sizeof(version110)) - 1);
+                }
+            }
         }
 
         // The precision qualifiers are useful on OpenGL/ES systems,
         // but usually not present on desktop systems.
-        QOpenGLContext *ctx = QOpenGLContext::currentContext();
         const QSurfaceFormat currentSurfaceFormat = ctx->format();
         QOpenGLContextPrivate *ctx_d = QOpenGLContextPrivate::get(QOpenGLContext::currentContext());
         if (currentSurfaceFormat.renderableType() == QSurfaceFormat::OpenGL
@@ -1215,8 +1237,7 @@ int QOpenGLShaderProgram::attributeLocation(const char *name) const
     if (d->linked && d->programGuard && d->programGuard->id()) {
         return d->glfuncs->glGetAttribLocation(d->programGuard->id(), name);
     } else {
-        qWarning() << "QOpenGLShaderProgram::attributeLocation(" << name
-                   << "): shader program is not linked";
+        qWarning("QOpenGLShaderProgram::attributeLocation(%s): shader program is not linked", name);
         return -1;
     }
 }
@@ -1479,7 +1500,7 @@ void QOpenGLShaderProgram::setAttributeValue
     Q_D(QOpenGLShaderProgram);
     Q_UNUSED(d);
     if (rows < 1 || rows > 4) {
-        qWarning() << "QOpenGLShaderProgram::setAttributeValue: rows" << rows << "not supported";
+        qWarning("QOpenGLShaderProgram::setAttributeValue: rows %d not supported", rows);
         return;
     }
     if (location != -1) {
@@ -1891,8 +1912,7 @@ int QOpenGLShaderProgram::uniformLocation(const char *name) const
     if (d->linked && d->programGuard && d->programGuard->id()) {
         return d->glfuncs->glGetUniformLocation(d->programGuard->id(), name);
     } else {
-        qWarning() << "QOpenGLShaderProgram::uniformLocation(" << name
-                   << "): shader program is not linked";
+        qWarning("QOpenGLShaderProgram::uniformLocation(%s): shader program is not linked", name);
         return -1;
     }
 }
@@ -2819,7 +2839,7 @@ void QOpenGLShaderProgram::setUniformValueArray(int location, const GLfloat *val
         else if (tupleSize == 4)
             d->glfuncs->glUniform4fv(location, count, values);
         else
-            qWarning() << "QOpenGLShaderProgram::setUniformValue: size" << tupleSize << "not supported";
+            qWarning("QOpenGLShaderProgram::setUniformValue: size %d not supported", tupleSize);
     }
 }
 

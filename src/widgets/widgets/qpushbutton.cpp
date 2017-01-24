@@ -56,10 +56,10 @@
 #include "qdebug.h"
 #include "qlayoutitem.h"
 #include "qdialogbuttonbox.h"
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include "private/qmacstyle_mac_p.h"
 #include "private/qmacstyle_mac_p_p.h"
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -254,11 +254,9 @@ QPushButton::QPushButton(QWidget *parent)
 */
 
 QPushButton::QPushButton(const QString &text, QWidget *parent)
-    : QAbstractButton(*new QPushButtonPrivate, parent)
+    : QPushButton(parent)
 {
-    Q_D(QPushButton);
     setText(text);
-    d->init();
 }
 
 
@@ -270,12 +268,10 @@ QPushButton::QPushButton(const QString &text, QWidget *parent)
 
 */
 QPushButton::QPushButton(const QIcon& icon, const QString &text, QWidget *parent)
-    : QAbstractButton(*new QPushButtonPrivate, parent)
+    : QPushButton(*new QPushButtonPrivate, parent)
 {
-    Q_D(QPushButton);
     setText(text);
     setIcon(icon);
-    d->init();
 }
 
 /*! \internal
@@ -419,7 +415,7 @@ QSize QPushButton::sizeHint() const
     QString s(text());
     bool empty = s.isEmpty();
     if (empty)
-        s = QString::fromLatin1("XXXX");
+        s = QStringLiteral("XXXX");
     QFontMetrics fm = fontMetrics();
     QSize sz = fm.size(Qt::TextShowMnemonic, s);
     if(!empty || !w)
@@ -679,7 +675,7 @@ bool QPushButton::event(QEvent *e)
     return QAbstractButton::event(e);
 }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 /*! \reimp */
 bool QPushButton::hitButton(const QPoint &pos) const
 {
@@ -708,7 +704,7 @@ bool QPushButtonPrivate::hitButton(const QPoint &pos)
                       q->rect().height() - QMacStylePrivate::PushButtonBottomOffset);
     return roundedRect.contains(pos);
 }
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 
 
 QT_END_NAMESPACE

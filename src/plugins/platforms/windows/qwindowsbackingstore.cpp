@@ -39,11 +39,11 @@
 
 #include "qwindowsbackingstore.h"
 #include "qwindowswindow.h"
-#include "qwindowsnativeimage.h"
 #include "qwindowscontext.h"
 
 #include <QtGui/QWindow>
 #include <QtGui/QPainter>
+#include <QtFontDatabaseSupport/private/qwindowsnativeimage_p.h>
 #include <private/qhighdpiscaling_p.h>
 #include <private/qimage_p.h>
 
@@ -87,7 +87,6 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
     QWindowsWindow *rw = QWindowsWindow::windowsWindowOf(window);
     Q_ASSERT(rw);
 
-#ifndef Q_OS_WINCE
     const bool hasAlpha = rw->format().hasAlpha();
     const Qt::WindowFlags flags = window->flags();
     if ((flags & Qt::FramelessWindowHint) && QWindowsWindow::setWindowLayered(rw->handle(), flags, hasAlpha, rw->opacity()) && hasAlpha) {
@@ -101,21 +100,16 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
         POINT ptDst = {r.x(), r.y()};
         POINT ptSrc = {0, 0};
         BLENDFUNCTION blend = {AC_SRC_OVER, 0, BYTE(qRound(255.0 * rw->opacity())), AC_SRC_ALPHA};
-        if (QWindowsContext::user32dll.updateLayeredWindowIndirect) {
-            RECT dirty = {dirtyRect.x(), dirtyRect.y(),
-                dirtyRect.x() + dirtyRect.width(), dirtyRect.y() + dirtyRect.height()};
-            UPDATELAYEREDWINDOWINFO info = {sizeof(info), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA, &dirty};
-            const BOOL result = QWindowsContext::user32dll.updateLayeredWindowIndirect(rw->handle(), &info);
-            if (!result)
-                qErrnoWarning("UpdateLayeredWindowIndirect failed for ptDst=(%d, %d),"
-                              " size=(%dx%d), dirty=(%dx%d %d, %d)", r.x(), r.y(),
-                              r.width(), r.height(), dirtyRect.width(), dirtyRect.height(),
-                              dirtyRect.x(), dirtyRect.y());
-        } else {
-            QWindowsContext::user32dll.updateLayeredWindow(rw->handle(), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA);
-        }
+        RECT dirty = {dirtyRect.x(), dirtyRect.y(),
+                      dirtyRect.x() + dirtyRect.width(), dirtyRect.y() + dirtyRect.height()};
+        UPDATELAYEREDWINDOWINFO info = {sizeof(info), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA, &dirty};
+        const BOOL result = UpdateLayeredWindowIndirect(rw->handle(), &info);
+        if (!result)
+            qErrnoWarning("UpdateLayeredWindowIndirect failed for ptDst=(%d, %d),"
+                          " size=(%dx%d), dirty=(%dx%d %d, %d)", r.x(), r.y(),
+                          r.width(), r.height(), dirtyRect.width(), dirtyRect.height(),
+                          dirtyRect.x(), dirtyRect.y());
     } else {
-#endif
         const HDC dc = rw->getDC();
         if (!dc) {
             qErrnoWarning("%s: GetDC failed", __FUNCTION__);
@@ -129,9 +123,7 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
                 qErrnoWarning(int(lastError), "%s: BitBlt failed", __FUNCTION__);
         }
         rw->releaseDC();
-#ifndef Q_OS_WINCE
     }
-#endif
 
     // Write image for debug purposes.
     if (QWindowsContext::verbose > 2 && lcQpaBackingStore().isDebugEnabled()) {
@@ -175,7 +167,7 @@ void QWindowsBackingStore::resize(const QSize &size, const QRegion &region)
             staticRegion &= QRect(0, 0, newimg.width(), newimg.height());
             QPainter painter(&newimg);
             painter.setCompositionMode(QPainter::CompositionMode_Source);
-            foreach (const QRect &rect, staticRegion.rects())
+            for (const QRect &rect : staticRegion)
                 painter.drawImage(rect, oldimg, rect);
         }
 
@@ -190,10 +182,9 @@ bool QWindowsBackingStore::scroll(const QRegion &area, int dx, int dy)
     if (m_image.isNull() || m_image->image().isNull())
         return false;
 
-    const QVector<QRect> rects = area.rects();
     const QPoint offset(dx, dy);
-    for (int i = 0; i < rects.size(); ++i)
-        qt_scrollRectInImage(m_image->image(), rects.at(i), offset);
+    for (const QRect &rect : area)
+        qt_scrollRectInImage(m_image->image(), rect, offset);
 
     return true;
 }
@@ -207,7 +198,7 @@ void QWindowsBackingStore::beginPaint(const QRegion &region)
         QPainter p(&m_image->image());
         p.setCompositionMode(QPainter::CompositionMode_Source);
         const QColor blank = Qt::transparent;
-        foreach (const QRect &r, region.rects())
+        for (const QRect &r : region)
             p.fillRect(r, blank);
     }
 }
@@ -219,8 +210,6 @@ HDC QWindowsBackingStore::getDC() const
     return 0;
 }
 
-#ifndef QT_NO_OPENGL
-
 QImage QWindowsBackingStore::toImage() const
 {
     if (m_image.isNull()) {
@@ -229,7 +218,5 @@ QImage QWindowsBackingStore::toImage() const
     }
     return m_image.data()->image();
 }
-
-#endif // !QT_NO_OPENGL
 
 QT_END_NAMESPACE

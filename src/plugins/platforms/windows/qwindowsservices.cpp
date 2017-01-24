@@ -39,16 +39,14 @@
 
 #define QT_NO_URL_CAST_FROM_STRING
 #include "qwindowsservices.h"
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 #include <QtCore/QUrl>
 #include <QtCore/QDebug>
 #include <QtCore/QDir>
 
 #include <shlobj.h>
-#ifndef Q_OS_WINCE
-#  include <intshcut.h>
-#endif
+#include <intshcut.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -56,9 +54,9 @@ enum { debug = 0 };
 
 static inline bool shellExecute(const QUrl &url)
 {
-#ifndef Q_OS_WINCE
-    const QString nativeFilePath =
-            url.isLocalFile() ? QDir::toNativeSeparators(url.toLocalFile()) : url.toString(QUrl::FullyEncoded);
+    const QString nativeFilePath = url.isLocalFile() && !url.hasFragment() && !url.hasQuery()
+        ? QDir::toNativeSeparators(url.toLocalFile())
+        : url.toString(QUrl::FullyEncoded);
     const quintptr result =
         reinterpret_cast<quintptr>(ShellExecute(0, 0,
                                                 reinterpret_cast<const wchar_t *>(nativeFilePath.utf16()),
@@ -69,10 +67,6 @@ static inline bool shellExecute(const QUrl &url)
         return false;
     }
     return true;
-#else
-    Q_UNUSED(url);
-    return false;
-#endif
 }
 
 // Retrieve the commandline for the default mail client. It contains a
@@ -94,9 +88,8 @@ static inline QString mailCommand()
             keyName = QString::fromWCharArray(command);
         RegCloseKey(handle);
     }
-    if (keyName.isEmpty())
-        keyName = QStringLiteral("mailto");
-    keyName += QStringLiteral("\\Shell\\Open\\Command");
+    const QLatin1String mailto = keyName.isEmpty() ? QLatin1String("mailto") : QLatin1String();
+    keyName += mailto + QLatin1String("\\Shell\\Open\\Command");
     if (debug)
         qDebug() << __FUNCTION__ << "keyName=" << keyName;
     command[0] = 0;
@@ -107,13 +100,9 @@ static inline QString mailCommand()
     }
     if (!command[0])
         return QString();
-#ifndef Q_OS_WINCE
     wchar_t expandedCommand[MAX_PATH] = {0};
     return ExpandEnvironmentStrings(command, expandedCommand, MAX_PATH) ?
            QString::fromWCharArray(expandedCommand) : QString::fromWCharArray(command);
-#else
-    return QString();
-#endif
 }
 
 static inline bool launchMail(const QUrl &url)
@@ -134,7 +123,7 @@ static inline bool launchMail(const QUrl &url)
     }
     // Pass the url as the parameter. Should use QProcess::startDetached(),
     // but that cannot handle a Windows command line [yet].
-    command.replace(QStringLiteral("%1"), url.toString(QUrl::FullyEncoded));
+    command.replace(QLatin1String("%1"), url.toString(QUrl::FullyEncoded));
     if (debug)
         qDebug() << __FUNCTION__ << "Launching" << command;
     //start the process

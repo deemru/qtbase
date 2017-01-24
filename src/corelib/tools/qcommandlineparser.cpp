@@ -44,13 +44,15 @@
 #include <qhash.h>
 #include <qvector.h>
 #include <qdebug.h>
-#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINRT)
 #  include <qt_windows.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>
 
 QT_BEGIN_NAMESPACE
+
+extern void Q_CORE_EXPORT qt_call_post_routines();
 
 typedef QHash<QString, int> NameHash_t;
 
@@ -295,7 +297,9 @@ QCommandLineParser::~QCommandLineParser()
     i.e. as the long option named \c{abc}. This is how Qt's own tools
     (uic, rcc...) have always been parsing arguments. This mode should be
     used for preserving compatibility in applications that were parsing
-    arguments in such a way.
+    arguments in such a way. There is an exception if the \c{a} option has the
+    QCommandLineOption::ShortOptionStyle flag set, in which case it is still
+    interpreted as \c{-a bc}.
 
     \sa setSingleDashWordOptionMode()
 */
@@ -530,7 +534,7 @@ QString QCommandLineParser::errorText() const
 
 enum MessageType { UsageMessage, ErrorMessage };
 
-#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINRT)
 // Return whether to use a message box. Use handles if a console can be obtained
 // or we are run with redirected handles (for example, by QProcess).
 static inline bool displayMessageBox()
@@ -552,7 +556,7 @@ static void showParserMessage(const QString &message, MessageType type)
     else
         qCritical(qPrintable(message));
     return;
-#elif defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE)
+#elif defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
     if (displayMessageBox()) {
         const UINT flags = MB_OK | MB_TOPMOST | MB_SETFOREGROUND
             | (type == UsageMessage ? MB_ICONINFORMATION : MB_ICONERROR);
@@ -565,7 +569,7 @@ static void showParserMessage(const QString &message, MessageType type)
                     reinterpret_cast<const wchar_t *>(title.utf16()), flags);
         return;
     }
-#endif // Q_OS_WIN && !QT_BOOTSTRAPPED && !Q_OS_WINCE
+#endif // Q_OS_WIN && !QT_BOOTSTRAPPED
     fputs(qPrintable(message), type == UsageMessage ? stdout : stderr);
 }
 
@@ -586,6 +590,7 @@ void QCommandLineParser::process(const QStringList &arguments)
 {
     if (!d->parse(arguments)) {
         showParserMessage(errorText() + QLatin1Char('\n'), ErrorMessage);
+        qt_call_post_routines();
         ::exit(EXIT_FAILURE);
     }
 
@@ -762,6 +767,18 @@ bool QCommandLineParserPrivate::parse(const QStringList &args)
             }
             case QCommandLineParser::ParseAsLongOptions:
             {
+                if (argument.size() > 2) {
+                    const QString possibleShortOptionStyleName = argument.mid(1, 1);
+                    const auto shortOptionIt = nameHash.constFind(possibleShortOptionStyleName);
+                    if (shortOptionIt != nameHash.constEnd()) {
+                        const auto &arg = commandLineOptionList.at(*shortOptionIt);
+                        if (arg.flags() & QCommandLineOption::ShortOptionStyle) {
+                            registerFoundOption(possibleShortOptionStyleName);
+                            optionValuesHash[*shortOptionIt].append(argument.mid(2));
+                            break;
+                        }
+                    }
+                }
                 const QString optionName = argument.mid(1).section(assignChar, 0, 0);
                 if (registerFoundOption(optionName)) {
                     if (!parseOptionValue(optionName, argument, &argumentIterator, args.end()))
@@ -997,6 +1014,7 @@ Q_NORETURN void QCommandLineParser::showVersion()
     showParserMessage(QCoreApplication::applicationName() + QLatin1Char(' ')
                       + QCoreApplication::applicationVersion() + QLatin1Char('\n'),
                       UsageMessage);
+    qt_call_post_routines();
     ::exit(EXIT_SUCCESS);
 }
 
@@ -1014,6 +1032,7 @@ Q_NORETURN void QCommandLineParser::showVersion()
 Q_NORETURN void QCommandLineParser::showHelp(int exitCode)
 {
     showParserMessage(d->helpText(), UsageMessage);
+    qt_call_post_routines();
     ::exit(exitCode);
 }
 
@@ -1098,7 +1117,7 @@ QString QCommandLineParserPrivate::helpText() const
     optionNameList.reserve(commandLineOptionList.size());
     int longestOptionNameString = 0;
     for (const QCommandLineOption &option : commandLineOptionList) {
-        if (option.isHidden())
+        if (option.flags() & QCommandLineOption::HiddenFromHelp)
             continue;
         const QStringList optionNames = option.names();
         QString optionNamesString;
@@ -1117,7 +1136,7 @@ QString QCommandLineParserPrivate::helpText() const
     ++longestOptionNameString;
     auto optionNameIterator = optionNameList.cbegin();
     for (const QCommandLineOption &option : commandLineOptionList) {
-        if (option.isHidden())
+        if (option.flags() & QCommandLineOption::HiddenFromHelp)
             continue;
         text += wrapText(*optionNameIterator, longestOptionNameString, option.description());
         ++optionNameIterator;

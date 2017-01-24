@@ -1080,8 +1080,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
             painter->setPen(innerLine);
             painter->drawRoundedRect(option->rect.adjusted(1, 1, -2, -2), 1, 1);
             painter->restore();
-            return;
         }
+        break;
     case CE_SizeGrip:
         painter->save();
     {
@@ -2389,8 +2389,7 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
                     if (!titleBar->icon.isNull()) {
                         titleBar->icon.paint(painter, iconRect);
                     } else {
-                        QStyleOption tool(0);
-                        tool.palette = titleBar->palette;
+                        QStyleOption tool = *titleBar;
                         QPixmap pm = proxy()->standardIcon(SP_TitleBarMenuButton, &tool, widget).pixmap(16, 16);
                         tool.rect = iconRect;
                         painter->save();
@@ -3102,6 +3101,9 @@ int QFusionStyle::pixelMetric(PixelMetric metric, const QStyleOption *option, co
     case PM_DockWidgetTitleBarButtonMargin:
         val = 2;
         break;
+    case PM_TitleBarButtonSize:
+        val = 19;
+        break;
     case PM_MaximumDragDistance:
         return -1; // Do not dpi-scale because the value is magic
     case PM_TabCloseIndicatorWidth:
@@ -3225,18 +3227,7 @@ QSize QFusionStyle::sizeFromContents(ContentsType type, const QStyleOption *opti
         newSize += QSize(4, 4);
         break;
     case CT_MdiControls:
-        if (const QStyleOptionComplex *styleOpt = qstyleoption_cast<const QStyleOptionComplex *>(option)) {
-            int width = 0;
-            if (styleOpt->subControls & SC_MdiMinButton)
-                width += 19 + 1;
-            if (styleOpt->subControls & SC_MdiNormalButton)
-                width += 19 + 1;
-            if (styleOpt->subControls & SC_MdiCloseButton)
-                width += 19 + 1;
-            newSize = QSize(width, 19);
-        } else {
-            newSize = QSize(60, 19);
-        }
+        newSize -= QSize(1, 0);
         break;
     default:
         break;
@@ -3632,7 +3623,7 @@ int QFusionStyle::styleHint(StyleHint hint, const QStyleOption *option, const QW
     case SH_Menu_SupportsSections:
         return 1;
 
-#if defined(Q_OS_IOS)
+#if defined(QT_PLATFORM_UIKIT)
     case SH_ComboBox_UseNativePopup:
         return 1;
 #endif

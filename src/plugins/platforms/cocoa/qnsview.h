@@ -64,8 +64,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
     CGImageRef m_maskImage;
     uchar *m_maskData;
     bool m_shouldInvalidateWindowShadow;
-    QPointer<QWindow> m_window;
-    QCocoaWindow *m_platformWindow;
+    QPointer<QCocoaWindow> m_platformWindow;
     NSTrackingArea *m_trackingArea;
     Qt::MouseButtons m_buttons;
     Qt::MouseButtons m_acceptedMouseDowns;
@@ -85,15 +84,13 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
     bool m_resendKeyEvent;
     bool m_scrolling;
     bool m_updatingDrag;
-    bool m_exposedOnMoveToWindow;
     NSEvent *m_currentlyInterpretedKeyEvent;
     bool m_isMenuView;
     QSet<quint32> m_acceptedKeyDowns;
 }
 
 - (id)init;
-- (id)initWithQWindow:(QWindow *)window platformWindow:(QCocoaWindow *) platformWindow;
-- (void) clearQWindowPointers;
+- (id)initWithCocoaWindow:(QCocoaWindow *)platformWindow;
 #ifndef QT_NO_OPENGL
 - (void)setQCocoaGLContext:(QCocoaGLContext *)context;
 #endif
@@ -102,6 +99,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)setMaskRegion:(const QRegion *)region;
 - (void)invalidateWindowShadowIfNeeded;
 - (void)drawRect:(NSRect)dirtyRect;
+- (void)drawBackingStoreUsingCoreGraphics:(NSRect)dirtyRect;
 - (void)updateGeometry;
 - (void)notifyWindowStateChanged:(Qt::WindowState)newState;
 - (void)windowNotification : (NSNotification *) windowNotification;
@@ -131,7 +129,6 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)mouseMovedImpl:(NSEvent *)theEvent;
 - (void)mouseEnteredImpl:(NSEvent *)theEvent;
 - (void)mouseExitedImpl:(NSEvent *)theEvent;
-- (void)cursorUpdateImpl:(NSEvent *)theEvent;
 - (void)rightMouseDown:(NSEvent *)theEvent;
 - (void)rightMouseDragged:(NSEvent *)theEvent;
 - (void)rightMouseUp:(NSEvent *)theEvent;

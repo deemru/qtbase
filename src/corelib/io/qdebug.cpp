@@ -166,16 +166,15 @@ void QDebug::putUcs4(uint ucs4)
 {
     maybeQuote('\'');
     if (ucs4 < 0x20) {
-        stream->ts << hex << "\\x" << ucs4 << reset;
+        stream->ts << "\\x" << hex << ucs4 << reset;
     } else if (ucs4 < 0x80) {
         stream->ts << char(ucs4);
     } else {
-        stream->ts << hex << qSetPadChar(QLatin1Char('0'));
         if (ucs4 < 0x10000)
-            stream->ts << qSetFieldWidth(4) << "\\u";
+            stream->ts << "\\u" << qSetFieldWidth(4);
         else
-            stream->ts << qSetFieldWidth(8) << "\\U";
-        stream->ts << ucs4 << reset;
+            stream->ts << "\\U" << qSetFieldWidth(8);
+        stream->ts << hex << qSetPadChar(QLatin1Char('0')) << ucs4 << reset;
     }
     maybeQuote('\'');
 }
@@ -577,6 +576,22 @@ QDebug &QDebug::resetFormat()
     Writes the '\\0'-terminated string, \a s, to the stream and returns a
     reference to the stream. The string is never quoted nor transformed to the
     output, but note that some QDebug backends might not be 8-bit clean.
+*/
+
+/*!
+    \fn QDebug &QDebug::operator<<(char16_t t)
+    \since 5.5
+
+    Writes the UTF-16 character, \a t, to the stream and returns a reference
+    to the stream.
+*/
+
+/*!
+    \fn QDebug &QDebug::operator<<(char32_t t)
+    \since 5.5
+
+    Writes the UTF-32 character, \a t, to the stream and returns a reference
+    to the stream.
 */
 
 /*!

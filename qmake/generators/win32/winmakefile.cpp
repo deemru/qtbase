@@ -165,6 +165,9 @@ Win32MakefileGenerator::findLibraries(bool linkPrl, bool mergeLflags)
 
 void Win32MakefileGenerator::processVars()
 {
+    if (project->first("TEMPLATE").endsWith("aux"))
+        return;
+
     project->values("QMAKE_ORIG_TARGET") = project->values("TARGET");
     if (project->isEmpty("QMAKE_PROJECT_NAME"))
         project->values("QMAKE_PROJECT_NAME") = project->values("QMAKE_ORIG_TARGET");
@@ -290,11 +293,7 @@ void Win32MakefileGenerator::processRcFileVar()
         int rcLang = project->intValue("RC_LANG", 1033);            // default: English(USA)
         int rcCodePage = project->intValue("RC_CODEPAGE", 1200);    // default: Unicode
 
-        ts << "# if defined(UNDER_CE)\n";
-        ts << "#  include <winbase.h>\n";
-        ts << "# else\n";
-        ts << "#  include <windows.h>\n";
-        ts << "# endif\n";
+        ts << "#include <windows.h>\n";
         ts << endl;
         if (!rcIcons.isEmpty()) {
             for (int i = 0; i < rcIcons.size(); ++i)
@@ -572,16 +571,18 @@ void Win32MakefileGenerator::writeStandardParts(QTextStream &t)
     t << "####### Build rules\n\n";
     writeBuildRulesPart(t);
 
-    if(project->isActiveConfig("shared") && !project->values("DLLDESTDIR").isEmpty()) {
-        const ProStringList &dlldirs = project->values("DLLDESTDIR");
-        for (ProStringList::ConstIterator dlldir = dlldirs.begin(); dlldir != dlldirs.end(); ++dlldir) {
-            t << "\t-$(COPY_FILE) $(DESTDIR_TARGET) "
-              << escapeFilePath(Option::fixPathToTargetOS((*dlldir).toQString(), false)) << endl;
+    if (project->first("TEMPLATE") != "aux") {
+        if (project->isActiveConfig("shared") && !project->values("DLLDESTDIR").isEmpty()) {
+            const ProStringList &dlldirs = project->values("DLLDESTDIR");
+            for (ProStringList::ConstIterator dlldir = dlldirs.begin(); dlldir != dlldirs.end(); ++dlldir) {
+                t << "\t-$(COPY_FILE) $(DESTDIR_TARGET) "
+                  << escapeFilePath(Option::fixPathToTargetOS((*dlldir).toQString(), false)) << endl;
+            }
         }
-    }
-    t << endl;
+        t << endl;
 
-    writeRcFilePart(t);
+        writeRcFilePart(t);
+    }
 
     writeMakeQmake(t);
 
@@ -605,8 +606,10 @@ void Win32MakefileGenerator::writeStandardParts(QTextStream &t)
         const ProStringList &quc = project->values("QMAKE_EXTRA_COMPILERS");
         for (ProStringList::ConstIterator it = quc.begin(); it != quc.end(); ++it) {
             const ProStringList &inputs = project->values(ProKey(*it + ".input"));
-            for (ProStringList::ConstIterator input = inputs.begin(); input != inputs.end(); ++input)
-                t << escapeFilePath(*input) << ' ';
+            for (ProStringList::ConstIterator input = inputs.begin(); input != inputs.end(); ++input) {
+                const ProStringList &val = project->values((*input).toKey());
+                t << escapeFilePaths(val).join(' ') << ' ';
+            }
         }
     }
     t << endl << endl;

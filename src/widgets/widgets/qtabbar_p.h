@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qtabbar.h"
 #include "private/qwidget_p.h"
 
@@ -90,7 +91,7 @@ public:
         selectionBehaviorOnRemove(QTabBar::SelectRightTab), paintWithOffsets(true), movable(false),
         dragInProgress(false), documentMode(false), autoHide(false), changeCurrentOnDrag(false),
         switchTabCurrentIndex(-1), switchTabTimerId(0), movingTab(0)
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         , previousPressedIndex(-1)
 #endif
         {}
@@ -131,6 +132,9 @@ public:
         QWidget *rightWidget;
         int lastTab;
         int dragOffset;
+#ifndef QT_NO_ACCESSIBILITY
+        QString accessibleName;
+#endif
 
 #ifndef QT_NO_ANIMATION
         ~Tab() { delete animation; }
@@ -165,6 +169,7 @@ public:
 #endif //QT_NO_ANIMATION
     };
     QList<Tab> tabList;
+    mutable QHash<QString, QSize> textSizes;
 
     int calculateNewPosition(int from, int to, int index) const;
     void slide(int from, int to);
@@ -198,6 +203,8 @@ public:
     void autoHideTabs();
     QRect normalizedScrollRect(int index = -1);
 
+    void initBasicStyleOption(QStyleOptionTab *option, int tabIndex) const;
+
     void makeVisible(int index);
     QSize iconSize;
     Qt::TextElideMode elideMode;
@@ -221,7 +228,7 @@ public:
     int switchTabTimerId;
 
     QMovableTabWidget *movingTab;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     int previousPressedIndex;
 #endif
     // shared by tabwidget and qtabbar

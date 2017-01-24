@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qglobal.h>
 #include <QtCore/qlist.h>
@@ -74,7 +75,7 @@ public:
 private:
     SSLContextRef context;
 
-    Q_DISABLE_COPY(QSecureTransportContext);
+    Q_DISABLE_COPY(QSecureTransportContext)
 };
 
 class QSslSocketBackendPrivate : public QSslSocketPrivate
@@ -121,7 +122,7 @@ private:
 
     QSecureTransportContext context;
 
-    Q_DISABLE_COPY(QSslSocketBackendPrivate);
+    Q_DISABLE_COPY(QSslSocketBackendPrivate)
 };
 
 QT_END_NAMESPACE

@@ -44,9 +44,12 @@
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qwindowsysteminterface.h>
 
+#include <QtCore/private/qfactoryloader_p.h>
+
 #include "qiosapplicationstate.h"
-#include "qiosfileenginefactory.h"
+#ifndef Q_OS_TVOS
 #include "qiostextinputoverlay.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -70,7 +73,9 @@ public:
     QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *surface) const Q_DECL_OVERRIDE;
 
     QPlatformFontDatabase *fontDatabase() const Q_DECL_OVERRIDE;
+#ifndef QT_NO_CLIPBOARD
     QPlatformClipboard *clipboard() const Q_DECL_OVERRIDE;
+#endif
     QPlatformInputContext *inputContext() const Q_DECL_OVERRIDE;
     QPlatformServices *services() const Q_DECL_OVERRIDE;
 
@@ -83,7 +88,9 @@ public:
     QPlatformNativeInterface *nativeInterface() const Q_DECL_OVERRIDE;
 
     QTouchDevice *touchDevice();
+#ifndef QT_NO_ACCESSIBILITY
     QPlatformAccessibility *accessibility() const Q_DECL_OVERRIDE;
+#endif
 
     // Called from Objective-C class QIOSScreenTracker, which can't be friended
     void addScreen(QPlatformScreen *screen) { screenAdded(screen); }
@@ -100,16 +107,22 @@ public:
     void setDebugWindowManagement(bool);
     bool debugWindowManagement() const;
 
+    QFactoryLoader *optionalPlugins() { return m_optionalPlugins; }
+
 private:
     QPlatformFontDatabase *m_fontDatabase;
+#ifndef Q_OS_TVOS
     QPlatformClipboard *m_clipboard;
+#endif
     QPlatformInputContext *m_inputContext;
     QTouchDevice *m_touchDevice;
     QIOSApplicationState m_applicationState;
     QIOSServices *m_platformServices;
     mutable QPlatformAccessibility *m_accessibility;
-    QIOSFileEngineFactory m_fileEngineFactory;
+    QFactoryLoader *m_optionalPlugins;
+#ifndef Q_OS_TVOS
     QIOSTextInputOverlay m_textInputOverlay;
+#endif
 
     bool m_debugWindowManagement;
 };
@@ -117,4 +130,3 @@ private:
 QT_END_NAMESPACE
 
 #endif
-

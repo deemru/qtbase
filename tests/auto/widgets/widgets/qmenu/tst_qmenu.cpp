@@ -81,10 +81,9 @@ private slots:
     void overrideMenuAction();
     void statusTip();
     void widgetActionFocus();
-#ifndef Q_OS_WINCE
     void mouseActivation();
-#endif
     void tearOff();
+    void submenuTearOffDontClose();
     void layoutDirection();
 
     void task208001_stylesheet();
@@ -95,9 +94,7 @@ private slots:
     void task250673_activeMultiColumnSubMenuPosition();
     void task256918_setFont();
     void menuSizeHint();
-#ifndef Q_OS_WINCE
     void task258920_mouseBorder();
-#endif
     void setFixedWidth();
     void deleteActionInTriggered();
     void pushButtonPopulateOnAboutToShow();
@@ -292,8 +289,6 @@ void tst_QMenu::addActionsConnect()
 #endif // !QT_NO_SHORTCUT
 }
 
-// We have a separate mouseActivation test for Windows mobile
-#ifndef Q_OS_WINCE
 void tst_QMenu::mouseActivation()
 {
     QWidget topLevel;
@@ -333,7 +328,6 @@ void tst_QMenu::mouseActivation()
     QVERIFY(submenu.isVisible());
 #endif
 }
-#endif
 
 void tst_QMenu::keyboardNavigation_data()
 {
@@ -464,7 +458,7 @@ void tst_QMenu::overrideMenuAction()
 
     // On Mac and Windows CE, we need to create native key events to test menu
     // action activation, so skip this part of the test.
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+#if !defined(Q_OS_DARWIN)
     QAction *aQuit = new QAction("Quit", &w);
     aQuit->setShortcut(QKeySequence("Ctrl+X"));
     m->addAction(aQuit);
@@ -655,6 +649,51 @@ void tst_QMenu::tearOff()
 #endif // QT_NO_CURSOR
 }
 
+void tst_QMenu::submenuTearOffDontClose()
+{
+    QWidget widget;
+    QMenu *menu = new QMenu(&widget);
+    QVERIFY(!menu->isTearOffEnabled()); //default value
+    menu->setTearOffEnabled(true);
+    QVERIFY(menu->isTearOffEnabled());
+    QMenu *submenu = new QMenu(&widget);
+    submenu->addAction("aaa");
+    submenu->addAction("bbb");
+    QVERIFY(!submenu->isTearOffEnabled()); //default value
+    submenu->setTearOffEnabled(true);
+    QVERIFY(submenu->isTearOffEnabled());
+    menu->addMenu(submenu);
+
+    widget.resize(300, 200);
+    centerOnScreen(&widget);
+    widget.show();
+    widget.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+    // Show parent menu
+    menu->popup(widget.geometry().topRight() + QPoint(50, 0));
+    QVERIFY(QTest::qWaitForWindowActive(menu));
+    // Then its submenu
+    const QRect submenuRect = menu->actionGeometry(menu->actions().at(0));
+    const QPoint submenuPos(submenuRect.topLeft() + QPoint(3, 3));
+    // Move then click to avoid the submenu moves from causing it to close
+    QTest::mouseMove(menu, submenuPos, 100);
+    QTest::mouseClick(menu, Qt::LeftButton, 0, submenuPos, 100);
+    QTRY_VERIFY(QTest::qWaitForWindowActive(submenu));
+    // Make sure we enter the submenu frame directly on the tear-off area
+    QTest::mouseMove(submenu, QPoint(10, 3), 100);
+    if (submenu->style()->styleHint(QStyle::SH_Menu_SubMenuDontStartSloppyOnLeave)) {
+        qWarning("Sloppy menu timer disabled by the style: %s", qPrintable(QApplication::style()->objectName()));
+        // Submenu must get the enter event
+        QTRY_VERIFY(submenu->underMouse());
+    } else {
+        const int closeTimeout = submenu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppyCloseTimeout);
+        QTest::qWait(closeTimeout + 100);
+        // Menu must not disappear and it must get the enter event
+        QVERIFY(submenu->isVisible());
+        QVERIFY(submenu->underMouse());
+    }
+}
+
 void tst_QMenu::layoutDirection()
 {
     QMainWindow win;
@@ -716,10 +755,8 @@ void tst_QMenu::activeSubMenuPosition()
     QVERIFY(sub->pos() != QPoint(0,0));
     // well, it's enough to check the pos is not (0,0) but it's more safe
     // to check that submenu is to the right of the main menu too.
-#ifndef Q_OS_WINCE_WM
     QVERIFY(sub->pos().x() > main->pos().x());
     QCOMPARE(sub->activeAction(), subAction);
-#endif
 }
 
 // QTBUG-49588, QTBUG-48396: activeSubMenuPositionExec() is the same as
@@ -771,10 +808,8 @@ private:
 
 void tst_QMenu::activeSubMenuPositionExec()
 {
-#ifndef Q_OS_WINCE
     SubMenuPositionExecMenu menu;
     menu.exec(QGuiApplication::primaryScreen()->availableGeometry().center());
-#endif // !Q_OS_WINCE
 }
 
 void tst_QMenu::task242454_sizeHint()
@@ -908,7 +943,6 @@ public:
 };
 
 // Mouse move related signals for Windows Mobile unavailable
-#ifndef Q_OS_WINCE
 void tst_QMenu::task258920_mouseBorder()
 {
     Menu258920 menu;
@@ -937,7 +971,6 @@ void tst_QMenu::task258920_mouseBorder()
     QTRY_COMPARE(static_cast<QAction*>(0), menu.activeAction());
     QTRY_VERIFY(menu.painted);
 }
-#endif
 
 void tst_QMenu::setFixedWidth()
 {

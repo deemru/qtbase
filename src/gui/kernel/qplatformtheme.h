@@ -49,12 +49,13 @@
 // source and binary incompatible with future versions of Qt.
 //
 
-#include <QtCore/QtGlobal>
+#include <QtGui/qtguiglobal.h>
 #include <QtCore/QScopedPointer>
 #include <QtGui/QKeySequence>
 
 QT_BEGIN_NAMESPACE
 
+class QIcon;
 class QIconEngine;
 class QMenu;
 class QMenuBar;
@@ -270,7 +271,8 @@ public:
         AnimateComboUiEffect = 0x8,
         AnimateTooltipUiEffect = 0x10,
         FadeTooltipUiEffect = 0x20,
-        AnimateToolBoxUiEffect = 0x40
+        AnimateToolBoxUiEffect = 0x40,
+        HoverEffect = 0x80
     };
 
     enum IconOption {
@@ -300,12 +302,13 @@ public:
     virtual QVariant themeHint(ThemeHint hint) const;
 
     virtual QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const;
-    virtual QPixmap fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size,
-                                   QPlatformTheme::IconOptions iconOptions = 0) const;
-
+    virtual QIcon fileIcon(const QFileInfo &fileInfo,
+                           QPlatformTheme::IconOptions iconOptions = 0) const;
     virtual QIconEngine *createIconEngine(const QString &iconName) const;
 
+#ifndef QT_NO_SHORTCUT
     virtual QList<QKeySequence> keyBindings(QKeySequence::StandardKey key) const;
+#endif
 
     virtual QString standardButtonText(int button) const;
 

@@ -131,7 +131,7 @@ static bool isValidBlockSeparator(QChar ch)
         || ch == QTextEndOfFrame;
 }
 
-static bool noBlockInString(const QString &str)
+static bool noBlockInString(const QStringRef &str)
 {
     return !str.contains(QChar::ParagraphSeparator)
         && !str.contains(QTextBeginningOfFrame)
@@ -320,7 +320,7 @@ void QTextDocumentPrivate::setLayout(QAbstractTextDocumentLayout *layout)
 void QTextDocumentPrivate::insert_string(int pos, uint strPos, uint length, int format, QTextUndoCommand::Operation op)
 {
     // ##### optimize when only appending to the fragment!
-    Q_ASSERT(noBlockInString(text.mid(strPos, length)));
+    Q_ASSERT(noBlockInString(text.midRef(strPos, length)));
 
     split(pos);
     uint x = fragments.insert_single(pos, length);
@@ -476,7 +476,7 @@ void QTextDocumentPrivate::insert(int pos, const QString &str, int format)
     if (str.size() == 0)
         return;
 
-    Q_ASSERT(noBlockInString(str));
+    Q_ASSERT(noBlockInString(QStringRef(&str)));
 
     int strPos = text.length();
     text.append(str);
@@ -494,7 +494,7 @@ int QTextDocumentPrivate::remove_string(int pos, uint length, QTextUndoCommand::
 
     Q_ASSERT(blocks.size(b) > length);
     Q_ASSERT(x && fragments.position(x) == (uint)pos && fragments.size(x) == length);
-    Q_ASSERT(noBlockInString(text.mid(fragments.fragment(x)->stringPosition, length)));
+    Q_ASSERT(noBlockInString(text.midRef(fragments.fragment(x)->stringPosition, length)));
 
     blocks.setSize(b, blocks.size(b)-length);
 
@@ -629,7 +629,7 @@ void QTextDocumentPrivate::move(int pos, int to, int length, QTextUndoCommand::O
 
         if (key+1 != blocks.position(b)) {
 //          qDebug("remove_string from %d length %d", key, X->size_array[0]);
-            Q_ASSERT(noBlockInString(text.mid(X->stringPosition, X->size_array[0])));
+            Q_ASSERT(noBlockInString(text.midRef(X->stringPosition, X->size_array[0])));
             w = remove_string(key, X->size_array[0], op);
 
             if (needsInsert) {
@@ -1006,9 +1006,9 @@ int QTextDocumentPrivate::undoRedo(bool undo)
         bool inBlock = (
                 undoState > 0
                 && undoState < undoStack.size()
-                && undoStack[undoState].block_part
-                && undoStack[undoState-1].block_part
-                && !undoStack[undoState-1].block_end
+                && undoStack.at(undoState).block_part
+                && undoStack.at(undoState - 1).block_part
+                && !undoStack.at(undoState - 1).block_end
                 );
         if (!inBlock)
             break;
@@ -1074,12 +1074,14 @@ void QTextDocumentPrivate::appendUndoItem(const QTextUndoCommand &c)
 
 
     if (!undoStack.isEmpty() && modified) {
-        QTextUndoCommand &last = undoStack[undoState - 1];
+        const int lastIdx = undoState - 1;
+        const QTextUndoCommand &last = undoStack.at(lastIdx);
 
         if ( (last.block_part && c.block_part && !last.block_end) // part of the same block => can merge
-            || (!c.block_part && !last.block_part)) {  // two single undo items => can merge
-
-            if (last.tryMerge(c))
+            || (!c.block_part && !last.block_part) // two single undo items => can merge
+            || (c.command == QTextUndoCommand::Inserted && last.command == c.command && (last.block_part && !c.block_part))) {
+            // two sequential inserts that are not part of the same block => can merge
+            if (undoStack[lastIdx].tryMerge(c))
                 return;
         }
     }
@@ -1101,7 +1103,7 @@ void QTextDocumentPrivate::clearUndoRedoStacks(QTextDocument::Stacks stacksToCle
     bool redoCommandsAvailable = undoState != undoStack.size();
     if (stacksToClear == QTextDocument::UndoStack && undoCommandsAvailable) {
         for (int i = 0; i < undoState; ++i) {
-            QTextUndoCommand c = undoStack[undoState];
+            QTextUndoCommand c = undoStack.at(undoState);
             if (c.command & QTextUndoCommand::Custom)
                 delete c.custom;
         }
@@ -1113,7 +1115,7 @@ void QTextDocumentPrivate::clearUndoRedoStacks(QTextDocument::Stacks stacksToCle
     } else if (stacksToClear == QTextDocument::RedoStack
                && redoCommandsAvailable) {
         for (int i = undoState; i < undoStack.size(); ++i) {
-            QTextUndoCommand c = undoStack[i];
+            QTextUndoCommand c = undoStack.at(i);
             if (c.command & QTextUndoCommand::Custom)
                 delete c.custom;
         }
@@ -1123,7 +1125,7 @@ void QTextDocumentPrivate::clearUndoRedoStacks(QTextDocument::Stacks stacksToCle
     } else if (stacksToClear == QTextDocument::UndoAndRedoStacks
                && !undoStack.isEmpty()) {
         for (int i = 0; i < undoStack.size(); ++i) {
-            QTextUndoCommand c = undoStack[i];
+            QTextUndoCommand c = undoStack.at(i);
             if (c.command & QTextUndoCommand::Custom)
                 delete c.custom;
         }
@@ -1186,8 +1188,8 @@ void QTextDocumentPrivate::endEditBlock()
         return;
 
     if (undoEnabled && undoState > 0) {
-        const bool wasBlocking = !undoStack[undoState - 1].block_end;
-        if (undoStack[undoState - 1].block_part) {
+        const bool wasBlocking = !undoStack.at(undoState - 1).block_end;
+        if (undoStack.at(undoState - 1).block_part) {
             undoStack[undoState - 1].block_end = true;
             if (wasBlocking)
                 emit document()->undoCommandAdded();

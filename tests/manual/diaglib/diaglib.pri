@@ -2,15 +2,13 @@ INCLUDEPATH += $$PWD
 SOURCES += \
     $$PWD/textdump.cpp \
     $$PWD/eventfilter.cpp \
-    $$PWD/qwindowdump.cpp \
-    $$PWD/debugproxystyle.cpp
+    $$PWD/qwindowdump.cpp
 
 HEADERS += \
     $$PWD/textdump.h \
     $$PWD/eventfilter.h \
     $$PWD/qwindowdump.h \
-    $$PWD/nativewindowdump.h \
-    $$PWD/debugproxystyle.h
+    $$PWD/nativewindowdump.h
 
 win32 {
     SOURCES += $$PWD/nativewindowdump_win.cpp
@@ -23,17 +21,25 @@ greaterThan(QT_MAJOR_VERSION, 4) {
     QT += gui-private core-private
     contains(QT, widgets) {
         HEADERS += \
-            $$PWD/qwidgetdump.h
+            $$PWD/qwidgetdump.h \
+            $$PWD/debugproxystyle.h \
+            $$PWD/logwidget.h
 
         SOURCES += \
-            $$PWD/qwidgetdump.cpp
+            $$PWD/qwidgetdump.cpp \
+            $$PWD/debugproxystyle.cpp \
+            $$PWD/logwidget.cpp
     }
 } else {
     HEADERS += \
-        $$PWD/qwidgetdump.h
+        $$PWD/qwidgetdump.h \
+        $$PWD/debugproxystyle.h \
+        $$PWD/logwidget.h
 
     SOURCES += \
-        $$PWD/qwidgetdump.cpp
+        $$PWD/qwidgetdump.cpp \
+        $$PWD/debugproxystyle.cpp \
+        $$PWD/logwidget.cpp
 }
 
 contains(QT, opengl) {

@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qmenubar.h"
 #include "QtWidgets/qstyleoption.h"
 #include "QtCore/qdatetime.h"
@@ -67,15 +68,6 @@ QT_BEGIN_NAMESPACE
 
 class QTornOffMenu;
 class QEventLoop;
-
-#ifdef Q_OS_WINCE
-struct QWceMenuAction {
-    uint command;
-    QPointer<QAction> action;
-    HMENU menuHandle;
-    QWceMenuAction() : menuHandle(0), command(0) {}
-};
-#endif
 
 template <typename T>
 class QSetValueOnDestroy
@@ -128,8 +120,6 @@ public:
     void reset();
     bool enabled() const { return m_enabled; }
 
-    void setResetAction(QAction *action) { m_reset_action = action; }
-
     enum MouseEventResult {
         EventIsProcessed,
         EventShouldBePropagated,
@@ -154,22 +144,9 @@ public:
     }
 
     void enter();
+    void childEnter();
 
-    void childEnter()
-    {
-        stopTimer();
-        if (m_parent)
-            m_parent->childEnter();
-    }
-
-    void leave()
-    {
-        if (m_dont_start_time_on_leave)
-            return;
-        if (m_parent)
-            m_parent->childLeave();
-        startTimer();
-    }
+    void leave();
     void childLeave();
 
     static float slope(const QPointF &p1, const QPointF &p2)
@@ -195,8 +172,7 @@ public:
         if (!m_enabled)
             return EventShouldBePropagated;
 
-        if (!m_time.isActive())
-            startTimer();
+        startTimerIfNotRunning();
 
         if (!m_sub_menu) {
             reset();
@@ -300,22 +276,18 @@ public:
                       cancelAction(0),
 #endif
                       scroll(0), eventLoop(0), tearoff(0), tornoff(0), tearoffHighlighted(0),
-                      hasCheckableItems(0), doChildEffects(false), platformMenu(0)
-
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-                      ,wce_menu(0)
-#endif
+                      hasCheckableItems(0), doChildEffects(false), platformMenu(0),
+                      scrollUpTearOffItem(nullptr), scrollDownItem(nullptr)
     { }
+
     ~QMenuPrivate()
     {
         delete scroll;
         if (!platformMenu.isNull() && !platformMenu->parent())
             delete platformMenu.data();
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-        delete wce_menu;
-#endif
     }
     void init();
+    QPlatformMenu *createPlatformMenu();
     void setPlatformMenu(QPlatformMenu *menu);
     void syncPlatformMenu();
 #ifdef Q_OS_OSX
@@ -473,33 +445,25 @@ public:
 
     QPointer<QAction> actionAboutToTrigger;
 
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-    struct QWceMenuPrivate {
-        QList<QWceMenuAction*> actionItems;
-        HMENU menuHandle;
-        QWceMenuPrivate();
-        ~QWceMenuPrivate();
-        void addAction(QAction *, QWceMenuAction* =0);
-        void addAction(QWceMenuAction *, QWceMenuAction* =0);
-        void syncAction(QWceMenuAction *);
-        inline void syncAction(QAction *a) { syncAction(findAction(a)); }
-        void removeAction(QWceMenuAction *);
-        void rebuild();
-        inline void removeAction(QAction *a) { removeAction(findAction(a)); }
-        inline QWceMenuAction *findAction(QAction *a) {
-            for(int i = 0; i < actionItems.size(); i++) {
-                QWceMenuAction *act = actionItems[i];
-                if(a == act->action)
-                    return act;
-            }
-            return 0;
-        }
-    } *wce_menu;
-    HMENU wceMenu();
-    QAction* wceCommands(uint command);
-#endif
     QPointer<QWidget> noReplayFor;
-    static QPointer<QMenu> previousMouseMenu;
+
+    class ScrollerTearOffItem : public QWidget {
+    public:
+        enum Type { ScrollUp, ScrollDown };
+        ScrollerTearOffItem(Type type, QMenuPrivate *mPrivate,
+                            QWidget *parent = Q_NULLPTR, Qt::WindowFlags f = Qt::WindowFlags());
+        void paintEvent(QPaintEvent *e) Q_DECL_OVERRIDE;
+        void updateScrollerRects(const QRect &rect);
+
+    private:
+        QMenuPrivate *menuPrivate;
+        Type scrollType;
+    };
+    ScrollerTearOffItem *scrollUpTearOffItem;
+    ScrollerTearOffItem *scrollDownItem;
+
+    void drawScroller(QPainter *painter, ScrollerTearOffItem::Type type, const QRect &rect);
+    void drawTearOff(QPainter *painter, const QRect &rect);
 };
 
 #endif // QT_NO_MENU

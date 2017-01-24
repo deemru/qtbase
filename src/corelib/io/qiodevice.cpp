@@ -120,6 +120,14 @@ static void checkWarnMessage(const QIODevice *device, const char *function, cons
         } \
     } while (0)
 
+#define CHECK_MAXBYTEARRAYSIZE(function) \
+    do { \
+        if (maxSize >= MaxByteArraySize) { \
+            checkWarnMessage(this, #function, "maxSize argument exceeds QByteArray size limit"); \
+            maxSize = MaxByteArraySize - 1; \
+        } \
+    } while (0)
+
 #define CHECK_WRITABLE(function, returnType) \
    do { \
        if ((d->openMode & WriteOnly) == 0) { \
@@ -739,6 +747,18 @@ void QIODevicePrivate::setWriteChannelCount(int count)
 }
 
 /*!
+    \internal
+*/
+bool QIODevicePrivate::allWriteBuffersEmpty() const
+{
+    for (const QRingBuffer &ringBuffer : writeBuffers) {
+        if (!ringBuffer.isEmpty())
+            return false;
+    }
+    return true;
+}
+
+/*!
     Opens the device and sets its OpenMode to \a mode. Returns \c true if successful;
     otherwise returns \c false. This function should be called from any
     reimplementations of open() or other functions that open the device.
@@ -895,7 +915,7 @@ void QIODevicePrivate::seekBuffer(qint64 newPos)
     For some devices, atEnd() can return true even though there is more data
     to read. This special case only applies to devices that generate data in
     direct response to you calling read() (e.g., \c /dev or \c /proc files on
-    Unix and OS X, or console input / \c stdin on all platforms).
+    Unix and \macos, or console input / \c stdin on all platforms).
 
     \sa bytesAvailable(), read(), isSequential()
 */
@@ -1148,34 +1168,28 @@ QByteArray QIODevice::read(qint64 maxSize)
     Q_D(QIODevice);
     QByteArray result;
 
-    CHECK_MAXLEN(read, result);
-
 #if defined QIODEVICE_DEBUG
     printf("%p QIODevice::read(%lld), d->pos = %lld, d->buffer.size() = %lld\n",
            this, maxSize, d->pos, d->buffer.size());
 #endif
 
-    if (maxSize >= MaxByteArraySize) {
-        checkWarnMessage(this, "read", "maxSize argument exceeds QByteArray size limit");
-        maxSize = MaxByteArraySize - 1;
+    // Try to prevent the data from being copied, if we have a chunk
+    // with the same size in the read buffer.
+    if (maxSize == d->buffer.nextDataBlockSize() && !d->transactionStarted
+        && (d->openMode & (QIODevice::ReadOnly | QIODevice::Text)) == QIODevice::ReadOnly) {
+        result = d->buffer.read();
+        if (!d->isSequential())
+            d->pos += maxSize;
+        if (d->buffer.isEmpty())
+            readData(nullptr, 0);
+        return result;
     }
 
-    qint64 readBytes = 0;
-    if (maxSize) {
-        result.resize(int(maxSize));
-        if (!result.size()) {
-            // If resize fails, read incrementally.
-            qint64 readResult;
-            do {
-                result.resize(int(qMin(maxSize, qint64(result.size() + d->readBufferChunkSize))));
-                readResult = read(result.data() + readBytes, result.size() - readBytes);
-                if (readResult > 0 || readBytes == 0)
-                    readBytes += readResult;
-            } while (readResult == d->readBufferChunkSize);
-        } else {
-            readBytes = read(result.data(), result.size());
-        }
-    }
+    CHECK_MAXLEN(read, result);
+    CHECK_MAXBYTEARRAYSIZE(read);
+
+    result.resize(int(maxSize));
+    qint64 readBytes = read(result.data(), result.size());
 
     if (readBytes <= 0)
         result.clear();
@@ -1186,8 +1200,6 @@ QByteArray QIODevice::read(qint64 maxSize)
 }
 
 /*!
-    \overload
-
     Reads all remaining data from the device, and returns it as a
     byte array.
 
@@ -1395,16 +1407,12 @@ QByteArray QIODevice::readLine(qint64 maxSize)
     QByteArray result;
 
     CHECK_MAXLEN(readLine, result);
+    CHECK_MAXBYTEARRAYSIZE(readLine);
 
 #if defined QIODEVICE_DEBUG
     printf("%p QIODevice::readLine(%lld), d->pos = %lld, d->buffer.size() = %lld\n",
            this, maxSize, d->pos, d->buffer.size());
 #endif
-
-    if (maxSize >= MaxByteArraySize) {
-        qWarning("QIODevice::read: maxSize argument exceeds QByteArray size limit");
-        maxSize = MaxByteArraySize - 1;
-    }
 
     result.resize(int(maxSize));
     qint64 readBytes = 0;

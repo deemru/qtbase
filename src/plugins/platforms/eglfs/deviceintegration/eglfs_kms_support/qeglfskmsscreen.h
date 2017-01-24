@@ -43,7 +43,7 @@
 #define QEGLFSKMSSCREEN_H
 
 #include "qeglfskmsintegration.h"
-#include "qeglfsscreen.h"
+#include "private/qeglfsscreen_p.h"
 #include <QtCore/QList>
 #include <QtCore/QMutex>
 
@@ -74,11 +74,13 @@ class Q_EGLFS_EXPORT QEglFSKmsScreen : public QEglFSScreen
 public:
     QEglFSKmsScreen(QEglFSKmsIntegration *integration,
                     QEglFSKmsDevice *device,
-                    QEglFSKmsOutput output,
-                    QPoint position);
+                    QEglFSKmsOutput output);
     ~QEglFSKmsScreen();
 
-    QRect geometry() const Q_DECL_OVERRIDE;
+    void setVirtualPosition(const QPoint &pos);
+
+    QRect rawGeometry() const Q_DECL_OVERRIDE;
+
     int depth() const Q_DECL_OVERRIDE;
     QImage::Format format() const Q_DECL_OVERRIDE;
 

@@ -121,15 +121,18 @@ bool QXcbMime::mimeDataForAtom(QXcbConnection *connection, xcb_atom_t a, QMimeDa
         // so QXcbConnection::atomName() has to be used.
         if (atomName == QLatin1String("text/uri-list")
             && connection->atomName(a) == "text/x-moz-url") {
-            const QByteArray uri = data->split('\n').first();
-            QString mozUri = QString::fromLatin1(uri, uri.size());
-            mozUri += QLatin1Char('\n');
+            const QString mozUri = QLatin1String(data->split('\n').constFirst()) + QLatin1Char('\n');
             *data = QByteArray(reinterpret_cast<const char *>(mozUri.utf16()),
                                mozUri.length() * 2);
         } else if (atomName == QLatin1String("application/x-color"))
             *dataFormat = 16;
         ret = true;
     } else if ((a == XCB_ATOM_PIXMAP || a == XCB_ATOM_BITMAP) && mimeData->hasImage()) {
+        ret = true;
+    } else if (atomName == QLatin1String("text/plain")
+               && mimeData->hasFormat(QLatin1String("text/uri-list"))) {
+        // Return URLs also as plain text.
+        *data = QInternalMimeData::renderDataHelper(atomName, mimeData);
         ret = true;
     }
     return ret;
@@ -149,8 +152,10 @@ QVector<xcb_atom_t> QXcbMime::mimeAtomsForFormat(QXcbConnection *connection, con
     }
 
     // special cases for uris
-    if (format == QLatin1String("text/uri-list"))
+    if (format == QLatin1String("text/uri-list")) {
         atoms.append(connection->internAtom("text/x-moz-url"));
+        atoms.append(connection->internAtom("text/plain"));
+    }
 
     //special cases for images
     if (format == QLatin1String("image/ppm"))
@@ -168,7 +173,7 @@ QVariant QXcbMime::mimeConvertToFormat(QXcbConnection *connection, xcb_atom_t a,
 //    qDebug() << "mimeConvertDataToFormat" << format << atomName << data;
 
     if (!encoding.isEmpty()
-        && atomName == format + QLatin1String(";charset=") + QString::fromLatin1(encoding)) {
+        && atomName == format + QLatin1String(";charset=") + QLatin1String(encoding)) {
 
 #ifndef QT_NO_TEXTCODEC
         if (requestedType == QVariant::String) {
@@ -203,10 +208,11 @@ QVariant QXcbMime::mimeConvertToFormat(QXcbConnection *connection, xcb_atom_t a,
                   reinterpret_cast<const ushort *>(data.constData()), data.size() / 2);
             if (!str.isNull()) {
                 if (format == QLatin1String("text/uri-list")) {
-                    const QStringList urls = str.split(QLatin1Char('\n'));
+                    const auto urls = str.splitRef(QLatin1Char('\n'));
                     QList<QVariant> list;
-                    foreach (const QString &s, urls) {
-                        const QUrl url(s.trimmed());
+                    list.reserve(urls.size());
+                    for (const QStringRef &s : urls) {
+                        const QUrl url(s.trimmed().toString());
                         if (url.isValid())
                             list.append(url);
                     }
@@ -214,7 +220,7 @@ QVariant QXcbMime::mimeConvertToFormat(QXcbConnection *connection, xcb_atom_t a,
                     // The atomName variable is not used because mimeAtomToString()
                     // converts "text/x-moz-url" to "text/uri-list".
                     if (!list.isEmpty() && connection->atomName(a) == "text/x-moz-url")
-                        return list.first();
+                        return list.constFirst();
                     return list;
                 } else {
                     return str;

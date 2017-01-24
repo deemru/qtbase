@@ -38,8 +38,8 @@
 ****************************************************************************/
 
 #include "qlinuxfbscreen.h"
-#include <QtPlatformSupport/private/qfbcursor_p.h>
-#include <QtPlatformSupport/private/qfbwindow_p.h>
+#include <QtFbSupport/private/qfbcursor_p.h>
+#include <QtFbSupport/private/qfbwindow_p.h>
 #include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
 #include <QtGui/QPainter>
@@ -320,7 +320,7 @@ bool QLinuxFbScreen::initialize()
     bool doSwitchToGraphicsMode = true;
 
     // Parse arguments
-    foreach (const QString &arg, mArgs) {
+    for (const QString &arg : qAsConst(mArgs)) {
         QRegularExpressionMatch match;
         if (arg == QLatin1String("nographicsmodeswitch"))
             doSwitchToGraphicsMode = false;
@@ -412,11 +412,9 @@ QRegion QLinuxFbScreen::doRedraw()
     if (!mBlitter)
         mBlitter = new QPainter(&mFbScreenImage);
 
-    const QVector<QRect> rects = touched.rects();
     mBlitter->setCompositionMode(QPainter::CompositionMode_Source);
-
-    for (int i = 0; i < rects.size(); ++i)
-        mBlitter->drawImage(rects[i], *mScreenImage, rects[i]);
+    for (const QRect &rect : touched)
+        mBlitter->drawImage(rect, *mScreenImage, rect);
 
     return touched;
 }

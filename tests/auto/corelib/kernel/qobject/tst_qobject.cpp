@@ -66,6 +66,7 @@ private slots:
     void connectDisconnectNotify();
     void connectDisconnectNotifyPMF();
     void disconnectNotify_receiverDestroyed();
+    void disconnectNotify_metaObjConnection();
     void connectNotify_connectSlotsByName();
     void connectDisconnectNotify_shadowing();
     void emitInDefinedOrder();
@@ -129,11 +130,13 @@ private slots:
     void returnValue2_data();
     void returnValue2();
     void connectVirtualSlots();
+    void connectSlotsVMIClass();  // VMI = Virtual or Multiple Inheritance
     void connectPrivateSlots();
     void connectFunctorArgDifference();
     void connectFunctorOverloads();
     void connectFunctorQueued();
     void connectFunctorWithContext();
+    void connectFunctorWithContextUnique();
     void connectFunctorDeadlock();
     void connectStaticSlotWithObject();
     void disconnectDoesNotLeakFunctor();
@@ -144,6 +147,7 @@ private slots:
     void noDeclarativeParentChangedOnDestruction();
     void deleteLaterInAboutToBlockHandler();
     void mutableFunctor();
+    void checkArgumentsForNarrowing();
 };
 
 struct QObjectCreatedOnShutdown
@@ -921,8 +925,7 @@ void tst_QObject::connectDisconnectNotifyPMF()
 
     // Test disconnectNotify when disconnecting by QMetaObject::Connection
     QVERIFY(QObject::disconnect(conn));
-    // disconnectNotify() is not called, but it probably should be.
-    QVERIFY(s->disconnectedSignals.isEmpty());
+    QVERIFY(!s->disconnectedSignals.isEmpty());
 
     // Test connectNotify when connecting by function pointer
     s->clearNotifications();
@@ -963,6 +966,25 @@ void tst_QObject::disconnectNotify_receiverDestroyed()
     delete r;
     QCOMPARE(s->disconnectedSignals.count(), 1);
     QCOMPARE(s->disconnectedSignals.at(0), QMetaMethod::fromSignal(&QObject::destroyed));
+
+    delete s;
+}
+
+void tst_QObject::disconnectNotify_metaObjConnection()
+{
+    NotifyObject *s = new NotifyObject;
+    NotifyObject *r = new NotifyObject;
+
+    QMetaObject::Connection c = QObject::connect((SenderObject*)s, SIGNAL(signal1()),
+                                                 (ReceiverObject*)r, SLOT(slot1()));
+    QVERIFY(c);
+    QVERIFY(QObject::disconnect(c));
+
+    QCOMPARE(s->disconnectedSignals.count(), 1);
+    QCOMPARE(s->disconnectedSignals.at(0), QMetaMethod::fromSignal(&SenderObject::signal1));
+
+    delete r;
+    QCOMPARE(s->disconnectedSignals.count(), 1);
 
     delete s;
 }
@@ -1573,11 +1595,7 @@ Q_DECLARE_METATYPE(PropertyObject::Priority)
 
 void tst_QObject::threadSignalEmissionCrash()
 {
-#if defined(Q_OS_WINCE)
-    int loopCount = 100;
-#else
     int loopCount = 1000;
-#endif
     for (int i = 0; i < loopCount; ++i) {
         QTcpSocket socket;
         socket.connectToHost("localhost", 80);
@@ -5606,6 +5624,112 @@ void tst_QObject::connectVirtualSlots()
     */
 }
 
+struct VirtualBase
+{
+    int virtual_base_count;
+    VirtualBase() : virtual_base_count(0) {}
+    virtual ~VirtualBase() {}
+    virtual void slot2() = 0;
+};
+
+class ObjectWithVirtualBase : public VirtualSlotsObject, public virtual VirtualBase
+{
+    Q_OBJECT
+public:
+    ObjectWithVirtualBase() : regular_call_count(0), derived_counter2(0) {}
+    int regular_call_count;
+    int derived_counter2;
+
+public slots:
+    void regularSlot() { ++regular_call_count; }
+    virtual void slot1() { ++derived_counter2; }
+    virtual void slot2() { ++virtual_base_count; }
+};
+
+// VMI = Virtual or Multiple Inheritance
+// (in this case, both)
+void tst_QObject::connectSlotsVMIClass()
+{
+    // test connecting by the base
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        QVERIFY(QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+    }
+
+    // test connecting with the actual class
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot, Qt::UniqueConnection));
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.regular_call_count, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot));
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.regular_call_count, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        /* the C++ standard say the comparison between pointer to virtual member function is unspecified
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+        */
+    }
+
+    // test connecting a slot that is virtual from the virtual base
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 0);
+        QCOMPARE(obj.virtual_base_count, 1);
+        QCOMPARE(obj.regular_call_count, 0);
+
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 0);
+        QCOMPARE(obj.virtual_base_count, 1);
+        QCOMPARE(obj.regular_call_count, 0);
+    }
+}
+
 #ifndef QT_BUILD_INTERNAL
 void tst_QObject::connectPrivateSlots()
 {QSKIP("Needs QT_BUILD_INTERNAL");}
@@ -5890,6 +6014,22 @@ void tst_QObject::deleteLaterInAboutToBlockHandler()
     e.exec();
     QCOMPARE(statusAwake, 2);
     QCOMPARE(statusAboutToBlock, 2);
+}
+
+void tst_QObject::connectFunctorWithContextUnique()
+{
+    // Qt::UniqueConnections currently don't work for functors, but we need to
+    // be sure that they don't crash. If that is implemented, change this test.
+
+    SenderObject sender;
+    ReceiverObject receiver;
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1);
+    receiver.count_slot1 = 0;
+
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, SlotFunctor(), Qt::UniqueConnection);
+
+    sender.emitSignal1();
+    QCOMPARE(receiver.count_slot1, 1);
 }
 
 class MyFunctor
@@ -6408,6 +6548,29 @@ signals:
     CountedStruct mySignal(const CountedStruct &s1, CountedStruct s2);
 };
 
+class CountedExceptionThrower : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit CountedExceptionThrower(bool throwException, QObject *parent = Q_NULLPTR)
+        : QObject(parent)
+    {
+        if (throwException)
+            throw ObjectException();
+        ++counter;
+    }
+
+    ~CountedExceptionThrower()
+    {
+        --counter;
+    }
+
+    static int counter;
+};
+
+int CountedExceptionThrower::counter = 0;
+
 void tst_QObject::exceptions()
 {
 #ifndef QT_NO_EXCEPTIONS
@@ -6469,6 +6632,59 @@ void tst_QObject::exceptions()
     }
     QCOMPARE(countedStructObjectsCount, 0);
 
+    // Child object reaping in case of exceptions thrown by constructors
+    {
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            class ParentObject : public QObject {
+            public:
+                explicit ParentObject(QObject *parent = Q_NULLPTR)
+                    : QObject(parent)
+                {
+                    new CountedExceptionThrower(false, this);
+                    new CountedExceptionThrower(false, this);
+                    new CountedExceptionThrower(true, this); // throws
+                }
+            };
+
+            ParentObject p;
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            QObject o;
+            new CountedExceptionThrower(false, &o);
+            new CountedExceptionThrower(false, &o);
+            new CountedExceptionThrower(true, &o); // throws
+
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            QObject o;
+            CountedExceptionThrower c1(false, &o);
+            CountedExceptionThrower c2(false, &o);
+            CountedExceptionThrower c3(true, &o); // throws
+
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+    }
 
 #else
     QSKIP("Needs exceptions");
@@ -6529,6 +6745,515 @@ void tst_QObject::mutableFunctor()
     QCOMPARE(emit o.returnInt(0), 2); // each emit should increase the internal count
 
     QCOMPARE(functor.count, 0); // but the original object should have been copied at connect time
+}
+
+void tst_QObject::checkArgumentsForNarrowing()
+{
+    enum UnscopedEnum {};
+    enum SignedUnscopedEnum { SignedUnscopedEnumV1 = -1, SignedUnscopedEnumV2 = 1 };
+
+    QVERIFY(sizeof(UnscopedEnum) <= sizeof(int));
+    QVERIFY(sizeof(SignedUnscopedEnum) <= sizeof(int));
+
+    // floating point to integral
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, bool>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, bool>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, bool>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, char>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, short>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, int>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<float, long long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, long long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, long long>::value));
+
+
+    // floating point to a smaller floating point
+    if (sizeof(double) > sizeof(float)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<double, float>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, float>::value));
+    }
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<float, double>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<float, long double>::value));
+
+    if (sizeof(long double) > sizeof(double))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long double, float>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<double, long double>::value));
+
+
+    // integral to floating point
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<char, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<char, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<char, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, long double>::value));
+
+
+    // enum to floating point
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, long double>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, float>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, double>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, long double>::value));
+
+
+    // integral to smaller integral
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<bool, bool>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<char, char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<signed char, signed char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<signed char, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<signed char, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<signed char, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<signed char, long long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, unsigned char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, unsigned short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, unsigned int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, unsigned long long>::value));
+
+    if (sizeof(bool) > sizeof(char))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, unsigned char>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<bool, unsigned char>::value));
+
+    if (sizeof(bool) > sizeof(short))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, unsigned short>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<bool, unsigned short>::value));
+
+    if (sizeof(bool) > sizeof(int))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, unsigned int>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<bool, unsigned int>::value));
+
+    if (sizeof(bool) > sizeof(long))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, unsigned long>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<bool, unsigned long>::value));
+
+    if (sizeof(bool) > sizeof(long long))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<bool, unsigned long long>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<bool, unsigned long long>::value));
+
+    if (sizeof(short) > sizeof(char)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, signed char>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned short, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned short, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned short, signed char>::value));
+    }
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<short, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<short, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<short, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<short, long long>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, unsigned short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, unsigned int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, unsigned long long>::value));
+
+    if (sizeof(int) > sizeof(short)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, unsigned short>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, unsigned short>::value));
+    }
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<int, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<int, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<int, long long>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned int, unsigned int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned int, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned int, unsigned long long>::value));
+
+    if (sizeof(long) > sizeof(int)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, unsigned int>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, unsigned int>::value));
+    }
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<long, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<long, long long>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned long, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned long, unsigned long long>::value));
+
+    if (sizeof(long long) > sizeof(long)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, unsigned int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, long>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, unsigned long>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, unsigned int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, long>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, unsigned long>::value));
+    }
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<long long, long long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned long long, unsigned long long>::value));
+
+
+    // integral to integral with different signedness. smaller ones tested above
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<signed char, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<signed char, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<signed char, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<signed char, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<signed char, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned char, signed char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned char, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<short, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned short, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned short, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<int, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned int, int>::value));
+    QCOMPARE((QtPrivate::AreArgumentsNarrowedBase<unsigned int, long>::value), sizeof(int) >= sizeof(long));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<unsigned int, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long, long>::value));
+    QCOMPARE((QtPrivate::AreArgumentsNarrowedBase<unsigned long, long long>::value), sizeof(long) >= sizeof(long long));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<long long, unsigned long long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<unsigned long long, long long>::value));
+
+    // enum to smaller integral
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, UnscopedEnum>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, SignedUnscopedEnum>::value));
+
+    if (std::is_signed<typename std::underlying_type<UnscopedEnum>::type>::value) {
+        if (sizeof(UnscopedEnum) > sizeof(char))
+            QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, signed char>::value));
+        else
+            QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, signed char>::value));
+
+        if (sizeof(UnscopedEnum) > sizeof(short))
+            QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, short>::value));
+        else
+            QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, short>::value));
+
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, int>::value));
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, long>::value));
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, long long>::value));
+    } else {
+        if (sizeof(UnscopedEnum) > sizeof(bool))
+            QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, bool>::value));
+        else
+            QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, bool>::value));
+
+        if (sizeof(UnscopedEnum) > sizeof(char))
+            QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned char>::value));
+        else
+            QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned char>::value));
+
+        if (sizeof(UnscopedEnum) > sizeof(short))
+            QVERIFY((QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned short>::value));
+        else
+            QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned short>::value));
+
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned int>::value));
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned long>::value));
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<UnscopedEnum, unsigned long long>::value));
+    }
+
+    QVERIFY(std::is_signed<typename std::underlying_type<SignedUnscopedEnum>::type>::value);
+
+    if (sizeof(SignedUnscopedEnum) > sizeof(char))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, signed char>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, signed char>::value));
+
+    if (sizeof(SignedUnscopedEnum) > sizeof(short))
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, short>::value));
+    else
+        QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, short>::value));
+
+    QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, int>::value));
+    QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, long>::value));
+    QVERIFY(!(QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, long long>::value));
+
+
+    enum class ScopedEnumBackedBySChar : signed char { A };
+    enum class ScopedEnumBackedByUChar : unsigned char { A };
+    enum class ScopedEnumBackedByShort : short { A };
+    enum class ScopedEnumBackedByUShort : unsigned short { A };
+    enum class ScopedEnumBackedByInt : int { A };
+    enum class ScopedEnumBackedByUInt : unsigned int { A };
+    enum class ScopedEnumBackedByLong : long { A };
+    enum class ScopedEnumBackedByULong : unsigned long { A };
+    enum class ScopedEnumBackedByLongLong : long long { A };
+    enum class ScopedEnumBackedByULongLong : unsigned long long { A };
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, ScopedEnumBackedBySChar>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, ScopedEnumBackedByUChar>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, ScopedEnumBackedByShort>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, ScopedEnumBackedByUShort>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, ScopedEnumBackedByInt>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, ScopedEnumBackedByUInt>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, ScopedEnumBackedByLong>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, ScopedEnumBackedByULong>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, ScopedEnumBackedByLongLong>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, ScopedEnumBackedByULongLong>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, signed char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, unsigned short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, unsigned int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, long long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, unsigned long long>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, signed char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, long long>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, unsigned long long>::value));
+
+    if (sizeof(short) > sizeof(char)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, char>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, signed char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, signed char>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned char>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, unsigned char>::value));
+    }
+
+    if (sizeof(int) > sizeof(short)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, short>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned short>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, unsigned short>::value));
+    }
+
+    if (sizeof(long) > sizeof(int)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, int>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, unsigned int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned int>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, unsigned int>::value));
+    }
+
+    if (sizeof(long long) > sizeof(long)) {
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, long>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, long>::value));
+
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned long>::value));
+        QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, unsigned long>::value));
+    }
+
+    // different signedness of the underlying type
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<SignedUnscopedEnum, unsigned long long>::value));
+
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedBySChar, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByShort, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByInt, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLong, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByLongLong, unsigned long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, signed char>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUChar, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, signed char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, short>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, int>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUShort, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, signed char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, int>::value));
+    QCOMPARE((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, long>::value), sizeof(ScopedEnumBackedByUInt) >= sizeof(long));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByUInt, long long>::value));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, signed char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, long>::value));
+    QCOMPARE((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULong, long long>::value), sizeof(ScopedEnumBackedByULong) >= sizeof(long long));
+
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, signed char>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, short>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, int>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, long>::value));
+    QVERIFY((QtPrivate::AreArgumentsNarrowedBase<ScopedEnumBackedByULongLong, long long>::value));
+
+    // other types which should be always unaffected
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<void *, void *>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString, QString>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString &, QString &>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<const QString &, const QString &>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QObject, QObject>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QObject *, QObject *>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<const QObject *, const QObject *>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<std::nullptr_t, std::nullptr_t>::value));
+
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString, QObject>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString, QVariant>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString, void *>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<QString, long long>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<bool, const QObject *&>::value));
+    QVERIFY((!QtPrivate::AreArgumentsNarrowedBase<int (*)(bool), void (QObject::*)()>::value));
 }
 
 // Test for QtPrivate::HasQ_OBJECT_Macro

@@ -35,8 +35,6 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
 
-#include "../../../qtest-config.h"
-
 class tst_QDataStream : public QObject
 {
 Q_OBJECT
@@ -65,7 +63,7 @@ private slots:
     void stream_QByteArray_data();
     void stream_QByteArray();
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void stream_QCursor_data();
     void stream_QCursor();
 #endif
@@ -88,10 +86,8 @@ private slots:
     void stream_QPen_data();
     void stream_QPen();
 
-#ifndef Q_OS_WINCE
     void stream_QPixmap_data();
     void stream_QPixmap();
-#endif
 
     void stream_QPoint_data();
     void stream_QPoint();
@@ -123,10 +119,8 @@ private slots:
     void stream_qint64_data();
     void stream_qint64();
 
-#ifndef Q_OS_WINCE
     void stream_QIcon_data();
     void stream_QIcon();
-#endif
 
     void stream_QEasingCurve_data();
     void stream_QEasingCurve();
@@ -193,7 +187,7 @@ private:
     void writeQBrush(QDataStream *s);
     void writeQColor(QDataStream *s);
     void writeQByteArray(QDataStream *s);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void writeQCursor(QDataStream *s);
 #endif
     void writeQWaitCursor(QDataStream *s);
@@ -222,7 +216,7 @@ private:
     void readQBrush(QDataStream *s);
     void readQColor(QDataStream *s);
     void readQByteArray(QDataStream *s);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void readQCursor(QDataStream *s);
 #endif
     void readQDate(QDataStream *s);
@@ -1023,7 +1017,7 @@ void tst_QDataStream::readQByteArray(QDataStream *s)
 }
 
 // ************************************
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 static QCursor qCursorData(int index)
 {
     switch (index) {
@@ -1042,21 +1036,21 @@ static QCursor qCursorData(int index)
 }
 #endif
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QDataStream::stream_QCursor_data()
 {
     stream_data(9);
 }
 #endif
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QDataStream::stream_QCursor()
 {
     STREAM_IMPL(QCursor);
 }
 #endif
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QDataStream::writeQCursor(QDataStream *s)
 {
     QCursor d5(qCursorData(dataIndex(QTest::currentDataTag())));
@@ -1064,7 +1058,7 @@ void tst_QDataStream::writeQCursor(QDataStream *s)
 }
 #endif
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QDataStream::readQCursor(QDataStream *s)
 {
     QCursor test(qCursorData(dataIndex(QTest::currentDataTag())));
@@ -1203,10 +1197,11 @@ static QTime qTimeData(int index)
     case 57: return QTime(23, 59, 59, 99);
     case 58: return QTime(23, 59, 59, 100);
     case 59: return QTime(23, 59, 59, 999);
+    case 60: return QTime();
     }
     return QTime(0, 0, 0);
 }
-#define MAX_QTIME_DATA 60
+#define MAX_QTIME_DATA 61
 
 void tst_QDataStream::stream_QTime_data()
 {
@@ -1542,24 +1537,16 @@ void tst_QDataStream::readQPen(QDataStream *s)
 
 // pixmap testing is currently limited to one pixmap only.
 //
-#ifndef Q_OS_WINCE
-// Test depends on more memory than available on Qt/CE
 void tst_QDataStream::stream_QPixmap_data()
 {
     stream_data(1);
 }
-#endif
 
-#ifndef Q_OS_WINCE
-// Test depends on more memory than available on Qt/CE
 void tst_QDataStream::stream_QPixmap()
 {
     STREAM_IMPL(QPixmap);
 }
-#endif
 
-#ifndef Q_OS_WINCE
-// Test depends on more memory than available on Qt/CE
 void tst_QDataStream::stream_QIcon_data()
 {
     stream_data(1);
@@ -1569,7 +1556,6 @@ void tst_QDataStream::stream_QIcon()
 {
     STREAM_IMPL(QIcon);
 }
-#endif
 
 void tst_QDataStream::writeQPixmap(QDataStream *s)
 {
@@ -1844,7 +1830,7 @@ static QRegion qRegionData(int index)
     case 4: return QRegion(100, -100, 2048, 4096, QRegion::Rectangle);
     case 5: return QRegion(-100, 100, 4096, 2048, QRegion::Rectangle);
     case 6: return QRegion(0, 0, 0, 0, QRegion::Ellipse);
-#if (!defined(Q_OS_UNIX) && !defined(Q_OS_WINCE)) // all our Unix platforms use X regions.
+#if !defined(Q_OS_UNIX) // all our Unix platforms use X regions.
     case 7: return QRegion(1, 2, 300, 400, QRegion::Ellipse);
     case 8: return QRegion(100, 100, 1024, 768, QRegion::Ellipse);
     case 9: return QRegion(-100, -100, 1024, 1024, QRegion::Ellipse);
@@ -2496,12 +2482,10 @@ void tst_QDataStream::status_charptr_QByteArray_data()
     QTest::addColumn<int>("expectedStatus");
     QTest::addColumn<QByteArray>("expectedString");
 
-#if !defined(Q_OS_WINCE)
     QByteArray oneMbMinus1(1024 * 1024 - 1, '\0');
     for (int i = 0; i < oneMbMinus1.size(); ++i)
         oneMbMinus1[i] = 0x1 | (8 * ((uchar)i / 9));
     QByteArray threeMbMinus1 = oneMbMinus1 + 'j' + oneMbMinus1 + 'k' + oneMbMinus1;
-#endif
 
     // ok
     QTest::newRow("size 0") << QByteArray("\x00\x00\x00\x00", 4) << (int) QDataStream::Ok << QByteArray();
@@ -2510,14 +2494,12 @@ void tst_QDataStream::status_charptr_QByteArray_data()
     QTest::newRow("size 3") << QByteArray("\x00\x00\x00\x03jkl", 7) << (int) QDataStream::Ok << QByteArray("jkl");
     QTest::newRow("size 4") << QByteArray("\x00\x00\x00\x04jklm", 8) << (int) QDataStream::Ok << QByteArray("jklm");
     QTest::newRow("size 4j") << QByteArray("\x00\x00\x00\x04jklmj", 8) << (int) QDataStream::Ok << QByteArray("jklm");
-#if !defined(Q_OS_WINCE)
     QTest::newRow("size 1MB-1") << QByteArray("\x00\x0f\xff\xff", 4) + oneMbMinus1 + QByteArray("j") << (int) QDataStream::Ok << oneMbMinus1;
     QTest::newRow("size 1MB") << QByteArray("\x00\x10\x00\x00", 4) + oneMbMinus1 + QByteArray("jkl") << (int) QDataStream::Ok << oneMbMinus1 + "j";
     QTest::newRow("size 1MB+1") << QByteArray("\x00\x10\x00\x01", 4) + oneMbMinus1 + QByteArray("jkl") << (int) QDataStream::Ok << oneMbMinus1 + "jk";
     QTest::newRow("size 3MB-1") << QByteArray("\x00\x2f\xff\xff", 4) + threeMbMinus1 + QByteArray("j") << (int) QDataStream::Ok << threeMbMinus1;
     QTest::newRow("size 3MB") << QByteArray("\x00\x30\x00\x00", 4) + threeMbMinus1 + QByteArray("jkl") << (int) QDataStream::Ok << threeMbMinus1 + "j";
     QTest::newRow("size 3MB+1") << QByteArray("\x00\x30\x00\x01", 4) + threeMbMinus1 + QByteArray("jkl") << (int) QDataStream::Ok << threeMbMinus1 + "jk";
-#endif
 
     // past end
     QTest::newRow("empty") << QByteArray() << (int) QDataStream::ReadPastEnd << QByteArray();
@@ -2530,12 +2512,10 @@ void tst_QDataStream::status_charptr_QByteArray_data()
     QTest::newRow("badsize 2") << QByteArray("\x00\x00\x00\x02j", 5) << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("badsize 3") << QByteArray("\x00\x00\x00\x03jk", 6) << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("badsize 4") << QByteArray("\x00\x00\x00\x04jkl", 7) << (int) QDataStream::ReadPastEnd << QByteArray();
-#if !defined(Q_OS_WINCE)
     QTest::newRow("badsize 1MB") << QByteArray("\x00\x10\x00\x00", 4) + oneMbMinus1 << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("badsize 1MB+1") << QByteArray("\x00\x10\x00\x01", 4) + oneMbMinus1 + QByteArray("j") << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("badsize 3MB") << QByteArray("\x00\x30\x00\x00", 4) + threeMbMinus1 << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("badsize 3MB+1") << QByteArray("\x00\x30\x00\x01", 4) + threeMbMinus1 + QByteArray("j") << (int) QDataStream::ReadPastEnd << QByteArray();
-#endif
     QTest::newRow("size -1") << QByteArray("\xff\xff\xff\xff", 4) << (int) QDataStream::ReadPastEnd << QByteArray();
     QTest::newRow("size -2") << QByteArray("\xff\xff\xff\xfe", 4) << (int) QDataStream::ReadPastEnd << QByteArray();
 }
@@ -2600,7 +2580,6 @@ void tst_QDataStream::status_QString_data()
     QTest::addColumn<int>("expectedStatus");
     QTest::addColumn<QString>("expectedString");
 
-#if !defined(Q_OS_WINCE)
     QString oneMbMinus1;
     oneMbMinus1.resize(1024 * 1024 - 1);
     for (int i = 0; i < oneMbMinus1.size(); ++i)
@@ -2609,7 +2588,6 @@ void tst_QDataStream::status_QString_data()
 
     QByteArray threeMbMinus1Data = qstring2qbytearray(threeMbMinus1);
     QByteArray oneMbMinus1Data = qstring2qbytearray(oneMbMinus1);
-#endif
 
     // ok
     QTest::newRow("size 0") << QByteArray("\x00\x00\x00\x00", 4) << (int) QDataStream::Ok << QString();
@@ -2618,14 +2596,12 @@ void tst_QDataStream::status_QString_data()
     QTest::newRow("size 3") << QByteArray("\x00\x00\x00\x06\x00j\x00k\x00l", 10) << (int) QDataStream::Ok << QString("jkl");
     QTest::newRow("size 4") << QByteArray("\x00\x00\x00\x08\x00j\x00k\x00l\x00m", 12) << (int) QDataStream::Ok << QString("jklm");
     QTest::newRow("size 4j") << QByteArray("\x00\x00\x00\x08\x00j\x00k\x00l\x00mjj", 14) << (int) QDataStream::Ok << QString("jklm");
-#if !defined(Q_OS_WINCE)
     QTest::newRow("size 1MB-1") << QByteArray("\x00\x1f\xff\xfe", 4) + oneMbMinus1Data + QByteArray("jj") << (int) QDataStream::Ok << oneMbMinus1;
     QTest::newRow("size 1MB") << QByteArray("\x00\x20\x00\x00", 4) + oneMbMinus1Data + QByteArray("\x00j\x00k\x00l", 6) << (int) QDataStream::Ok << oneMbMinus1 + "j";
     QTest::newRow("size 1MB+1") << QByteArray("\x00\x20\x00\x02", 4) + oneMbMinus1Data + QByteArray("\x00j\x00k\x00l", 6) << (int) QDataStream::Ok << oneMbMinus1 + "jk";
     QTest::newRow("size 3MB-1") << QByteArray("\x00\x5f\xff\xfe", 4) + threeMbMinus1Data + QByteArray("jj") << (int) QDataStream::Ok << threeMbMinus1;
     QTest::newRow("size 3MB") << QByteArray("\x00\x60\x00\x00", 4) + threeMbMinus1Data + QByteArray("\x00j\x00k\x00l", 6) << (int) QDataStream::Ok << threeMbMinus1 + "j";
     QTest::newRow("size 3MB+1") << QByteArray("\x00\x60\x00\x02", 4) + threeMbMinus1Data + QByteArray("\x00j\x00k\x00l", 6) << (int) QDataStream::Ok << threeMbMinus1 + "jk";
-#endif
 
     // past end
     QTest::newRow("empty") << QByteArray() << (int) QDataStream::ReadPastEnd << QString();
@@ -2638,14 +2614,12 @@ void tst_QDataStream::status_QString_data()
     QTest::newRow("badsize 2") << QByteArray("\x00\x00\x00\x04jj", 6) << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("badsize 3") << QByteArray("\x00\x00\x00\x06jjkk", 8) << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("badsize 4") << QByteArray("\x00\x00\x00\x08jjkkll", 10) << (int) QDataStream::ReadPastEnd << QString();
-#if !defined(Q_OS_WINCE)
     QTest::newRow("badsize 1MB") << QByteArray("\x00\x20\x00\x00", 4) + oneMbMinus1Data << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("badsize 1MB+1") << QByteArray("\x00\x20\x00\x02", 4) + oneMbMinus1Data + QByteArray("j") << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("badsize 3MB") << QByteArray("\x00\x60\x00\x00", 4) + threeMbMinus1Data << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("badsize 3MB+1") << QByteArray("\x00\x60\x00\x02", 4) + threeMbMinus1Data + QByteArray("j") << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("size -2") << QByteArray("\xff\xff\xff\xfe", 4) << (int) QDataStream::ReadPastEnd << QString();
     QTest::newRow("size MAX") << QByteArray("\x7f\xff\xff\xfe", 4) << (int) QDataStream::ReadPastEnd << QString();
-#endif
 
     // corrupt data
     QTest::newRow("corrupt1") << QByteArray("yyyy") << (int) QDataStream::ReadCorruptData << QString();
@@ -2748,26 +2722,44 @@ void tst_QDataStream::status_QBitArray()
     QCOMPARE(str, expectedString);
 }
 
-#define MAP_TEST(byteArray, expectedStatus, expectedHash) \
-    { \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> hash; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(hash.size(), expectedHash.size()); \
-        QCOMPARE(hash, expectedHash); \
-    } \
-    { \
-        QByteArray ba = byteArray; \
-        StringMap expectedMap; \
-        StringHash::const_iterator it = expectedHash.constBegin(); \
-        for (; it != expectedHash.constEnd(); ++it) \
-            expectedMap.insert(it.key(), it.value()); \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> map; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(map.size(), expectedMap.size()); \
-        QCOMPARE(map, expectedMap); \
+#define MAP_TEST(byteArray, initialStatus, expectedStatus, expectedHash) \
+    for (bool inTransaction = false;; inTransaction = true) { \
+        { \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> hash; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(hash.size(), expectedHash.size()); \
+                QCOMPARE(hash, expectedHash); \
+            } else { \
+                QVERIFY(hash.isEmpty()); \
+            } \
+        } \
+        { \
+            QByteArray ba = byteArray; \
+            StringMap expectedMap; \
+            StringHash::const_iterator it = expectedHash.constBegin(); \
+            for (; it != expectedHash.constEnd(); ++it) \
+                expectedMap.insert(it.key(), it.value()); \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> map; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(map.size(), expectedMap.size()); \
+                QCOMPARE(map, expectedMap); \
+            } else { \
+                QVERIFY(map.isEmpty()); \
+            } \
+        } \
+        if (inTransaction) \
+            break; \
     }
 
 void tst_QDataStream::status_QHash_QMap()
@@ -2785,57 +2777,87 @@ void tst_QDataStream::status_QHash_QMap()
     hash2.insert("L", "MN");
 
     // ok
-    MAP_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::Ok, hash1);
+    MAP_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, QDataStream::Ok, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::Ok, QDataStream::Ok, hash1);
     MAP_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x02\x00J\x00\x00\x00\x02\x00K"
-                        "\x00\x00\x00\x02\x00L\x00\x00\x00\x04\x00M\x00N", 30), QDataStream::Ok, hash2);
+                        "\x00\x00\x00\x02\x00L\x00\x00\x00\x04\x00M\x00N", 30), QDataStream::Ok, QDataStream::Ok, hash2);
 
     // past end
-    MAP_TEST(QByteArray(), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00", 1), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00", 2), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray(), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00", 1), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00", 2), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
     for (int i = 4; i < 12; ++i) {
-        MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::ReadPastEnd, StringHash());
+        MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
     }
 
     // corrupt data
-    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadCorruptData, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::Ok, QDataStream::ReadCorruptData, StringHash());
     MAP_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x01\x00J\x00\x00\x00\x01\x00K"
-                        "\x00\x00\x00\x01\x00L\x00\x00\x00\x02\x00M\x00N", 30), QDataStream::ReadCorruptData, StringHash());
+                        "\x00\x00\x00\x01\x00L\x00\x00\x00\x02\x00M\x00N", 30), QDataStream::Ok, QDataStream::ReadCorruptData, StringHash());
+
+    // test the previously latched error status is not affected by reading
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, hash1);
+    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadCorruptData, QDataStream::ReadCorruptData, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, StringHash());
 }
 
-#define LIST_TEST(byteArray, expectedStatus, expectedList) \
-    { \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> list; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(list.size(), expectedList.size()); \
-        QCOMPARE(list, expectedList); \
-    } \
-    { \
-        LinkedList expectedLinkedList; \
-        for (int i = 0; i < expectedList.count(); ++i) \
-            expectedLinkedList << expectedList.at(i); \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> linkedList; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(linkedList.size(), expectedLinkedList.size()); \
-        QCOMPARE(linkedList, expectedLinkedList); \
-    } \
-    { \
-        Vector expectedVector; \
-        for (int i = 0; i < expectedList.count(); ++i) \
-            expectedVector << expectedList.at(i); \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> vector; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(vector.size(), expectedVector.size()); \
-        QCOMPARE(vector, expectedVector); \
+#define LIST_TEST(byteArray, initialStatus, expectedStatus, expectedList) \
+    for (bool inTransaction = false;; inTransaction = true) { \
+        { \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> list; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(list.size(), expectedList.size()); \
+                QCOMPARE(list, expectedList); \
+            } else { \
+                QVERIFY(list.isEmpty()); \
+            } \
+        } \
+        { \
+            LinkedList expectedLinkedList; \
+            for (int i = 0; i < expectedList.count(); ++i) \
+                expectedLinkedList << expectedList.at(i); \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> linkedList; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(linkedList.size(), expectedLinkedList.size()); \
+                QCOMPARE(linkedList, expectedLinkedList); \
+            } else { \
+                QVERIFY(linkedList.isEmpty()); \
+            } \
+        } \
+        { \
+            Vector expectedVector; \
+            for (int i = 0; i < expectedList.count(); ++i) \
+                expectedVector << expectedList.at(i); \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> vector; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(vector.size(), expectedVector.size()); \
+                QCOMPARE(vector, expectedVector); \
+            } else { \
+                QVERIFY(vector.isEmpty()); \
+            } \
+        } \
+        if (inTransaction) \
+            break; \
     }
 
 void tst_QDataStream::status_QLinkedList_QList_QVector()
@@ -2847,8 +2869,49 @@ void tst_QDataStream::status_QLinkedList_QList_QVector()
     List list;
     Vector vector;
 
-    LIST_TEST(QByteArray(), QDataStream::ReadPastEnd, List());
-    LIST_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, List());
+    // ok
+    {
+        List listWithEmptyString;
+        listWithEmptyString.append("");
+
+        List someList;
+        someList.append("J");
+        someList.append("MN");
+
+        LIST_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, QDataStream::Ok, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00", 8), QDataStream::Ok, QDataStream::Ok, listWithEmptyString);
+        LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x02\x00J"
+                             "\x00\x00\x00\x04\x00M\x00N", 18), QDataStream::Ok, QDataStream::Ok, someList);
+    }
+
+    // past end
+    {
+        LIST_TEST(QByteArray(), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00", 1), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00", 2), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        for (int i = 4; i < 12; ++i) {
+            LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        }
+    }
+
+    // corrupt data
+    {
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::Ok, QDataStream::ReadCorruptData, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x01\x00J"
+                             "\x00\x00\x00\x02\x00M\x00N", 18), QDataStream::Ok, QDataStream::ReadCorruptData, List());
+    }
+
+    // test the previously latched error status is not affected by reading
+    {
+        List listWithEmptyString;
+        listWithEmptyString.append("");
+
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, listWithEmptyString);
+        LIST_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadCorruptData, QDataStream::ReadCorruptData, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, List());
+    }
 }
 
 void tst_QDataStream::streamToAndFromQByteArray()
@@ -3081,6 +3144,30 @@ void tst_QDataStream::compatibility_Qt3()
         QCOMPARE(in_palette.brush(QPalette::Button).style(), Qt::NoBrush);
         QCOMPARE(in_palette.color(QPalette::Light), QColor(Qt::green));
     }
+    // QTime() was serialized to (0, 0, 0, 0) in Qt3, not (0xFF, 0xFF, 0xFF, 0xFF)
+    // This is because in Qt3 a null time was valid, and there was no support for deserializing a value of -1.
+    {
+        QByteArray stream;
+        {
+            QDataStream out(&stream, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_3_3);
+            out << QTime();
+        }
+        QTime in_time;
+        {
+            QDataStream in(stream);
+            in.setVersion(QDataStream::Qt_3_3);
+            in >> in_time;
+        }
+        QVERIFY(in_time.isNull());
+
+        quint32 rawValue;
+        QDataStream in(stream);
+        in.setVersion(QDataStream::Qt_3_3);
+        in >> rawValue;
+        QCOMPARE(rawValue, quint32(0));
+    }
+
 }
 
 void tst_QDataStream::compatibility_Qt2()

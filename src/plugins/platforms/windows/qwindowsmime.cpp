@@ -403,11 +403,9 @@ QDebug operator<<(QDebug d, const FORMATETC &tc)
     case CF_UNICODETEXT:
         d << "CF_UNICODETEXT";
         break;
-#ifndef Q_OS_WINCE
     case CF_ENHMETAFILE:
         d << "CF_ENHMETAFILE";
         break;
-#endif // !Q_OS_WINCE
     default:
         d << QWindowsMimeConverter::clipboardFormatName(tc.cfFormat);
         break;
@@ -698,7 +696,7 @@ QVariant QWindowsMimeText::convertToMime(const QString &mime, LPDATAOBJECT pData
         QByteArray data = getData(CF_UNICODETEXT, pDataObj);
         if (!data.isEmpty()) {
             str = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(data.constData()));
-            str.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+            str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
         } else {
             data = getData(CF_TEXT, pDataObj);
             if (!data.isEmpty()) {

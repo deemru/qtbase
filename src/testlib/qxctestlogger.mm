@@ -66,7 +66,7 @@
 
 QT_WARNING_PUSH
 // Ignore XCTestProbe deprecation
-QT_WARNING_DISABLE_GCC("-Wdeprecated-declarations")
+QT_WARNING_DISABLE_DEPRECATED
 
 // ---------------------------------------------------------
 
@@ -191,7 +191,7 @@ private:
         name:[NSString stringWithFormat:@"%@DidFinishLaunchingNotification",
                 #if defined(Q_OS_OSX)
                     @"NSApplication"
-                #elif defined(Q_OS_IOS)
+                #else
                     @"UIApplication"
                 #endif
              ]

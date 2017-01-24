@@ -46,7 +46,7 @@
 #include <QThread>
 #include <QOffscreenSurface>
 
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtEglSupport/private/qeglpbuffer_p.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformoffscreensurface.h>
@@ -79,6 +79,8 @@ Qt::ScreenOrientation QAndroidPlatformIntegration::m_orientation = Qt::PrimaryOr
 Qt::ScreenOrientation QAndroidPlatformIntegration::m_nativeOrientation = Qt::PrimaryOrientation;
 
 Qt::ApplicationState QAndroidPlatformIntegration::m_defaultApplicationState = Qt::ApplicationActive;
+
+bool QAndroidPlatformIntegration::m_showPasswordEnabled = false;
 
 void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteArray &resource)
 {
@@ -190,6 +192,19 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
                 m_touchDevice->setMaximumTouchPoints(2);
             }
             QWindowSystemInterface::registerTouchDevice(m_touchDevice);
+        }
+
+        auto contentResolver = javaActivity.callObjectMethod("getContentResolver", "()Landroid/content/ContentResolver;");
+        Q_ASSERT(contentResolver.isValid());
+        QJNIObjectPrivate txtShowPassValue = QJNIObjectPrivate::callStaticObjectMethod("android/provider/Settings$System",
+                                                                                       "getString",
+                                                                                       "(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;",
+                                                                                       contentResolver.object(),
+                                                                                       QJNIObjectPrivate::getStaticObjectField("android/provider/Settings$System", "TEXT_SHOW_PASSWORD", "Ljava/lang/String;").object());
+        if (txtShowPassValue.isValid()) {
+            bool ok = false;
+            const int txtShowPass = txtShowPassValue.toString().toInt(&ok);
+            m_showPasswordEnabled = ok ? (txtShowPass == 1) : false;
         }
     }
 
@@ -313,6 +328,9 @@ QPlatformServices *QAndroidPlatformIntegration::services() const
 QVariant QAndroidPlatformIntegration::styleHint(StyleHint hint) const
 {
     switch (hint) {
+    case PasswordMaskDelay:
+        // this number is from a hard-coded value in Android code (cf. PasswordTransformationMethod)
+        return m_showPasswordEnabled ? 1500 : 0;
     case ShowIsMaximized:
         return true;
     default:

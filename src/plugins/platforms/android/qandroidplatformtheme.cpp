@@ -368,9 +368,6 @@ QAndroidPlatformTheme::QAndroidPlatformTheme(QAndroidPlatformNativeInterface *an
 
     // default in case the style has not set a font
     m_systemFont = QFont(QLatin1String("Roboto"), 14.0 * 100 / 72); // keep default size the same after changing from 100 dpi to 72 dpi
-
-    // by default use native menu bar
-    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar, false);
 }
 
 QPlatformMenuBar *QAndroidPlatformTheme::createPlatformMenuBar() const
@@ -464,9 +461,9 @@ QVariant QAndroidPlatformTheme::themeHint(ThemeHint hint) const
     case StyleNames:
         if (qEnvironmentVariableIntValue("QT_USE_ANDROID_NATIVE_STYLE")
                 && m_androidStyleData) {
-            return QStringList("android");
+            return QStringList(QLatin1String("android"));
         }
-        return QStringList("fusion");
+        return QStringList(QLatin1String("fusion"));
 
     case MouseDoubleClickDistance:
     {
@@ -489,7 +486,7 @@ QVariant QAndroidPlatformTheme::themeHint(ThemeHint hint) const
             if (ret > 0)
                 return ret;
 
-            // fall through
+            Q_FALLTHROUGH();
     }
     default:
         return QPlatformTheme::themeHint(hint);

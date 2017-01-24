@@ -72,7 +72,7 @@
 
 #ifndef QT_NO_QOBJECT
 #if defined(Q_OS_UNIX)
-# if defined(Q_OS_OSX)
+# if defined(Q_OS_DARWIN)
 #  include "qeventdispatcher_cf_p.h"
 # else
 #  if !defined(QT_NO_GLIB)
@@ -150,7 +150,7 @@ QString QCoreApplicationPrivate::macMenuBarName()
     QString bundleName;
     CFTypeRef string = CFBundleGetValueForInfoDictionaryKey(CFBundleGetMainBundle(), CFSTR("CFBundleName"));
     if (string)
-        bundleName = QCFString::toQString(static_cast<CFStringRef>(string));
+        bundleName = QString::fromCFString(static_cast<CFStringRef>(string));
     return bundleName;
 }
 #endif
@@ -483,7 +483,7 @@ void QCoreApplicationPrivate::createEventDispatcher()
 {
     Q_Q(QCoreApplication);
 #if defined(Q_OS_UNIX)
-#  if defined(Q_OS_OSX)
+#  if defined(Q_OS_DARWIN)
     bool ok = false;
     int value = qEnvironmentVariableIntValue("QT_EVENT_DISPATCHER_CORE_FOUNDATION", &ok);
     if (ok && value > 0)
@@ -687,7 +687,7 @@ QCoreApplication::QCoreApplication(QCoreApplicationPrivate &p)
 
     If you are doing graphical changes inside a loop that does not
     return to the event loop on asynchronous window systems like X11
-    or double buffered window systems like Quartz (OS X and iOS), and you want to
+    or double buffered window systems like Quartz (\macos and iOS), and you want to
     visualize these changes immediately (e.g. Splash Screens), call
     this function.
 
@@ -1004,7 +1004,7 @@ bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
   approaches are listed below:
   \list 1
   \li Reimplementing \l {QWidget::}{paintEvent()}, \l {QWidget::}{mousePressEvent()} and so
-  on. This is the commonest, easiest, and least powerful way.
+  on. This is the most common, easiest, and least powerful way.
 
   \li Reimplementing this function. This is very powerful, providing
   complete control; but only one subclass can be active at a time.
@@ -1260,15 +1260,27 @@ int QCoreApplication::exec()
     self->d_func()->aboutToQuitEmitted = false;
     int returnCode = eventLoop.exec();
     threadData->quitNow = false;
-    if (self) {
-        self->d_func()->in_exec = false;
-        if (!self->d_func()->aboutToQuitEmitted)
-            emit self->aboutToQuit(QPrivateSignal());
-        self->d_func()->aboutToQuitEmitted = true;
-        sendPostedEvents(0, QEvent::DeferredDelete);
-    }
+
+    if (self)
+        self->d_func()->execCleanup();
 
     return returnCode;
+}
+
+
+// Cleanup after eventLoop is done executing in QCoreApplication::exec().
+// This is for use cases in which QCoreApplication is instantiated by a
+// library and not by an application executable, for example, Active X
+// servers.
+
+void QCoreApplicationPrivate::execCleanup()
+{
+    threadData->quitNow = false;
+    in_exec = false;
+    if (!aboutToQuitEmitted)
+        emit q_func()->aboutToQuit(QCoreApplication::QPrivateSignal());
+    aboutToQuitEmitted = true;
+    QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
 }
 
 
@@ -1299,19 +1311,6 @@ void QCoreApplication::exit(int returnCode)
         QEventLoop *eventLoop = data->eventLoops.at(i);
         eventLoop->exit(returnCode);
     }
-#ifdef Q_OS_WINRT
-    qWarning("QCoreApplication::exit: It is not recommended to explicitly exit an application on Windows Store Apps");
-    ComPtr<ICoreApplication> app;
-    HRESULT hr = RoGetActivationFactory(Wrappers::HString::MakeReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication).Get(),
-                                IID_PPV_ARGS(&app));
-    RETURN_VOID_IF_FAILED("Could not acquire ICoreApplication object");
-    ComPtr<ICoreApplicationExit> appExit;
-
-    hr = app.As(&appExit);
-    RETURN_VOID_IF_FAILED("Could not acquire ICoreApplicationExit object");
-    hr = appExit->Exit();
-    RETURN_VOID_IF_FAILED("Could not exit application");
-#endif // Q_OS_WINRT
 }
 
 /*****************************************************************************
@@ -2049,7 +2048,7 @@ QString QCoreApplication::translate(const char *context, const char *sourceText,
     return ret;
 }
 
-#endif //QT_NO_TRANSLATE
+#endif //QT_NO_TRANSLATION
 
 // Makes it possible to point QCoreApplication to a custom location to ensure
 // the directory is added to the patch, and qt.conf and deployed plugins are
@@ -2072,7 +2071,7 @@ void QCoreApplicationPrivate::setApplicationFilePath(const QString &path)
     directory, and you run the \c{regexp} example, this function will
     return "C:/Qt/examples/tools/regexp".
 
-    On OS X and iOS this will point to the directory actually containing
+    On \macos and iOS this will point to the directory actually containing
     the executable, which may be inside an application bundle (if the
     application is bundled).
 
@@ -2144,7 +2143,6 @@ QString QCoreApplication::applicationFilePath()
             QCoreApplicationPrivate::setApplicationFilePath(fi.canonicalFilePath());
             return *QCoreApplicationPrivate::cachedApplicationFilePath;
         }
-        return QString();
     }
 #endif
 #if defined( Q_OS_UNIX )
@@ -2190,9 +2188,8 @@ QString QCoreApplication::applicationFilePath()
         }
     }
 
-    return QString();
 #endif
-    Q_UNREACHABLE();
+    return QString();
 }
 
 /*!
@@ -2260,14 +2257,6 @@ QStringList QCoreApplication::arguments()
     // and filter out arguments that were deleted by derived application
     // classes by index.
     QString cmdline = QString::fromWCharArray(GetCommandLine());
-
-#if defined(Q_OS_WINCE)
-    wchar_t tempFilename[MAX_PATH+1];
-    if (GetModuleFileName(0, tempFilename, MAX_PATH)) {
-        tempFilename[MAX_PATH] = 0;
-        cmdline.prepend(QLatin1Char('\"') + QString::fromWCharArray(tempFilename) + QLatin1String("\" "));
-    }
-#endif // Q_OS_WINCE
 
     const QCoreApplicationPrivate *d = self->d_func();
     if (d->origArgv) {
@@ -2498,6 +2487,26 @@ QStringList QCoreApplication::libraryPaths()
                 }
             }
         }
+
+#ifdef Q_OS_DARWIN
+        // Check the main bundle's PlugIns directory as this is a standard location for Apple OSes.
+        // Note that the QLibraryInfo::PluginsPath below will coincidentally be the same as this value
+        // but with a different casing, so it can't be relied upon when the underlying filesystem
+        // is case sensitive (and this is always the case on newer OSes like iOS).
+        if (CFBundleRef bundleRef = CFBundleGetMainBundle()) {
+            if (QCFType<CFURLRef> urlRef = CFBundleCopyBuiltInPlugInsURL(bundleRef)) {
+                if (QCFType<CFURLRef> absoluteUrlRef = CFURLCopyAbsoluteURL(urlRef)) {
+                    if (QCFString path = CFURLCopyFileSystemPath(absoluteUrlRef, kCFURLPOSIXPathStyle)) {
+                        if (QFile::exists(path)) {
+                            path = QDir(path).canonicalPath();
+                            if (!app_libpaths->contains(path))
+                                app_libpaths->append(path);
+                        }
+                    }
+                }
+            }
+        }
+#endif // Q_OS_DARWIN
 
         QString installPathPlugins =  QLibraryInfo::location(QLibraryInfo::PluginsPath);
         if (QFile::exists(installPathPlugins)) {

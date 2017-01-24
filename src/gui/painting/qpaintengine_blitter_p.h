@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "private/qpaintengine_raster_p.h"
 
 #ifndef QT_NO_BLITTABLE
@@ -62,7 +63,7 @@ class QBlittable;
 
 class Q_GUI_EXPORT QBlitterPaintEngine : public QRasterPaintEngine
 {
-    Q_DECLARE_PRIVATE(QBlitterPaintEngine);
+    Q_DECLARE_PRIVATE(QBlitterPaintEngine)
 public:
     QBlitterPaintEngine(QBlittablePlatformPixmap *p);
 

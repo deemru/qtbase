@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qbytearray.h"
 
 #include <stdlib.h>
@@ -59,7 +60,7 @@ QT_BEGIN_NAMESPACE
 
 template <typename Type> class QDataBuffer
 {
-    Q_DISABLE_COPY(QDataBuffer);
+    Q_DISABLE_COPY(QDataBuffer)
 public:
     QDataBuffer(int res)
     {

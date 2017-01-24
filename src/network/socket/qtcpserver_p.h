@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Alex Trotsenko <alex1973tr@gmail.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
@@ -44,13 +45,14 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "QtNetwork/qtcpserver.h"
 #include "private/qobject_p.h"
 #include "private/qabstractsocketengine_p.h"
@@ -73,6 +75,7 @@ public:
     quint16 port;
     QHostAddress address;
 
+    QAbstractSocket::SocketType socketType;
     QAbstractSocket::SocketState state;
     QAbstractSocketEngine *socketEngine;
 

@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/private/qhighdpiscaling_p.h>
 #include <QtCore/QDebug>
 
 #include "qxcbconnection.h"
@@ -106,6 +107,7 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcQpaXInput, "qt.qpa.input")
 Q_LOGGING_CATEGORY(lcQpaXInputDevices, "qt.qpa.input.devices")
+Q_LOGGING_CATEGORY(lcQpaXInputEvents, "qt.qpa.input.events")
 Q_LOGGING_CATEGORY(lcQpaScreen, "qt.qpa.screen")
 
 // this event type was added in libxcb 1.10,
@@ -114,6 +116,7 @@ Q_LOGGING_CATEGORY(lcQpaScreen, "qt.qpa.screen")
 #define XCB_GE_GENERIC 35
 #endif
 
+#if defined(XCB_USE_XINPUT2)
 // Starting from the xcb version 1.9.3 struct xcb_ge_event_t has changed:
 // - "pad0" became "extension"
 // - "pad1" and "pad" became "pad0"
@@ -131,6 +134,7 @@ static inline bool isXIEvent(xcb_generic_event_t *event, int opCode)
     qt_xcb_ge_event_t *e = (qt_xcb_ge_event_t *)event;
     return e->extension == opCode;
 }
+#endif // XCB_USE_XINPUT2
 
 #ifdef XCB_USE_XLIB
 static const char * const xcbConnectionErrors[] = {
@@ -265,6 +269,7 @@ void QXcbConnection::updateScreens(const xcb_randr_notify_event_t *event)
                     screen = createScreen(virtualDesktop, output, outputInfo.data());
                     qCDebug(lcQpaScreen) << "output" << screen->name() << "is connected and enabled";
                 }
+                QHighDpiScaling::updateHighDpiScaling();
             }
         } else if (screen) {
             if (output.crtc == XCB_NONE && output.mode == XCB_NONE) {
@@ -597,7 +602,7 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
 
     xcb_extension_t *extensions[] = {
         &xcb_shm_id, &xcb_xfixes_id, &xcb_randr_id, &xcb_shape_id, &xcb_sync_id,
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
         &xcb_xkb_id,
 #endif
 #ifdef XCB_USE_RENDER
@@ -1067,7 +1072,7 @@ Qt::MouseButton QXcbConnection::translateMouseButton(xcb_button_t s)
     }
 }
 
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
 namespace {
     typedef union {
         /* All XKB events share these fields. */
@@ -1117,7 +1122,8 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
             // the rest we need to manage ourselves
             m_buttons = (m_buttons & ~0x7) | translateMouseButtons(ev->state);
             m_buttons |= translateMouseButton(ev->detail);
-            qCDebug(lcQpaXInput, "legacy mouse press, button %d state %X", ev->detail, static_cast<unsigned int>(m_buttons));
+            if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
+                qCDebug(lcQpaXInputEvents, "legacy mouse press, button %d state %X", ev->detail, static_cast<unsigned int>(m_buttons));
             HANDLE_PLATFORM_WINDOW_EVENT(xcb_button_press_event_t, event, handleButtonPressEvent);
         }
         case XCB_BUTTON_RELEASE: {
@@ -1125,15 +1131,17 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
             m_keyboard->updateXKBStateFromCore(ev->state);
             m_buttons = (m_buttons & ~0x7) | translateMouseButtons(ev->state);
             m_buttons &= ~translateMouseButton(ev->detail);
-            qCDebug(lcQpaXInput, "legacy mouse release, button %d state %X", ev->detail, static_cast<unsigned int>(m_buttons));
+            if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
+                qCDebug(lcQpaXInputEvents, "legacy mouse release, button %d state %X", ev->detail, static_cast<unsigned int>(m_buttons));
             HANDLE_PLATFORM_WINDOW_EVENT(xcb_button_release_event_t, event, handleButtonReleaseEvent);
         }
         case XCB_MOTION_NOTIFY: {
             xcb_motion_notify_event_t *ev = (xcb_motion_notify_event_t *)event;
             m_keyboard->updateXKBStateFromCore(ev->state);
             m_buttons = (m_buttons & ~0x7) | translateMouseButtons(ev->state);
-            qCDebug(lcQpaXInput, "legacy mouse move %d,%d button %d state %X", ev->event_x, ev->event_y,
-                    ev->detail, static_cast<unsigned int>(m_buttons));
+            if (Q_UNLIKELY(lcQpaXInputEvents().isDebugEnabled()))
+                qCDebug(lcQpaXInputEvents, "legacy mouse move %d,%d button %d state %X", ev->event_x, ev->event_y,
+                        ev->detail, static_cast<unsigned int>(m_buttons));
             HANDLE_PLATFORM_WINDOW_EVENT(xcb_motion_notify_event_t, event, handleMotionNotifyEvent);
         }
 
@@ -1250,7 +1258,7 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
                     s->handleScreenChange(change_event);
             }
             handled = true;
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
         } else if (response_type == xkb_first_event) { // https://bugs.freedesktop.org/show_bug.cgi?id=51295
             _xkb_event *xkb_event = reinterpret_cast<_xkb_event *>(event);
             if (xkb_event->any.deviceID == m_keyboard->coreDeviceId()) {
@@ -1717,11 +1725,13 @@ void QXcbConnection::processXcbEvents()
                 compressEvent(event, i, eventqueue))
             continue;
 
+#ifndef QT_NO_CLIPBOARD
         bool accepted = false;
         if (clipboard()->processIncr())
             clipboard()->incrTransactionPeeker(event, accepted);
         if (accepted)
             continue;
+#endif
 
         auto isWaitingFor = [=](PeekFunc peekFunc) {
             // These callbacks return true if the event is what they were
@@ -1769,24 +1779,6 @@ void QXcbConnection::handleClientMessageEvent(const xcb_client_message_event_t *
         return;
 
     window->handleClientMessageEvent(event);
-}
-
-xcb_generic_event_t *QXcbConnection::checkEvent(int type)
-{
-    QXcbEventArray *eventqueue = m_reader->lock();
-
-    for (int i = 0; i < eventqueue->size(); ++i) {
-        xcb_generic_event_t *event = eventqueue->at(i);
-        if (event && event->response_type == type) {
-            (*eventqueue)[i] = 0;
-            m_reader->unlock();
-            return event;
-        }
-    }
-
-    m_reader->unlock();
-
-    return 0;
 }
 
 static const char * xcb_atomnames = {
@@ -2190,7 +2182,7 @@ void QXcbConnection::initializeXShape()
 
 void QXcbConnection::initializeXKB()
 {
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     const xcb_query_extension_reply_t *reply = xcb_get_extension_data(m_connection, &xcb_xkb_id);
     if (!reply || !reply->present) {
         qWarning("Qt: XKEYBOARD extension not present on the X server.");

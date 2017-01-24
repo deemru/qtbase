@@ -238,15 +238,15 @@ QString QMimeType::name() const
 /*!
     Returns the description of the MIME type to be displayed on user interfaces.
 
-    The system language (QLocale::system().name()) is used to select the appropriate translation.
+    The default language (QLocale().name()) is used to select the appropriate translation.
  */
 QString QMimeType::comment() const
 {
     QMimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
 
     QStringList languageList;
-    languageList << QLocale::system().name();
-    languageList << QLocale::system().uiLanguages();
+    languageList << QLocale().name();
+    languageList << QLocale().uiLanguages();
     for (const QString &language : qAsConst(languageList)) {
         const QString lang = language == QLatin1String("C") ? QLatin1String("en_US") : language;
         const QString comm = d->localeComments.value(lang);
@@ -286,11 +286,12 @@ QString QMimeType::genericIconName() const
         // then the mimetype is used to generate the generic icon by using the top-level
         // media type (e.g.  "video" in "video/ogg") and appending "-x-generic"
         // (i.e. "video-x-generic" in the previous example).
-        QString group = name();
-        const int slashindex = group.indexOf(QLatin1Char('/'));
+        const QString group = name();
+        QStringRef groupRef(&group);
+        const int slashindex = groupRef.indexOf(QLatin1Char('/'));
         if (slashindex != -1)
-            group = group.left(slashindex);
-        return group + QLatin1String("-x-generic");
+            groupRef = groupRef.left(slashindex);
+        return groupRef + QLatin1String("-x-generic");
     }
     return d->genericIconName;
 }

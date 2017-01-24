@@ -75,7 +75,7 @@ class QFontconfigDatabase;
 class QFreetypeFace
 {
 public:
-    void computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing);
+    void computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing, QFixed *scalableBitmapScaleFactor);
     QFontEngine::Properties properties() const;
     bool getSfntTable(uint tag, uchar *buffer, uint *length) const;
 
@@ -96,7 +96,6 @@ public:
     FT_Face face;
     int xsize; // 26.6
     int ysize; // 26.6
-    QFixed scalableBitmapScaleFactor;
     FT_Matrix matrix;
     FT_CharMap unicode_map;
     FT_CharMap symbol_map;
@@ -210,6 +209,7 @@ private:
     int synthesized() const Q_DECL_OVERRIDE;
 
     QFixed ascent() const Q_DECL_OVERRIDE;
+    QFixed capHeight() const Q_DECL_OVERRIDE;
     QFixed descent() const Q_DECL_OVERRIDE;
     QFixed leading() const Q_DECL_OVERRIDE;
     QFixed xHeight() const Q_DECL_OVERRIDE;
@@ -272,10 +272,10 @@ private:
     inline bool isBitmapFont() const { return defaultFormat == Format_Mono; }
     inline bool isScalableBitmap() const { return freetype->isScalableBitmap(); }
 
-    inline Glyph *loadGlyph(uint glyph, QFixed subPixelPosition, GlyphFormat format = Format_None, bool fetchMetricsOnly = false) const
-    { return loadGlyph(cacheEnabled ? &defaultGlyphSet : 0, glyph, subPixelPosition, format, fetchMetricsOnly); }
-    Glyph *loadGlyph(QGlyphSet *set, uint glyph, QFixed subPixelPosition, GlyphFormat = Format_None, bool fetchMetricsOnly = false) const;
-    Glyph *loadGlyphFor(glyph_t g, QFixed subPixelPosition, GlyphFormat format, const QTransform &t, bool fetchBoundingBox = false);
+    inline Glyph *loadGlyph(uint glyph, QFixed subPixelPosition, GlyphFormat format = Format_None, bool fetchMetricsOnly = false, bool disableOutlineDrawing = false) const
+    { return loadGlyph(cacheEnabled ? &defaultGlyphSet : 0, glyph, subPixelPosition, format, fetchMetricsOnly, disableOutlineDrawing); }
+    Glyph *loadGlyph(QGlyphSet *set, uint glyph, QFixed subPixelPosition, GlyphFormat = Format_None, bool fetchMetricsOnly = false, bool disableOutlineDrawing = false) const;
+    Glyph *loadGlyphFor(glyph_t g, QFixed subPixelPosition, GlyphFormat format, const QTransform &t, bool fetchBoundingBox = false, bool disableOutlineDrawing = false);
 
     QGlyphSet *loadGlyphSet(const QTransform &matrix);
 
@@ -340,6 +340,7 @@ private:
 
     FT_Size_Metrics metrics;
     mutable bool kerning_pairs_loaded;
+    QFixed scalableBitmapScaleFactor;
 };
 
 inline uint qHash(const QFontEngineFT::GlyphAndSubPixelPosition &g)

@@ -45,12 +45,14 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
+
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "QtNetwork/qhostaddress.h"
 #include "QtNetwork/qnetworkinterface.h"
 #include "private/qabstractsocketengine_p.h"
@@ -66,21 +68,20 @@
 QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN
-#define QT_SOCKLEN_T int
-#define QT_SOCKOPTLEN_T int
+#  define QT_SOCKLEN_T int
+#  define QT_SOCKOPTLEN_T int
 
 // The following definitions are copied from the MinGW header mswsock.h which
 // was placed in the public domain. The WSASendMsg and WSARecvMsg functions
 // were introduced with Windows Vista, so some Win32 headers are lacking them.
 // There are no known versions of Windows CE or Embedded that contain them.
-#ifndef Q_OS_WINCE
 #  ifndef WSAID_WSARECVMSG
 typedef INT (WINAPI *LPFN_WSARECVMSG)(SOCKET s, LPWSAMSG lpMsg,
                                       LPDWORD lpdwNumberOfBytesRecvd,
                                       LPWSAOVERLAPPED lpOverlapped,
                                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 #    define WSAID_WSARECVMSG {0xf689d7c8,0x6f1f,0x436b,{0x8a,0x53,0xe5,0x4f,0xe3,0x51,0xc3,0x22}}
-#  endif
+#  endif // !WSAID_WSARECVMSG
 #  ifndef WSAID_WSASENDMSG
 typedef struct {
   LPWSAMSG lpMsg;
@@ -96,9 +97,8 @@ typedef INT (WSAAPI *LPFN_WSASENDMSG)(SOCKET s, LPWSAMSG lpMsg, DWORD dwFlags,
                                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 
 #    define WSAID_WSASENDMSG {0xa441e712,0x754f,0x43ca,{0x84,0xa7,0x0d,0xee,0x44,0xcf,0x60,0x6d}}
-#  endif
-#endif
-#endif
+#  endif // !WSAID_WSASENDMSG
+#endif // Q_OS_WIN
 
 union qt_sockaddr {
     sockaddr a;
@@ -157,13 +157,13 @@ public:
     bool setMulticastInterface(const QNetworkInterface &iface) Q_DECL_OVERRIDE;
 #endif
 
-    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader * = 0,
-                        PacketHeaderOptions = WantNone) Q_DECL_OVERRIDE;
-    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     bool hasPendingDatagrams() const Q_DECL_OVERRIDE;
     qint64 pendingDatagramSize() const Q_DECL_OVERRIDE;
 #endif // QT_NO_UDPSOCKET
 
+    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader * = 0,
+                        PacketHeaderOptions = WantNone) Q_DECL_OVERRIDE;
+    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     qint64 bytesToWrite() const Q_DECL_OVERRIDE;
 
     qint64 receiveBufferSize() const;
@@ -210,7 +210,7 @@ public:
 
     QSocketNotifier *readNotifier, *writeNotifier, *exceptNotifier;
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     LPFN_WSASENDMSG sendmsg;
     LPFN_WSARECVMSG recvmsg;
 #  endif

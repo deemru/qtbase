@@ -51,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtGui/qfont.h"
 #include "QtCore/qmap.h"
 #include "QtCore/qhash.h"
@@ -70,7 +71,7 @@ struct QFontDef
     inline QFontDef()
         : pointSize(-1.0), pixelSize(-1),
           styleStrategy(QFont::PreferDefault), styleHint(QFont::AnyStyle),
-          weight(50), fixedPitch(false), style(QFont::StyleNormal), stretch(100),
+          weight(50), fixedPitch(false), style(QFont::StyleNormal), stretch(QFont::AnyStretch),
           hintingPreference(QFont::PreferDefaultHinting), ignorePitch(true),
           fixedPitchComputed(0), reserved(0)
     {

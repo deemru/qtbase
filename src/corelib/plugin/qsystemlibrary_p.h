@@ -51,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtCore/private/qglobal_p.h>
 #ifdef Q_OS_WIN
 #  include <QtCore/qstring.h>
 #  include <qt_windows.h>
@@ -93,11 +93,7 @@ public:
             load();
         if (!m_handle)
             return 0;
-#ifdef Q_OS_WINCE
-        return QFunctionPointer(GetProcAddress(m_handle, (const wchar_t*)QString::fromLatin1(symbol).utf16()));
-#else
         return QFunctionPointer(GetProcAddress(m_handle, symbol));
-#endif
     }
 
     static QFunctionPointer resolve(const QString &libraryName, const char *symbol)

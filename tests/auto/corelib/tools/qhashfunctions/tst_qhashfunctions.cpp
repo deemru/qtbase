@@ -29,7 +29,6 @@
 #include <QtTest/QtTest>
 
 #include <qhash.h>
-#include <qtypetraits.h>
 
 #include <iterator>
 #include <sstream>
@@ -40,6 +39,8 @@ class tst_QHashFunctions : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void qhash();
+    void qhash_of_empty_and_null_qstring();
+    void qhash_of_empty_and_null_qbytearray();
     void fp_qhash_of_zero_is_zero();
     void qthash_data();
     void qthash();
@@ -128,6 +129,20 @@ void tst_QHashFunctions::qhash()
     }
 }
 
+void tst_QHashFunctions::qhash_of_empty_and_null_qstring()
+{
+    QString null, empty("");
+    QCOMPARE(null, empty);
+    QCOMPARE(qHash(null), qHash(empty));
+}
+
+void tst_QHashFunctions::qhash_of_empty_and_null_qbytearray()
+{
+    QByteArray null, empty("");
+    QCOMPARE(null, empty);
+    QCOMPARE(qHash(null), qHash(empty));
+}
+
 void tst_QHashFunctions::fp_qhash_of_zero_is_zero()
 {
     QCOMPARE(qHash(-0.0f), 0U);
@@ -181,7 +196,7 @@ void tst_QHashFunctions::range()
     {
         // verify that the input iterator category suffices:
         std::stringstream sstream;
-        Q_STATIC_ASSERT((QtPrivate::is_same<std::input_iterator_tag, std::istream_iterator<int>::iterator_category>::value));
+        Q_STATIC_ASSERT((std::is_same<std::input_iterator_tag, std::istream_iterator<int>::iterator_category>::value));
         std::copy(ints, ints + numInts, std::ostream_iterator<int>(sstream, " "));
         sstream.seekg(0);
         std::istream_iterator<int> it(sstream), end;

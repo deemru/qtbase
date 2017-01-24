@@ -1271,17 +1271,13 @@ static QByteArray qEncodeNtlmv2Response(const QAuthenticatorPrivate *ctx,
     if(timeArray.size()) {
         ds.writeRawData(timeArray.constData(), timeArray.size());
     } else {
-        QDateTime currentTime(QDate::currentDate(),
-                              QTime::currentTime(), Qt::UTC);
-
-        // number of seconds between 1601 and epoc(1970)
+        // number of seconds between 1601 and the epoch (1970)
         // 369 years, 89 leap years
         // ((369 * 365) + 89) * 24 * 3600 = 11644473600
-
-        time = Q_UINT64_C(currentTime.toTime_t() + 11644473600);
+        time = QDateTime::currentSecsSinceEpoch() + 11644473600;
 
         // represented as 100 nano seconds
-        time = Q_UINT64_C(time * 10000000);
+        time = time * Q_UINT64_C(10000000);
         ds << time;
     }
 
@@ -1455,15 +1451,9 @@ static bool q_NTLM_SSPI_library_load()
     if (pSecurityFunctionTable == NULL) {
         securityDLLHandle = LoadLibrary(L"secur32.dll");
         if (securityDLLHandle != NULL) {
-#if defined(Q_OS_WINCE)
-            INIT_SECURITY_INTERFACE pInitSecurityInterface =
-            (INIT_SECURITY_INTERFACE)GetProcAddress(securityDLLHandle,
-                                                    L"InitSecurityInterfaceW");
-#else
             INIT_SECURITY_INTERFACE pInitSecurityInterface =
             (INIT_SECURITY_INTERFACE)GetProcAddress(securityDLLHandle,
                                                     "InitSecurityInterfaceW");
-#endif
             if (pInitSecurityInterface != NULL)
                 pSecurityFunctionTable = pInitSecurityInterface();
         }

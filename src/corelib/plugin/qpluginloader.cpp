@@ -145,7 +145,7 @@ QPluginLoader::QPluginLoader(QObject *parent)
 
     To be loadable, the file's suffix must be a valid suffix for a
     loadable library in accordance with the platform, e.g. \c .so on
-    Unix, - \c .dylib on OS X and iOS, and \c .dll on Windows. The suffix
+    Unix, - \c .dylib on \macos and iOS, and \c .dll on Windows. The suffix
     can be verified with QLibrary::isLibrary().
 
     \sa setFileName()
@@ -154,6 +154,7 @@ QPluginLoader::QPluginLoader(const QString &fileName, QObject *parent)
     : QObject(parent), d(0), did_load(false)
 {
     setFileName(fileName);
+    setLoadHints(QLibrary::PreventUnloadHint);
 }
 
 /*!
@@ -348,7 +349,7 @@ static QString locatePlugin(const QString& fileName)
 void QPluginLoader::setFileName(const QString &fileName)
 {
 #if defined(QT_SHARED)
-    QLibrary::LoadHints lh;
+    QLibrary::LoadHints lh = QLibrary::PreventUnloadHint;
     if (d) {
         lh = d->loadHints();
         d->release();
@@ -394,7 +395,7 @@ QString QPluginLoader::errorString() const
     \brief Give the load() function some hints on how it should behave.
 
     You can give hints on how the symbols in the plugin are
-    resolved. By default, none of the hints are set.
+    resolved. By default since Qt 5.7, QLibrary::PreventUnloadHint is set.
 
     See the documentation of QLibrary::loadHints for a complete
     description of how this property works.

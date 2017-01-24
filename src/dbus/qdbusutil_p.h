@@ -52,11 +52,10 @@
 #ifndef QDBUSUTIL_P_H
 #define QDBUSUTIL_P_H
 
+#include <QtDBus/private/qtdbusglobal_p.h>
+#include <QtDBus/qdbuserror.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qvariant.h>
-
-#include <QtDBus/qdbusmacros.h>
-#include <QtDBus/qdbuserror.h>
 
 #include "qdbus_symbols_p.h"
 
@@ -64,7 +63,8 @@
 
 QT_BEGIN_NAMESPACE
 
-namespace QDBusUtil
+#define Q_DBUS_NO_EXPORT        // force findclasslist.pl looking into this namespace
+namespace Q_DBUS_NO_EXPORT QDBusUtil
 {
     Q_DBUS_EXPORT bool isValidInterfaceName(const QString &ifaceName);
 

@@ -47,7 +47,6 @@
 #include "qdatetime.h"
 #include <private/qlocale_tools_p.h>
 
-#include <private/qsystemlibrary_p.h>
 #include <qmutex.h>
 
 #ifndef QT_NO_QOBJECT
@@ -64,11 +63,9 @@
 #  include <exception>
 #endif
 
-#if !defined(Q_OS_WINCE)
-#  include <errno.h>
-#  if defined(Q_CC_MSVC)
-#    include <crtdbg.h>
-#  endif
+#include <errno.h>
+#if defined(Q_CC_MSVC)
+#  include <crtdbg.h>
 #endif
 
 #ifdef Q_OS_WINRT
@@ -573,11 +570,11 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \snippet code/src_corelib_global_qglobal.cpp 4
 
     The remaining functions are qRound() and qRound64(), which both
-    accept a \l qreal value as their argument returning the value
-    rounded up to the nearest integer and 64-bit integer respectively,
-    the qInstallMessageHandler() function which installs the given
-    QtMessageHandler, and the qVersion() function which returns the
-    version number of Qt at run-time as a string.
+    accept a \c double or \c float value as their argument returning
+    the value rounded up to the nearest integer and 64-bit integer
+    respectively, the qInstallMessageHandler() function which installs
+    the given QtMessageHandler, and the qVersion() function which
+    returns the version number of Qt at run-time as a string.
 
     \section1 Macros
 
@@ -864,24 +861,44 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     \snippet code/src_corelib_global_qglobal.cpp 10
 */
 
-/*! \fn int qRound(qreal value)
+/*! \fn int qRound(double value)
     \relates <QtGlobal>
 
     Rounds \a value to the nearest integer.
 
     Example:
 
-    \snippet code/src_corelib_global_qglobal.cpp 11
+    \snippet code/src_corelib_global_qglobal.cpp 11A
 */
 
-/*! \fn qint64 qRound64(qreal value)
+/*! \fn int qRound(float value)
+    \relates <QtGlobal>
+
+    Rounds \a value to the nearest integer.
+
+    Example:
+
+    \snippet code/src_corelib_global_qglobal.cpp 11B
+*/
+
+/*! \fn qint64 qRound64(double value)
     \relates <QtGlobal>
 
     Rounds \a value to the nearest 64-bit integer.
 
     Example:
 
-    \snippet code/src_corelib_global_qglobal.cpp 12
+    \snippet code/src_corelib_global_qglobal.cpp 12A
+*/
+
+/*! \fn qint64 qRound64(float value)
+    \relates <QtGlobal>
+
+    Rounds \a value to the nearest 64-bit integer.
+
+    Example:
+
+    \snippet code/src_corelib_global_qglobal.cpp 12B
 */
 
 /*! \fn const T &qMin(const T &value1, const T &value2)
@@ -1016,7 +1033,7 @@ Q_STATIC_ASSERT_X(QT_POINTER_SIZE == sizeof(void *), "QT_POINTER_SIZE defined in
     example, "4.1.2"). This may be a different version than the
     version the application was compiled against.
 
-    \sa QT_VERSION_STR
+    \sa QT_VERSION_STR, QLibraryInfo::version()
 */
 
 const char *qVersion() Q_DECL_NOTHROW
@@ -1054,8 +1071,8 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \endlist
 
     Some constants are defined only on certain platforms. You can use
-    the preprocessor symbols Q_OS_WIN and Q_OS_OSX to test that
-    the application is compiled under Windows or OS X.
+    the preprocessor symbols Q_OS_WIN and Q_OS_MACOS to test that
+    the application is compiled under Windows or \macos.
 
     \sa QLibraryInfo
 */
@@ -1094,7 +1111,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
 /*!
     \fn QSysInfo::MacVersion QSysInfo::macVersion()
 
-    Returns the version of Darwin (OS X or iOS) on which the
+    Returns the version of Darwin (\macos or iOS) on which the
     application is run, or MV_None if the operating system
     is not a version of Darwin.
 */
@@ -1147,21 +1164,19 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \value WV_6_3   Operating system version 6.3, corresponds to Windows 8.1, introduced in Qt 5.2
     \value WV_10_0  Operating system version 10.0, corresponds to Windows 10, introduced in Qt 5.5
 
-    CE-based versions:
-
-    \value WV_CE    Windows CE
-    \value WV_CENET Windows CE .NET
-    \value WV_CE_5  Windows CE 5.x
-    \value WV_CE_6  Windows CE 6.x
-
     The following masks can be used for testing whether a Windows
-    version is MS-DOS-based, NT-based, or CE-based:
+    version is MS-DOS-based or NT-based:
 
     \value WV_DOS_based MS-DOS-based version of Windows
     \value WV_NT_based  NT-based version of Windows
-    \value WV_CE_based  CE-based version of Windows
 
     \value WV_None Operating system other than Windows.
+
+    \omitvalue WV_CE
+    \omitvalue WV_CENET
+    \omitvalue WV_CE_5
+    \omitvalue WV_CE_6
+    \omitvalue WV_CE_based
 
     \sa MacVersion
 */
@@ -1170,23 +1185,24 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \enum QSysInfo::MacVersion
 
     This enum provides symbolic names for the various versions of the
-    Darwin operating system, covering both OS X and iOS. The
+    Darwin operating system, covering both \macos and iOS. The
     QSysInfo::MacintoshVersion variable gives the version of the
     system on which the application is run.
 
-    \value MV_9        Mac OS 9
-    \value MV_10_0     Mac OS X 10.0
-    \value MV_10_1     Mac OS X 10.1
-    \value MV_10_2     Mac OS X 10.2
-    \value MV_10_3     Mac OS X 10.3
-    \value MV_10_4     Mac OS X 10.4
-    \value MV_10_5     Mac OS X 10.5
-    \value MV_10_6     Mac OS X 10.6
-    \value MV_10_7     Mac OS X 10.7
-    \value MV_10_8     OS X 10.8
-    \value MV_10_9     OS X 10.9
-    \value MV_10_10    OS X 10.10
-    \value MV_10_11    OS X 10.11
+    \value MV_9        \macos 9
+    \value MV_10_0     \macos 10.0
+    \value MV_10_1     \macos 10.1
+    \value MV_10_2     \macos 10.2
+    \value MV_10_3     \macos 10.3
+    \value MV_10_4     \macos 10.4
+    \value MV_10_5     \macos 10.5
+    \value MV_10_6     \macos 10.6
+    \value MV_10_7     \macos 10.7
+    \value MV_10_8     \macos 10.8
+    \value MV_10_9     \macos 10.9
+    \value MV_10_10    \macos 10.10
+    \value MV_10_11    \macos 10.11
+    \value MV_10_12    \macos 10.12
     \value MV_Unknown  An unknown and currently unsupported platform
 
     \value MV_CHEETAH  Apple codename for MV_10_0
@@ -1201,6 +1217,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \value MV_MAVERICKS    Apple codename for MV_10_9
     \value MV_YOSEMITE     Apple codename for MV_10_10
     \value MV_ELCAPITAN    Apple codename for MV_10_11
+    \value MV_SIERRA       Apple codename for MV_10_12
 
     \value MV_IOS      iOS (any)
     \value MV_IOS_4_3  iOS 4.3
@@ -1216,6 +1233,22 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \value MV_IOS_8_3  iOS 8.3
     \value MV_IOS_8_4  iOS 8.4
     \value MV_IOS_9_0  iOS 9.0
+    \value MV_IOS_9_1  iOS 9.1
+    \value MV_IOS_9_2  iOS 9.2
+    \value MV_IOS_9_3  iOS 9.3
+    \value MV_IOS_10_0 iOS 10.0
+
+    \value MV_TVOS          tvOS (any)
+    \value MV_TVOS_9_0      tvOS 9.0
+    \value MV_TVOS_9_1      tvOS 9.1
+    \value MV_TVOS_9_2      tvOS 9.2
+    \value MV_TVOS_10_0     tvOS 10.0
+
+    \value MV_WATCHOS       watchOS (any)
+    \value MV_WATCHOS_2_0   watchOS 2.0
+    \value MV_WATCHOS_2_1   watchOS 2.1
+    \value MV_WATCHOS_2_2   watchOS 2.2
+    \value MV_WATCHOS_3_0   watchOS 3.0
 
     \value MV_None     Not a Darwin operating system
 
@@ -1226,14 +1259,28 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \macro Q_OS_DARWIN
     \relates <QtGlobal>
 
-    Defined on Darwin-based operating systems such as OS X, iOS, watchOS, and tvOS.
+    Defined on Darwin-based operating systems such as \macos, iOS, watchOS, and tvOS.
 */
+
+/*!
+    \macro Q_OS_MAC
+    \relates <QtGlobal>
+
+    Deprecated synonym for \c Q_OS_DARWIN. Do not use.
+ */
 
 /*!
     \macro Q_OS_OSX
     \relates <QtGlobal>
 
-    Defined on OS X.
+    Deprecated synonym for \c Q_OS_MACOS. Do not use.
+ */
+
+/*!
+    \macro Q_OS_MACOS
+    \relates <QtGlobal>
+
+    Defined on \macos.
  */
 
 /*!
@@ -1262,14 +1309,14 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \relates <QtGlobal>
 
     Defined on all supported versions of Windows. That is, if
-    \l Q_OS_WIN32, \l Q_OS_WIN64, \l Q_OS_WINCE or \l Q_OS_WINRT is defined.
+    \l Q_OS_WIN32, \l Q_OS_WIN64, or \l Q_OS_WINRT is defined.
 */
 
 /*!
     \macro Q_OS_WIN32
     \relates <QtGlobal>
 
-    Defined on 32-bit and 64-bit versions of Windows (not on Windows CE).
+    Defined on 32-bit and 64-bit versions of Windows.
 */
 
 /*!
@@ -1277,13 +1324,6 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \relates <QtGlobal>
 
     Defined on 64-bit versions of Windows.
-*/
-
-/*!
-    \macro Q_OS_WINCE
-    \relates <QtGlobal>
-
-    Defined on Windows CE.
 */
 
 /*!
@@ -1916,13 +1956,37 @@ QSysInfo::MacVersion QSysInfo::macVersion()
     return QSysInfo::MacVersion(Q_MV_OSX(version.major, version.minor));
 #elif defined(Q_OS_IOS)
     return QSysInfo::MacVersion(Q_MV_IOS(version.major, version.minor));
+#elif defined(Q_OS_TVOS)
+    return QSysInfo::MacVersion(Q_MV_TVOS(version.major, version.minor));
+#elif defined(Q_OS_WATCHOS)
+    return QSysInfo::MacVersion(Q_MV_WATCHOS(version.major, version.minor));
 #else
     return QSysInfo::MV_Unknown;
 #endif
 }
 const QSysInfo::MacVersion QSysInfo::MacintoshVersion = QSysInfo::macVersion();
 
-#elif defined(Q_OS_WIN) || defined(Q_OS_CYGWIN) || defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+#ifdef Q_OS_OSX
+static const char *osxVer_helper(QAppleOperatingSystemVersion version = qt_apple_os_version())
+{
+    if (version.major == 10) {
+        switch (version.minor) {
+        case 9:
+            return "Mavericks";
+        case 10:
+            return "Yosemite";
+        case 11:
+            return "El Capitan";
+        case 12:
+            return "Sierra";
+        }
+    }
+    // unknown, future version
+    return 0;
+}
+#endif
+
+#elif defined(Q_OS_WIN) || defined(Q_OS_CYGWIN) || defined(Q_OS_WINRT)
 
 QT_BEGIN_INCLUDE_NAMESPACE
 #include "qt_windows.h"
@@ -1975,9 +2039,7 @@ static inline OSVERSIONINFOEX determineWinOsVersion()
 {
     OSVERSIONINFOEX result = { sizeof(OSVERSIONINFOEX), 0, 0, 0, 0, {'\0'}, 0, 0, 0, 0, 0};
 
-#ifndef Q_OS_WINCE
 #define GetProcAddressA GetProcAddress
-#endif
 
     // GetModuleHandle is not supported in WinRT and linking to it at load time
     // will not pass the Windows App Certification Kit... but it exists and is functional,
@@ -2026,113 +2088,66 @@ static inline OSVERSIONINFOEX determineWinOsVersion()
 
 static OSVERSIONINFOEX winOsVersion()
 {
-    static OSVERSIONINFOEX result = determineWinOsVersion();
-    return result;
+    OSVERSIONINFOEX realResult = determineWinOsVersion();
+#ifdef QT_DEBUG
+    {
+        if (Q_UNLIKELY(qEnvironmentVariableIsSet("QT_WINVER_OVERRIDE"))) {
+            OSVERSIONINFOEX result = realResult;
+            result.dwMajorVersion = 0;
+            result.dwMinorVersion = 0;
+
+            // Erase any build number and service pack information
+            result.dwBuildNumber = 0;
+            result.szCSDVersion[0] = L'\0';
+            result.wServicePackMajor = 0;
+            result.wServicePackMinor = 0;
+
+            const QByteArray winVerOverride = qgetenv("QT_WINVER_OVERRIDE");
+            if (winVerOverride == "WINDOWS7" || winVerOverride == "2008_R2") {
+                result.dwMajorVersion = 6;
+                result.dwMinorVersion = 1;
+            } else if (winVerOverride == "WINDOWS8" || winVerOverride == "2012") {
+                result.dwMajorVersion = 6;
+                result.dwMinorVersion = 2;
+            } else if (winVerOverride == "WINDOWS8_1" || winVerOverride == "2012_R2") {
+                result.dwMajorVersion = 6;
+                result.dwMinorVersion = 3;
+            } else if (winVerOverride == "WINDOWS10" || winVerOverride == "2016") {
+                result.dwMajorVersion = 10;
+            } else {
+                return realResult;
+            }
+
+            if (winVerOverride == "2008_R2"
+                || winVerOverride == "2012"
+                || winVerOverride == "2012_R2"
+                || winVerOverride == "2016") {
+                // If the current host OS is a domain controller and the override OS
+                // is also a server type OS, preserve that information
+                if (result.wProductType == VER_NT_WORKSTATION)
+                    result.wProductType = VER_NT_SERVER;
+            } else {
+                // Any other OS must be a workstation OS type
+                result.wProductType = VER_NT_WORKSTATION;
+            }
+        }
+    }
+#endif
+    return realResult;
 }
 
 QSysInfo::WinVersion QSysInfo::windowsVersion()
 {
-#ifndef VER_PLATFORM_WIN32s
-#define VER_PLATFORM_WIN32s            0
-#endif
-#ifndef VER_PLATFORM_WIN32_WINDOWS
-#define VER_PLATFORM_WIN32_WINDOWS  1
-#endif
-#ifndef VER_PLATFORM_WIN32_NT
-#define VER_PLATFORM_WIN32_NT            2
-#endif
-#ifndef VER_PLATFORM_WIN32_CE
-#define VER_PLATFORM_WIN32_CE            3
-#endif
-
-    static QSysInfo::WinVersion winver;
-    if (winver)
-        return winver;
-    winver = QSysInfo::WV_NT;
     const OSVERSIONINFOEX osver = winOsVersion();
-    if (osver.dwMajorVersion == 0)
-        return QSysInfo::WV_None;
-#ifdef Q_OS_WINCE
-    DWORD qt_cever = 0;
-    qt_cever = osver.dwMajorVersion * 100;
-    qt_cever += osver.dwMinorVersion * 10;
-#endif
-    switch (osver.dwPlatformId) {
-    case VER_PLATFORM_WIN32s:
-        winver = QSysInfo::WV_32s;
-        break;
-    case VER_PLATFORM_WIN32_WINDOWS:
-        // We treat Windows Me (minor 90) the same as Windows 98
-        if (osver.dwMinorVersion == 90)
-            winver = QSysInfo::WV_Me;
-        else if (osver.dwMinorVersion == 10)
-            winver = QSysInfo::WV_98;
-        else
-            winver = QSysInfo::WV_95;
-        break;
-#ifdef Q_OS_WINCE
-    case VER_PLATFORM_WIN32_CE:
-        if (qt_cever >= 600)
-            winver = QSysInfo::WV_CE_6;
-        if (qt_cever >= 500)
-            winver = QSysInfo::WV_CE_5;
-        else if (qt_cever >= 400)
-            winver = QSysInfo::WV_CENET;
-        else
-            winver = QSysInfo::WV_CE;
-        break;
-#endif
-    default: // VER_PLATFORM_WIN32_NT
-        if (osver.dwMajorVersion < 5) {
-            winver = QSysInfo::WV_NT;
-        } else if (osver.dwMajorVersion == 5 && osver.dwMinorVersion == 0) {
-            winver = QSysInfo::WV_2000;
-        } else if (osver.dwMajorVersion == 5 && osver.dwMinorVersion == 1) {
-            winver = QSysInfo::WV_XP;
-        } else if (osver.dwMajorVersion == 5 && osver.dwMinorVersion == 2) {
-            winver = QSysInfo::WV_2003;
-        } else if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 0) {
-            winver = QSysInfo::WV_VISTA;
-        } else if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 1) {
-            winver = QSysInfo::WV_WINDOWS7;
-        } else if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 2) {
-            winver = QSysInfo::WV_WINDOWS8;
-        } else if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 3) {
-            winver = QSysInfo::WV_WINDOWS8_1;
-        } else if (osver.dwMajorVersion == 10 && osver.dwMinorVersion == 0) {
-            winver = QSysInfo::WV_WINDOWS10;
-        } else {
-            winver = QSysInfo::WV_NT_based;
-        }
-    }
-
-#ifdef QT_DEBUG
-    {
-        if (Q_UNLIKELY(qEnvironmentVariableIsSet("QT_WINVER_OVERRIDE"))) {
-            const QByteArray winVerOverride = qgetenv("QT_WINVER_OVERRIDE");
-            if (winVerOverride == "NT")
-                winver = QSysInfo::WV_NT;
-            else if (winVerOverride == "2000")
-                winver = QSysInfo::WV_2000;
-            else if (winVerOverride == "2003")
-                winver = QSysInfo::WV_2003;
-            else if (winVerOverride == "XP")
-                winver = QSysInfo::WV_XP;
-            else if (winVerOverride == "VISTA")
-                winver = QSysInfo::WV_VISTA;
-            else if (winVerOverride == "WINDOWS7")
-                winver = QSysInfo::WV_WINDOWS7;
-            else if (winVerOverride == "WINDOWS8")
-                winver = QSysInfo::WV_WINDOWS8;
-            else if (winVerOverride == "WINDOWS8_1")
-                winver = QSysInfo::WV_WINDOWS8_1;
-            else if (winVerOverride == "WINDOWS10")
-                winver = QSysInfo::WV_WINDOWS10;
-        }
-    }
-#endif
-
-    return winver;
+    if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 1)
+        return QSysInfo::WV_WINDOWS7;
+    if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 2)
+        return QSysInfo::WV_WINDOWS8;
+    if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 3)
+        return QSysInfo::WV_WINDOWS8_1;
+    if (osver.dwMajorVersion == 10 && osver.dwMinorVersion == 0)
+        return QSysInfo::WV_WINDOWS10;
+    return QSysInfo::WV_NT_based;
 }
 
 static QString winSp_helper()
@@ -2151,37 +2166,21 @@ static QString winSp_helper()
 
 static const char *winVer_helper()
 {
-    const bool workstation = winOsVersion().wProductType == VER_NT_WORKSTATION;
+    const OSVERSIONINFOEX osver = winOsVersion();
+    const bool workstation = osver.wProductType == VER_NT_WORKSTATION;
 
-    switch (int(QSysInfo::WindowsVersion)) {
-    case QSysInfo::WV_NT:
-        return "NT";
-    case QSysInfo::WV_2000:
-        return "2000";
-    case QSysInfo::WV_XP:
-        return "XP";
-    case QSysInfo::WV_2003:
-        return "2003";
-    case QSysInfo::WV_VISTA:
-        return workstation ? "Vista" : "Server 2008";
-    case QSysInfo::WV_WINDOWS7:
+#define Q_WINVER(major, minor) (major << 8 | minor)
+    switch (Q_WINVER(osver.dwMajorVersion, osver.dwMinorVersion)) {
+    case Q_WINVER(6, 1):
         return workstation ? "7" : "Server 2008 R2";
-    case QSysInfo::WV_WINDOWS8:
+    case Q_WINVER(6, 2):
         return workstation ? "8" : "Server 2012";
-    case QSysInfo::WV_WINDOWS8_1:
+    case Q_WINVER(6, 3):
         return workstation ? "8.1" : "Server 2012 R2";
-    case QSysInfo::WV_WINDOWS10:
+    case Q_WINVER(10, 0):
         return workstation ? "10" : "Server 2016";
-
-    case QSysInfo::WV_CE:
-        return "CE";
-    case QSysInfo::WV_CENET:
-        return "CENET";
-    case QSysInfo::WV_CE_5:
-        return "CE5";
-    case QSysInfo::WV_CE_6:
-        return "CE6";
     }
+#undef Q_WINVER
     // unknown, future version
     return 0;
 }
@@ -2438,7 +2437,7 @@ QString QSysInfo::buildCpuArchitecture()
  */
 QString QSysInfo::currentCpuArchitecture()
 {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     // We don't need to catch all the CPU architectures in this function;
     // only those where the host CPU might be different than the build target
     // (usually, 64-bit platforms).
@@ -2576,23 +2575,21 @@ static QString unknownText()
     so applications can rely on the returned value as an identifier, except
     that new OS kernel types may be added over time.
 
-    On Windows, this function returns the type of Windows kernel, like "wince"
-    or "winnt". On Unix systems, it returns the same as the output of \c{uname
+    On Windows, this function returns the type of Windows kernel, like "winnt".
+    On Unix systems, it returns the same as the output of \c{uname
     -s} (lowercased).
 
-    Note that this function may return surprising values: it returns "linux"
+    \note This function may return surprising values: it returns "linux"
     for all operating systems running Linux (including Android), "qnx" for all
     operating systems running QNX, "freebsd" for
-    Debian/kFreeBSD, and "darwin" for OS X and iOS. For information on the type
+    Debian/kFreeBSD, and "darwin" for \macos and iOS. For information on the type
     of product the application is running on, see productType().
 
     \sa QFileSelector, kernelVersion(), productType(), productVersion(), prettyProductName()
 */
 QString QSysInfo::kernelType()
 {
-#if defined(Q_OS_WINCE)
-    return QStringLiteral("wince");
-#elif defined(Q_OS_WIN)
+#if defined(Q_OS_WIN)
     return QStringLiteral("winnt");
 #elif defined(Q_OS_UNIX)
     struct utsname u;
@@ -2606,8 +2603,8 @@ QString QSysInfo::kernelType()
     \since 5.4
 
     Returns the release version of the operating system kernel. On Windows, it
-    returns the version of the NT or CE kernel. On Unix systems, including
-    Android and OS X, it returns the same as the \c{uname -r}
+    returns the version of the NT kernel. On Unix systems, including
+    Android and \macos, it returns the same as the \c{uname -r}
     command would return.
 
     If the version could not be determined, this function may return an empty
@@ -2648,16 +2645,18 @@ QString QSysInfo::kernelVersion()
     to determine the distribution name and returns that. If determining the
     distribution name failed, it returns "unknown".
 
-    \b{Darwin, OS X and iOS note}: this function returns "osx" for OS X
-    systems, "ios" for iOS systems and "darwin" in case the system could not be
-    determined.
+    \b{Darwin, \macos, iOS, tvOS, and watchOS note}: this function returns
+    "macos" for \macos systems, "ios" for iOS systems, "tvos" for tvOS systems,
+    "watchos" for watchOS systems, and "darwin" in case the system could not
+    be determined.
+
+    \b{OS X note}: this function returns "osx" for versions of \macos prior to 10.12.
 
     \b{FreeBSD note}: this function returns "debian" for Debian/kFreeBSD and
     "unknown" otherwise.
 
     \b{Windows note}: this function returns "winphone" for builds for Windows
-    Phone, "winrt" for WinRT builds, "wince" for Windows CE and Embedded
-    Compact builds, and "windows" for normal desktop builds.
+    Phone, "winrt" for WinRT builds, and "windows" for normal desktop builds.
 
     For other Unix-type systems, this function usually returns "unknown".
 
@@ -2670,8 +2669,6 @@ QString QSysInfo::productType()
     return QStringLiteral("winphone");
 #elif defined(Q_OS_WINRT)
     return QStringLiteral("winrt");
-#elif defined(Q_OS_WINCE)
-    return QStringLiteral("wince");
 #elif defined(Q_OS_WIN)
     return QStringLiteral("windows");
 
@@ -2683,8 +2680,15 @@ QString QSysInfo::productType()
 
 #elif defined(Q_OS_IOS)
     return QStringLiteral("ios");
-#elif defined(Q_OS_OSX)
-    return QStringLiteral("osx");
+#elif defined(Q_OS_TVOS)
+    return QStringLiteral("tvos");
+#elif defined(Q_OS_WATCHOS)
+    return QStringLiteral("watchos");
+#elif defined(Q_OS_MACOS)
+    const QAppleOperatingSystemVersion version = qt_apple_os_version();
+    if (version.major == 10 && version.minor < 12)
+        return QStringLiteral("osx");
+    return QStringLiteral("macos");
 #elif defined(Q_OS_DARWIN)
     return QStringLiteral("darwin");
 
@@ -2703,7 +2707,7 @@ QString QSysInfo::productType()
     Returns the product version of the operating system in string form. If the
     version could not be determined, this function returns "unknown".
 
-    It will return the Android, iOS, OS X, Windows full-product
+    It will return the Android, iOS, \macos, Windows full-product
     versions on those systems. In particular, on OS X, iOS and Windows, the
     returned string is similar to the macVersion() or windowsVersion() enums.
 
@@ -2713,9 +2717,8 @@ QString QSysInfo::productType()
 
     In all other Unix-type systems, this function always returns "unknown".
 
-    \note The version string returned from this function is only guaranteed to
-    be orderable on Android, OS X and iOS. On Windows, some Windows
-    versions are text ("XP" and "Vista", for example). On Linux, the version of
+    \note The version string returned from this function is not guaranteed to
+    be orderable. On Linux, the version of
     the distribution may jump unexpectedly, please refer to the distribution's
     documentation for versioning practices.
 
@@ -2766,50 +2769,40 @@ QString QSysInfo::prettyProductName()
 {
 #if defined(Q_OS_IOS)
     return QLatin1String("iOS ") + productVersion();
-#elif defined(Q_OS_OSX)
-    // get the known codenames
-    const char *basename = 0;
-    switch (int(MacintoshVersion)) {
-    case MV_CHEETAH:
-    case MV_PUMA:
-    case MV_JAGUAR:
-    case MV_PANTHER:
-    case MV_TIGER:
-        // This version of Qt does not run on those versions of OS X
-        // so this case label will never be reached
-        Q_UNREACHABLE();
-        break;
-    case MV_LEOPARD:
-        basename = "Mac OS X Leopard (";
-        break;
-    case MV_SNOWLEOPARD:
-        basename = "Mac OS X Snow Leopard (";
-        break;
-    case MV_LION:
-        basename = "OS X Lion (";
-        break;
-    case MV_MOUNTAINLION:
-        basename = "OS X Mountain Lion (";
-        break;
-    case MV_MAVERICKS:
-        basename = "OS X Mavericks (";
-        break;
-    case MV_YOSEMITE:
-        basename = "OS X Yosemite (";
-        break;
-    case MV_ELCAPITAN:
-        basename = "OS X El Capitan (";
-        break;
+#elif defined(Q_OS_TVOS)
+    return QLatin1String("tvOS ") + productVersion();
+#elif defined(Q_OS_WATCHOS)
+    return QLatin1String("watchOS ") + productVersion();
+#elif defined(Q_OS_MACOS)
+    const QAppleOperatingSystemVersion version = qt_apple_os_version();
+    const char *name = osxVer_helper(version);
+    if (name) {
+        return (version.major == 10 && version.minor < 12
+                ? QLatin1String("OS X ")
+                : QLatin1String("macOS "))
+            + QLatin1String(name)
+            + QLatin1String(" (") + QString::number(version.major)
+            + QLatin1Char('.') + QString::number(version.minor)
+            + QLatin1Char(')');
+    } else {
+        return QLatin1String("macOS ")
+            + QString::number(version.major) + QLatin1Char('.')
+            + QString::number(version.minor);
     }
-    if (basename)
-        return QLatin1String(basename) + productVersion() + QLatin1Char(')');
-
-    // a future version of OS X
-    return QLatin1String("OS X ") + productVersion();
 #elif defined(Q_OS_WINPHONE)
     return QLatin1String("Windows Phone ") + QLatin1String(winVer_helper());
 #elif defined(Q_OS_WIN)
-    return QLatin1String("Windows ") + QLatin1String(winVer_helper()) + winSp_helper();
+    const char *name = winVer_helper();
+    const OSVERSIONINFOEX osver = winOsVersion();
+    if (name)
+        return QLatin1String("Windows ") + QLatin1String(name) + winSp_helper()
+            + QLatin1String(" (") + QString::number(osver.dwMajorVersion)
+            + QLatin1Char('.') + QString::number(osver.dwMinorVersion)
+            + QLatin1Char(')');
+    else
+        return QLatin1String("Windows ")
+            + QString::number(osver.dwMajorVersion) + QLatin1Char('.')
+            + QString::number(osver.dwMinorVersion);
 #elif defined(Q_OS_ANDROID)
     return QLatin1String("Android ") + productVersion();
 #elif defined(Q_OS_HAIKU)
@@ -2973,6 +2966,20 @@ QString QSysInfo::machineHostName()
     In debug builds the condition is enforced by an assert to facilitate debugging.
 
     \sa Q_ASSERT(), Q_ASSUME(), qFatal()
+*/
+
+/*!
+    \macro void Q_FALLTHROUGH()
+    \relates <QtGlobal>
+    \since 5.8
+
+    Can be used in switch statements at the end of case block to tell the compiler
+    and other developers that that the lack of a break statement is intentional.
+
+    This is useful since a missing break statement is often a bug, and some
+    compilers can be configured to emit warnings when one is not found.
+
+    \sa Q_UNREACHABLE()
 */
 
 /*!
@@ -3440,7 +3447,7 @@ Q_GLOBAL_STATIC(AndroidRandomStorage, randomTLS)
     pseudo random integers to be returned by qrand().
 
     The sequence of random numbers generated is deterministic per thread. For example,
-    if two threads call qsrand(1) and subsequently calls qrand(), the threads will get
+    if two threads call qsrand(1) and subsequently call qrand(), the threads will get
     the same random number sequence.
 
     \sa qrand()
@@ -4250,8 +4257,10 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
  Compares the floating point value \a p1 and \a p2 and
  returns \c true if they are considered equal, otherwise \c false.
 
- Note that comparing values where either \a p1 or \a p2 is 0.0 will not work.
- The solution to this is to compare against values greater than or equal to 1.0.
+ Note that comparing values where either \a p1 or \a p2 is 0.0 will not work,
+ nor does comparing values where one of the values is NaN or infinity.
+ If one of the values is always 0.0, use qFuzzyIsNull instead. If one of the
+ values is likely to be 0.0, one solution is to add 1.0 to both values.
 
  \snippet code/src_corelib_global_qglobal.cpp 46
 
@@ -4271,6 +4280,24 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
  The two numbers are compared in a relative way, where the
  exactness is stronger the smaller the numbers are.
  */
+
+/*!
+ \fn bool qFuzzyIsNull(double d)
+ \relates <QtGlobal>
+ \since 4.4
+ \threadsafe
+
+ Returns true if the absolute value of \a d is within 0.000000000001 of 0.0.
+*/
+
+/*!
+ \fn bool qFuzzyIsNull(float f)
+ \relates <QtGlobal>
+ \since 4.4
+ \threadsafe
+
+ Returns true if the absolute value of \a f is within 0.00001f of 0.0.
+*/
 
 /*!
     \macro QT_REQUIRE_VERSION(int argc, char **argv, const char *version)
@@ -4487,7 +4514,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     On QNX the message is sent to slogger2
 
     If you are using the \b{default message handler} this function will
-    abort on Unix systems to create a core dump. On Windows, for debug builds,
+    abort to create a core dump. On Windows, for debug builds,
     this function will report a _CRT_ERROR enabling you to connect a debugger
     to the application.
 

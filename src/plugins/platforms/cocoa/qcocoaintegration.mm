@@ -58,6 +58,8 @@
 #include <qpa/qplatforminputcontextfactory_p.h>
 #include <QtCore/qcoreapplication.h>
 
+#include <QtGui/private/qcoregraphics_p.h>
+
 #include <IOKit/graphics/IOGraphicsLib.h>
 
 static void initResources()
@@ -199,8 +201,6 @@ QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
     return window;
 }
 
-extern CGContextRef qt_mac_cg_context(const QPaintDevice *pdev);
-
 QPixmap QCocoaScreen::grabWindow(WId window, int x, int y, int width, int height) const
 {
     // TODO window should be handled
@@ -251,9 +251,8 @@ QPixmap QCocoaScreen::grabWindow(WId window, int x, int y, int width, int height
         QPixmap pix(w, h);
         pix.fill(Qt::transparent);
         CGRect rect = CGRectMake(0, 0, w, h);
-        CGContextRef ctx = qt_mac_cg_context(&pix);
+        QMacCGContext ctx(&pix);
         qt_mac_drawCGImage(ctx, &rect, image);
-        CGContextRelease(ctx);
 
         QPainter painter(&windowPixmap);
         painter.drawPixmap(0, 0, pix);
@@ -283,7 +282,9 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 #ifndef QT_NO_ACCESSIBILITY
     , mAccessibility(new QCocoaAccessibility)
 #endif
+#ifndef QT_NO_CLIPBOARD
     , mCocoaClipboard(new QCocoaClipboard)
+#endif
     , mCocoaDrag(new QCocoaDrag)
     , mNativeInterface(new QCocoaNativeInterface)
     , mServices(new QCocoaServices)
@@ -299,8 +300,6 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
 
     initResources();
     QMacAutoReleasePool pool;
-
-    qApp->setAttribute(Qt::AA_DontUseNativeMenuBar, false);
 
     NSApplication *cocoaApplication = [QNSApplication sharedApplication];
     qt_redirectNSApplicationSendEvent();
@@ -331,10 +330,8 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
         [cocoaApplication setDelegate:newDelegate];
 
         // Load the application menu. This menu contains Preferences, Hide, Quit.
-        QCocoaMenuLoader *qtMenuLoader = [[QCocoaMenuLoader alloc] init];
-        qt_mac_loadMenuNib(qtMenuLoader);
+        QCocoaMenuLoader *qtMenuLoader = [QCocoaMenuLoader sharedMenuLoader];
         [cocoaApplication setMenu:[qtMenuLoader menu]];
-        [newDelegate setMenuLoader:qtMenuLoader];
     }
 
     // The presentation options such as whether or not the dock and/or menu bar is
@@ -368,11 +365,13 @@ QCocoaIntegration::~QCocoaIntegration()
         [[NSApplication sharedApplication] setDelegate: 0];
     }
 
+#ifndef QT_NO_CLIPBOARD
     // Delete the clipboard integration and destroy mime type converters.
     // Deleting the clipboard integration flushes promised pastes using
     // the mime converters - the ordering here is important.
     delete mCocoaClipboard;
     QMacInternalPasteboardMime::destroyMimeTypes();
+#endif
 
     // Delete screens in reverse order to avoid crash in case of multiple screens
     while (!mScreens.isEmpty()) {
@@ -457,6 +456,10 @@ QCocoaScreen *QCocoaIntegration::screenAtIndex(int index)
     if (index >= mScreens.count())
         updateScreens();
 
+    // It is possible that the screen got removed while updateScreens was called
+    // so we do a sanity check to be certain
+    if (index >= mScreens.count())
+        return 0;
     return mScreens.at(index);
 }
 
@@ -529,10 +532,12 @@ QCocoaAccessibility *QCocoaIntegration::accessibility() const
 }
 #endif
 
+#ifndef QT_NO_CLIPBOARD
 QCocoaClipboard *QCocoaIntegration::clipboard() const
 {
     return mCocoaClipboard;
 }
+#endif
 
 QCocoaDrag *QCocoaIntegration::drag() const
 {

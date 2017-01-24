@@ -59,13 +59,14 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "qsslsocket_p.h"
 
 #ifdef Q_OS_WIN
@@ -149,6 +150,7 @@ public:
     bool checkSslErrors();
     void storePeerCertificates();
     unsigned int tlsPskClientCallback(const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len);
+    unsigned int tlsPskServerCallback(const char *identity, unsigned char *psk, unsigned int max_psk_len);
 #ifdef Q_OS_WIN
     void fetchCaRootForCert(const QSslCertificate &cert);
     void _q_caRootLoaded(QSslCertificate,QSslCertificate) Q_DECL_OVERRIDE;

@@ -37,6 +37,8 @@
 **
 ****************************************************************************/
 
+#include <QtPrintSupport/qtprintsupportglobal.h>
+
 #ifndef QT_NO_PRINTER
 
 #include "qprintengine_win_p.h"
@@ -393,6 +395,9 @@ int QWin32PrintEngine::metric(QPaintDevice::PaintDeviceMetric m) const
         break;
     case QPaintDevice::PdmDevicePixelRatio:
         val = 1;
+        break;
+    case QPaintDevice::PdmDevicePixelRatioScaled:
+        val = 1 * QPaintDevice::devicePixelRatioFScale();
         break;
     default:
         qWarning("QPrinter::metric: Invalid metric command");
@@ -921,13 +926,13 @@ void QWin32PrintEnginePrivate::initialize()
     Q_ASSERT(hPrinter);
     Q_ASSERT(pInfo);
 
+    initHDC();
+
     if (devMode) {
         num_copies = devMode->dmCopies;
         devMode->dmCollate = DMCOLLATE_TRUE;
         updatePageLayout();
     }
-
-    initHDC();
 
 #if defined QT_DEBUG_DRAW || defined QT_DEBUG_METRICS
     qDebug("QWin32PrintEngine::initialize()");
@@ -1138,7 +1143,7 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
 #endif // QT_DEBUG_METRICS
         break;
 
-    case PPK_CopyCount: // fallthrough
+    case PPK_CopyCount:
     case PPK_NumberOfCopies:
         if (!d->devMode)
             break;
@@ -1716,7 +1721,6 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
         }
     }
 
-#if !defined(Q_OS_WINCE)
     // Scale, rotate and translate here.
     XFORM win_xform;
     win_xform.eM11 = xform.m11();
@@ -1728,7 +1732,6 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
 
     SetGraphicsMode(hdc, GM_ADVANCED);
     SetWorldTransform(hdc, &win_xform);
-#endif
 
     if (fast) {
         // fast path
@@ -1781,11 +1784,9 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
         }
     }
 
-#if !defined(Q_OS_WINCE)
         win_xform.eM11 = win_xform.eM22 = 1.0;
         win_xform.eM12 = win_xform.eM21 = win_xform.eDx = win_xform.eDy = 0.0;
         SetWorldTransform(hdc, &win_xform);
-#endif
 
     SelectObject(hdc, old_font);
 }

@@ -101,23 +101,13 @@
 
 #include "qdatetime.h"
 
-#ifdef Q_OS_WINCE
-extern bool qt_wince_is_smartphone(); //qguifunctions_wince.cpp
-extern bool qt_wince_is_mobile();     //qguifunctions_wince.cpp
-extern bool qt_wince_is_pocket_pc();  //qguifunctions_wince.cpp
-#endif
-
 #include <qpa/qplatformwindow.h>
 
 //#define ALIEN_DEBUG
 
 static void initResources()
 {
-#if defined(Q_OS_WINCE)
-    Q_INIT_RESOURCE(qstyle_wince);
-#else
     Q_INIT_RESOURCE(qstyle);
-#endif
     Q_INIT_RESOURCE(qmessagebox);
 
 }
@@ -171,12 +161,7 @@ static QByteArray nativeStyleClassName()
     return name;
 }
 
-#ifdef Q_OS_WINCE
-int QApplicationPrivate::autoMaximizeThreshold = -1;
-bool QApplicationPrivate::autoSipEnabled = false;
-#else
 bool QApplicationPrivate::autoSipEnabled = true;
-#endif
 
 QApplicationPrivate::QApplicationPrivate(int &argc, char **argv, int flags)
     : QApplicationPrivateBase(argc, argv, flags)
@@ -352,8 +337,10 @@ void QApplicationPrivate::createEventDispatcher()
     \sa QCoreApplication, QAbstractEventDispatcher, QEventLoop, QSettings
 */
 
+// ### fixme: Qt 6: Remove ColorSpec and accessors.
 /*!
     \enum QApplication::ColorSpec
+    \obsolete
 
     \value NormalColor the default color allocation policy
     \value CustomColor the same as NormalColor for X11; allocates colors
@@ -409,8 +396,6 @@ bool QApplicationPrivate::overrides_native_style = false; // whether native QApp
 QString QApplicationPrivate::styleSheet;           // default application stylesheet
 #endif
 QPointer<QWidget> QApplicationPrivate::leaveAfterRelease = 0;
-
-int QApplicationPrivate::app_cspec = QApplication::NormalColor;
 
 QPalette *QApplicationPrivate::sys_pal = 0;        // default system palette
 QPalette *QApplicationPrivate::set_pal = 0;        // default palette set by programmer
@@ -623,7 +608,7 @@ void qt_init_tooltip_palette()
 #endif
 }
 
-#ifndef QT_NO_STATEMACHINE
+#if QT_CONFIG(statemachine)
 void qRegisterGuiStateMachine();
 void qUnregisterGuiStateMachine();
 #endif
@@ -649,24 +634,13 @@ void QApplicationPrivate::initialize()
 
     if (application_type != QApplicationPrivate::Tty)
         (void) QApplication::style();  // trigger creation of application style
-#ifndef QT_NO_STATEMACHINE
+#if QT_CONFIG(statemachine)
     // trigger registering of QStateMachine's GUI types
     qRegisterGuiStateMachine();
 #endif
 
     if (qEnvironmentVariableIntValue("QT_USE_NATIVE_WINDOWS") > 0)
         QCoreApplication::setAttribute(Qt::AA_NativeWindows);
-
-#ifdef Q_OS_WINCE
-#ifdef QT_AUTO_MAXIMIZE_THRESHOLD
-    autoMaximizeThreshold = QT_AUTO_MAXIMIZE_THRESHOLD;
-#else
-    if (qt_wince_is_mobile())
-        autoMaximizeThreshold = 50;
-    else
-        autoMaximizeThreshold = -1;
-#endif //QT_AUTO_MAXIMIZE_THRESHOLD
-#endif //Q_OS_WINCE
 
 #ifndef QT_NO_WHEELEVENT
     QApplicationPrivate::wheel_scroll_lines = 3;
@@ -888,12 +862,13 @@ QApplication::~QApplication()
     QApplicationPrivate::enabledAnimations = QPlatformTheme::GeneralUiEffect;
     QApplicationPrivate::widgetCount = false;
 
-#ifndef QT_NO_STATEMACHINE
+#if QT_CONFIG(statemachine)
     // trigger unregistering of QStateMachine's GUI types
     qUnregisterGuiStateMachine();
 #endif
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 // #fixme: Remove.
 static HDC         displayDC        = 0;                // display device context
@@ -906,6 +881,7 @@ Q_WIDGETS_EXPORT HDC qt_win_display_dc()                        // get display D
     return displayDC;
 }
 #endif
+#endif
 
 void qt_cleanup()
 {
@@ -913,11 +889,13 @@ void qt_cleanup()
     QColormap::cleanup();
 
     QApplicationPrivate::active_window = 0; //### this should not be necessary
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     if (displayDC) {
         ReleaseDC(0, displayDC);
         displayDC = 0;
     }
+#endif
 #endif
 }
 
@@ -1023,30 +1001,6 @@ bool QApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventLis
 */
 
 /*!
-    \property QApplication::autoMaximizeThreshold
-    \since 4.4
-    \brief defines a threshold for auto maximizing widgets
-
-    \b{The auto maximize threshold is only available as part of Qt for
-    Windows CE.}
-
-    This property defines a threshold for the size of a window as a percentage
-    of the screen size. If the minimum size hint of a window exceeds the
-    threshold, calling show() will cause the window to be maximized
-    automatically.
-
-    Setting the threshold to 100 or greater means that the widget will always
-    be maximized. Alternatively, setting the threshold to 50 means that the
-    widget will be maximized only if the vertical minimum size hint is at least
-    50% of the vertical screen size.
-
-    Setting the threshold to -1 disables the feature.
-
-    On Windows CE the default is -1 (i.e., it is disabled).
-    On Windows Mobile the default is 40.
-*/
-
-/*!
     \property QApplication::autoSipEnabled
     \since 4.5
     \brief toggles automatic SIP (software input panel) visibility
@@ -1056,24 +1010,11 @@ bool QApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventLis
     the WA_InputMethodEnabled attribute set, and is typically used to launch
     a virtual keyboard on devices which have very few or no keys.
 
-    \b{ The property only has an effect on platforms which use software input
-    panels, such as Windows CE.}
+    \b{ The property only has an effect on platforms that use software input
+    panels.}
 
     The default is platform dependent.
 */
-
-#ifdef Q_OS_WINCE
-void QApplication::setAutoMaximizeThreshold(const int threshold)
-{
-    QApplicationPrivate::autoMaximizeThreshold = threshold;
-}
-
-int QApplication::autoMaximizeThreshold() const
-{
-    return QApplicationPrivate::autoMaximizeThreshold;
-}
-#endif
-
 void QApplication::setAutoSipEnabled(const bool enabled)
 {
     QApplicationPrivate::autoSipEnabled = enabled;
@@ -1127,15 +1068,17 @@ QStyle *QApplication::style()
     if (!QApplicationPrivate::app_style) {
         // Compile-time search for default style
         //
-        QString style;
-        if (!QApplicationPrivate::styleOverride.isEmpty()) {
-            style = QApplicationPrivate::styleOverride.toLower();
-        } else {
-            style = QApplicationPrivate::desktopStyleKey();
-        }
-
         QStyle *&app_style = QApplicationPrivate::app_style;
-        app_style = QStyleFactory::create(style);
+
+        if (!QApplicationPrivate::styleOverride.isEmpty()) {
+            const QString style = QApplicationPrivate::styleOverride.toLower();
+            app_style = QStyleFactory::create(style);
+            if (!app_style)
+                qWarning("QApplication: invalid style override passed, ignoring it.");
+        }
+        if (!app_style)
+            app_style = QStyleFactory::create(QApplicationPrivate::desktopStyleKey());
+
         if (!app_style) {
             const QStringList styles = QStyleFactory::keys();
             for (const auto &style : styles) {
@@ -1314,17 +1257,21 @@ QStyle* QApplication::setStyle(const QString& style)
 
 /*!
     Returns the color specification.
+    \obsolete
 
     \sa QApplication::setColorSpec()
 */
 
 int QApplication::colorSpec()
 {
-    return QApplicationPrivate::app_cspec;
+    return QApplication::NormalColor;
 }
 
 /*!
     Sets the color specification for the application to \a spec.
+    \obsolete
+
+    This call has no effect.
 
     The color specification controls how the application allocates colors when
     run on a display with a limited amount of colors, e.g. 8 bit / 256 color
@@ -1380,10 +1327,7 @@ int QApplication::colorSpec()
 
 void QApplication::setColorSpec(int spec)
 {
-    if (Q_UNLIKELY(qApp))
-        qWarning("QApplication::setColorSpec: This function must be "
-                 "called before the QApplication object is created");
-    QApplicationPrivate::app_cspec = spec;
+    Q_UNUSED(spec)
 }
 
 /*!
@@ -1535,7 +1479,7 @@ void QApplicationPrivate::setPalette_helper(const QPalette &palette, const char*
 
     \note Some styles do not use the palette for all drawing, for instance, if
     they make use of native theme engines. This is the case for the Windows XP,
-    Windows Vista, and OS X styles.
+    Windows Vista, and \macos styles.
 
     \sa QWidget::setPalette(), palette(), QStyle::polish()
 */
@@ -2846,6 +2790,8 @@ void QApplicationPrivate::sendSyntheticEnterLeave(QWidget *widget)
     // Send enter/leave events followed by a mouse move on the entered widget.
     QMouseEvent e(QEvent::MouseMove, pos, windowPos, globalPos, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
     sendMouseEvent(widgetUnderCursor, &e, widgetUnderCursor, tlw, &qt_button_down, qt_last_mouse_receiver);
+#else // !QT_NO_CURSOR
+    Q_UNUSED(widget);
 #endif // QT_NO_CURSOR
 }
 
@@ -3174,11 +3120,11 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     key->accept();
                 else
                     key->ignore();
-                res = d->notify_helper(receiver, e);
                 QWidget *w = isWidget ? static_cast<QWidget *>(receiver) : 0;
 #ifndef QT_NO_GRAPHICSVIEW
                 QGraphicsWidget *gw = isGraphicsWidget ? static_cast<QGraphicsWidget *>(receiver) : 0;
 #endif
+                res = d->notify_helper(receiver, e);
 
                 if ((res && key->isAccepted())
                     /*
@@ -3637,7 +3583,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
         // We may get here if the widget is subscribed to a gesture,
         // but has not accepted TouchBegin. Propagate touch events
         // only if TouchBegin has been accepted.
-        if (widget && widget->testAttribute(Qt::WA_WState_AcceptedTouchBeginEvent))
+        if (widget->testAttribute(Qt::WA_WState_AcceptedTouchBeginEvent))
             res = d->notify_helper(widget, e);
         break;
     }
@@ -3777,7 +3723,7 @@ bool QApplicationPrivate::notify_helper(QObject *receiver, QEvent * e)
     if (receiver->isWidgetType()) {
         QWidget *widget = static_cast<QWidget *>(receiver);
 
-#if !defined(Q_OS_WINCE) || (defined(GWES_ICONCURS) && !defined(QT_NO_CURSOR))
+#if !defined(QT_NO_CURSOR)
         // toggle HasMouse widget state on enter and leave
         if ((e->type() == QEvent::Enter || e->type() == QEvent::DragEnter) &&
             (!QApplication::activePopupWidget() || QApplication::activePopupWidget() == widget->window()))
@@ -3927,12 +3873,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
 /*!
     Sets the kind of focus navigation Qt should use to \a mode.
 
-    This feature is available in Qt for Embedded Linux, and Windows CE
-    only.
-
-    \note On Windows CE this feature is disabled by default for touch device
-          mkspecs. To enable keypad navigation, build Qt with
-          QT_KEYPAD_NAVIGATION defined.
+    This feature is available in Qt for Embedded Linux only.
 
     \since 4.6
 
@@ -3946,11 +3887,7 @@ void QApplication::setNavigationMode(Qt::NavigationMode mode)
 /*!
     Returns what kind of focus navigation Qt is using.
 
-    This feature is available in Qt for Embedded Linux, and Windows CE only.
-
-    \note On Windows CE this feature is disabled by default for touch device
-          mkspecs. To enable keypad navigation, build Qt with
-          QT_KEYPAD_NAVIGATION defined.
+    This feature is available in Qt for Embedded Linux only.
 
     \since 4.6
 
@@ -4016,7 +3953,7 @@ bool QApplication::keypadNavigationEnabled()
 
     Currently this function does nothing on Qt for Embedded Linux.
 
-    On OS X, this works more at the application level and will cause the
+    On \macos, this works more at the application level and will cause the
     application icon to bounce in the dock.
 
     On Windows, this causes the window's taskbar entry to flash for a time. If
@@ -4225,13 +4162,10 @@ void QApplication::beep()
     \relates QApplication
 
     A global pointer referring to the unique application object. It is
-    equivalent to the pointer returned by the QCoreApplication::instance()
-    function except that, in GUI applications, it is a pointer to a
-    QApplication instance.
+    equivalent to QCoreApplication::instance(), but cast as a QApplication pointer,
+    so only valid when the unique application object is a QApplication.
 
-    Only one application object can be created.
-
-    \sa QCoreApplication::instance()
+    \sa QCoreApplication::instance(), qGuiApp
 */
 
 /*!

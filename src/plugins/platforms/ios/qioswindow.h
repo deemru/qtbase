@@ -48,9 +48,9 @@
 class QIOSContext;
 class QIOSWindow;
 
-QT_BEGIN_NAMESPACE
-
 @class QUIView;
+
+QT_BEGIN_NAMESPACE
 
 class QIOSWindow : public QObject, public QPlatformWindow
 {
@@ -87,6 +87,10 @@ public:
     void clearAccessibleCache();
 
     QSurfaceFormat format() const Q_DECL_OVERRIDE;
+
+    void requestUpdate() Q_DECL_OVERRIDE;
+
+    CAEAGLLayer *eaglLayer() const;
 
 private:
     void applicationStateChanged(Qt::ApplicationState state);

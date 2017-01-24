@@ -181,6 +181,7 @@ private slots:
     void slotConnected()
     {
         QCOMPARE(state(), QLocalSocket::ConnectedState);
+        QVERIFY(isOpen());
     }
     void slotDisconnected()
     {
@@ -697,7 +698,7 @@ void tst_QLocalSocket::simpleCommandProtocol2()
 
     QObject::connect(localSocketRead, &QLocalSocket::readyRead, [&] {
         forever {
-            if (localSocketRead->bytesAvailable() < sizeof(qint64))
+            if (localSocketRead->bytesAvailable() < qint64(sizeof(qint64)))
                 return;
 
             if (blockSize == 0) {
@@ -867,10 +868,8 @@ void tst_QLocalSocket::threadedConnection_data()
     QTest::newRow("1 client") << 1;
     QTest::newRow("2 clients") << 2;
     QTest::newRow("5 clients") << 5;
-#ifndef Q_OS_WINCE
     QTest::newRow("10 clients") << 10;
     QTest::newRow("20 clients") << 20;
-#endif
 }
 
 void tst_QLocalSocket::threadedConnection()

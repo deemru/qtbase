@@ -41,9 +41,7 @@
 #define QMACCLIPBOARD_H
 
 #include <QtGui>
-#include <QtPlatformSupport/private/qmacmime_p.h>
-
-#undef slots
+#include <QtClipboardSupport/private/qmacmime_p.h>
 
 #import <AppKit/AppKit.h>
 
@@ -75,6 +73,7 @@ private:
     uchar mime_type;
     mutable QPointer<QMimeData> mime;
     mutable bool mac_mime_source;
+    bool resolvingBeforeDestruction;
     static OSStatus promiseKeeper(PasteboardRef, PasteboardItemID, CFStringRef, void *);
     void clear_helper();
 public:

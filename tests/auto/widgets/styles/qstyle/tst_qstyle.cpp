@@ -56,20 +56,6 @@
 #include <qlineedit.h>
 #include <qmdiarea.h>
 #include <qscrollarea.h>
-
-#ifdef Q_OS_WINCE_WM
-#include <windows.h>
-
-static bool qt_wince_is_smartphone() {
-    wchar_t tszPlatform[64];
-    if (SystemParametersInfo(SPI_GETPLATFORMTYPE,
-                             sizeof(tszPlatform)/sizeof(*tszPlatform),tszPlatform,0))
-      if (0 == _tcsicmp(reinterpret_cast<const wchar_t *> (QString::fromLatin1("Smartphone").utf16()), tszPlatform))
-            return true;
-    return false;
-}
-#endif
-
 #include <qwidget.h>
 
 // Make a widget frameless to prevent size constraints of title bars
@@ -90,7 +76,7 @@ public:
 
 private:
     bool testAllFunctions(QStyle *);
-    bool testScrollBarSubControls(QStyle *);
+    bool testScrollBarSubControls();
     void testPainting(QStyle *style, const QString &platform);
 private slots:
     void drawItemPixmap();
@@ -108,12 +94,6 @@ private slots:
 #endif
 #ifdef Q_OS_MAC
     void testMacStyle();
-#endif
-#ifdef Q_OS_WINCE
-    void testWindowsCEStyle();
-#endif
-#ifdef Q_OS_WINCE_WM
-    void testWindowsMobileStyle();
 #endif
     void testStyleFactory();
     void testProxyStyle();
@@ -315,19 +295,11 @@ bool tst_QStyle::testAllFunctions(QStyle *style)
     style->itemPixmapRect(QRect(0, 0, 100, 100), Qt::AlignHCenter, QPixmap(200, 200));
     style->itemTextRect(QFontMetrics(qApp->font()), QRect(0, 0, 100, 100), Qt::AlignHCenter, true, QString("Test"));
 
-    return testScrollBarSubControls(style);
+    return testScrollBarSubControls();
 }
 
-bool tst_QStyle::testScrollBarSubControls(QStyle* style)
+bool tst_QStyle::testScrollBarSubControls()
 {
-    // WinCE SmartPhone doesn't have scrollbar subcontrols, so skip the rest of the test.
-#ifdef Q_OS_WINCE_WM
-    if (style->inherits("QWindowsMobileStyle") && qt_wince_is_smartphone())
-        return true;
-#else
-    Q_UNUSED(style);
-#endif
-
     QScrollBar scrollBar;
     setFrameless(&scrollBar);
     scrollBar.show();
@@ -519,26 +491,6 @@ void tst_QStyle::testMacStyle()
     QStyle *mstyle = QStyleFactory::create("Macintosh");
     QVERIFY(testAllFunctions(mstyle));
     delete mstyle;
-}
-#endif
-
-#ifdef Q_OS_WINCE
-// WindowsCEStyle style
-void tst_QStyle::testWindowsCEStyle()
-{
-    QStyle *cstyle = QStyleFactory::create("WindowsCE");
-    QVERIFY(testAllFunctions(cstyle));
-    delete cstyle;
-}
-#endif
-
-#ifdef Q_OS_WINCE_WM
-// WindowsMobileStyle style
-void tst_QStyle::testWindowsMobileStyle()
-{
-    QStyle *cstyle = QStyleFactory::create("WindowsMobile");
-    QVERIFY(testAllFunctions(cstyle));
-    delete cstyle;
 }
 #endif
 
@@ -930,17 +882,14 @@ private:
 void tst_QStyle::testStyleOptionInit()
 {
     QStringList keys = QStyleFactory::keys();
-    QVector<QStyle*> styles;
-    styles.reserve(keys.size() + 1);
+    keys.prepend(QString()); // QCommonStyle marker
 
-    styles << new QCommonStyle();
-
-    Q_FOREACH (QStyle *style, styles) {
+    Q_FOREACH (const QString &key, keys) {
+        QStyle* style = key.isEmpty() ? new QCommonStyle : QStyleFactory::create(key);
         TestStyleOptionInitProxy testStyle;
         testStyle.setBaseStyle(style);
         testAllFunctions(style);
         QVERIFY(!testStyle.invalidOptionsDetected);
-        delete style;
     }
 }
 

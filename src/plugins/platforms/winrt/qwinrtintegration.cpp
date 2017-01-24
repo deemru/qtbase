@@ -45,15 +45,18 @@
 #include "qwinrtinputcontext.h"
 #include "qwinrtservices.h"
 #include "qwinrteglcontext.h"
-#include "qwinrtfontdatabase.h"
 #include "qwinrttheme.h"
 #include "qwinrtclipboard.h"
+#ifndef QT_NO_DRAGANDDROP
+#include "qwinrtdrag.h"
+#endif
 
 #include <QtGui/QOffscreenSurface>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QSurface>
 
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtFontDatabaseSupport/private/qwinrtfontdatabase_p.h>
+#include <QtEglSupport/private/qeglpbuffer_p.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformoffscreensurface.h>
@@ -194,9 +197,9 @@ QWinRTIntegration::QWinRTIntegration() : d_ptr(new QWinRTIntegrationPrivate)
 
     QEventDispatcherWinRT::runOnXamlThread([d]() {
         d->mainScreen = new QWinRTScreen;
-        d->inputContext.reset(new QWinRTInputContext(d->mainScreen));
         return S_OK;
     });
+    d->inputContext.reset(new QWinRTInputContext(d->mainScreen));
 
     screenAdded(d->mainScreen);
     d->platformServices = new QWinRTServices;
@@ -311,6 +314,17 @@ QPlatformClipboard *QWinRTIntegration::clipboard() const
     Q_D(const QWinRTIntegration);
     return d->clipboard;
 }
+
+#ifndef QT_NO_DRAGANDDROP
+QPlatformDrag *QWinRTIntegration::drag() const
+{
+#if _MSC_VER >= 1900
+    return QWinRTDrag::instance();
+#else
+    return QPlatformIntegration::drag();
+#endif
+}
+#endif // QT_NO_DRAGANDDROP
 
 Qt::KeyboardModifiers QWinRTIntegration::queryKeyboardModifiers() const
 {

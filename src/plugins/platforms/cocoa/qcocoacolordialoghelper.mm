@@ -45,36 +45,19 @@
 
 #include "qcocoacolordialoghelper.h"
 #include "qcocoahelpers.h"
+#include "qcocoaeventdispatcher.h"
 
 #import <AppKit/AppKit.h>
 
 QT_USE_NAMESPACE
 
-static NSButton *macCreateButton(const char *text, NSView *superview)
-{
-    static const NSRect buttonFrameRect = { { 0.0, 0.0 }, { 0.0, 0.0 } };
-
-    NSButton *button = [[NSButton alloc] initWithFrame:buttonFrameRect];
-    [button setButtonType:NSMomentaryLightButton];
-    [button setBezelStyle:NSRoundedBezelStyle];
-    [button setTitle:(NSString*)(CFStringRef)QCFString(
-            QPlatformTheme::removeMnemonics(QCoreApplication::translate("QPlatformTheme", text)))];
-    [[button cell] setFont:[NSFont systemFontOfSize:
-            [NSFont systemFontSizeForControlSize:NSRegularControlSize]]];
-    [superview addSubview:button];
-    return button;
-}
-
-@class QT_MANGLE_NAMESPACE(QNSColorPanelDelegate);
-
-@interface QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) : NSObject<NSWindowDelegate>
+@interface QT_MANGLE_NAMESPACE(QNSColorPanelDelegate) : NSObject<NSWindowDelegate, QT_MANGLE_NAMESPACE(QNSPanelDelegate)>
 {
     @public
     NSColorPanel *mColorPanel;
     QCocoaColorDialogHelper *mHelper;
     NSView *mStolenContentView;
-    NSButton *mOkButton;
-    NSButton *mCancelButton;
+    QNSPanelContentsWrapper *mPanelButtons;
     QColor mQtColor;
     NSInteger mResultCode;
     BOOL mDialogIsExecuting;
@@ -82,7 +65,6 @@ static NSButton *macCreateButton(const char *text, NSView *superview)
     BOOL mClosingDueToKnownButton;
 };
 - (void)restoreOriginalContentView;
-- (void)relayout;
 - (void)updateQtColor;
 - (void)finishOffWithCode:(NSInteger)code;
 @end
@@ -97,8 +79,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
     mColorPanel = [NSColorPanel sharedColorPanel];
     mHelper = 0;
     mStolenContentView = 0;
-    mOkButton = 0;
-    mCancelButton = 0;
+    mPanelButtons = nil;
     mResultCode = NSCancelButton;
     mDialogIsExecuting = false;
     mResultSet = false;
@@ -122,7 +103,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 
 - (void)dealloc
 {
-    [self restoreOriginalContentView];
+    [mStolenContentView release];
     [mColorPanel setDelegate:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 
@@ -132,7 +113,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 - (void)setDialogHelper:(QCocoaColorDialogHelper *)helper
 {
     mHelper = helper;
-    [mColorPanel setShowsAlpha:mHelper->options()->testOption(QColorDialogOptions::ShowAlphaChannel)];
+
     if (mHelper->options()->testOption(QColorDialogOptions::NoButtons)) {
         [self restoreOriginalContentView];
     } else if (!mStolenContentView) {
@@ -142,23 +123,10 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
         [mColorPanel setContentView:0];
 
         // create a new content view and add the stolen one as a subview
-        NSRect frameRect = { { 0.0, 0.0 }, { 0.0, 0.0 } };
-        NSView *ourContentView = [[NSView alloc] initWithFrame:frameRect];
-        [ourContentView addSubview:mStolenContentView];
-
-        // create OK and Cancel buttons and add these as subviews
-        mOkButton = macCreateButton("&OK", ourContentView);
-        mCancelButton = macCreateButton("Cancel", ourContentView);
-
-        [mColorPanel setContentView:ourContentView];
-        [mColorPanel setDefaultButtonCell:[mOkButton cell]];
-        [self relayout];
-
-        [mOkButton setAction:@selector(onOkClicked)];
-        [mOkButton setTarget:self];
-
-        [mCancelButton setAction:@selector(onCancelClicked)];
-        [mCancelButton setTarget:self];
+        mPanelButtons = [[QNSPanelContentsWrapper alloc] initWithPanelDelegate:self];
+        [mPanelButtons addSubview:mStolenContentView];
+        mColorPanel.contentView = mPanelButtons;
+        mColorPanel.defaultButtonCell = mPanelButtons.okButton.cell;
     }
 }
 
@@ -167,24 +135,16 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
     [mColorPanel close];
 }
 
-- (void)windowDidResize:(NSNotification *)notification
-{
-    Q_UNUSED(notification);
-    [self relayout];
-}
-
 - (void)colorChanged:(NSNotification *)notification
 {
     Q_UNUSED(notification);
     [self updateQtColor];
-    if (mHelper)
-        emit mHelper->colorSelected(mQtColor);
 }
 
 - (void)windowWillClose:(NSNotification *)notification
 {
     Q_UNUSED(notification);
-    if (mCancelButton && mHelper && !mClosingDueToKnownButton) {
+    if (mPanelButtons && mHelper && !mClosingDueToKnownButton) {
         mClosingDueToKnownButton = true; // prevent repeating emit
         emit mHelper->reject();
     }
@@ -193,66 +153,14 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 - (void)restoreOriginalContentView
 {
     if (mStolenContentView) {
-        NSView *ourContentView = [mColorPanel contentView];
-
         // return stolen stuff to its rightful owner
         [mStolenContentView removeFromSuperview];
         [mColorPanel setContentView:mStolenContentView];
-        [mOkButton release];
-        [mCancelButton release];
-        [ourContentView release];
-        mOkButton = 0;
-        mCancelButton = 0;
-        mStolenContentView = 0;
+        [mStolenContentView release];
+        mStolenContentView = nil;
+        [mPanelButtons release];
+        mPanelButtons = nil;
     }
-}
-
-- (void)relayout
-{
-    if (!mOkButton)
-        return;
-
-    NSRect rect = [[mStolenContentView superview] frame];
-
-    // should a priori be kept in sync with qfontdialog_mac.mm
-    const CGFloat ButtonMinWidth = 78.0; // 84.0 for Carbon
-    const CGFloat ButtonMinHeight = 32.0;
-    const CGFloat ButtonSpacing = 0.0;
-    const CGFloat ButtonTopMargin = 0.0;
-    const CGFloat ButtonBottomMargin = 7.0;
-    const CGFloat ButtonSideMargin = 9.0;
-
-    [mOkButton sizeToFit];
-    NSSize okSizeHint = [mOkButton frame].size;
-
-    [mCancelButton sizeToFit];
-    NSSize cancelSizeHint = [mCancelButton frame].size;
-
-    const CGFloat ButtonWidth = qMin(qMax(ButtonMinWidth,
-                                          qMax(okSizeHint.width, cancelSizeHint.width)),
-                                     CGFloat((rect.size.width - 2.0 * ButtonSideMargin - ButtonSpacing) * 0.5));
-    const CGFloat ButtonHeight = qMax(ButtonMinHeight,
-                                     qMax(okSizeHint.height, cancelSizeHint.height));
-
-    NSRect okRect = { { rect.size.width - ButtonSideMargin - ButtonWidth,
-                        ButtonBottomMargin },
-                      { ButtonWidth, ButtonHeight } };
-    [mOkButton setFrame:okRect];
-    [mOkButton setNeedsDisplay:YES];
-
-    NSRect cancelRect = { { okRect.origin.x - ButtonSpacing - ButtonWidth,
-                            ButtonBottomMargin },
-                            { ButtonWidth, ButtonHeight } };
-    [mCancelButton setFrame:cancelRect];
-    [mCancelButton setNeedsDisplay:YES];
-
-    const CGFloat Y = ButtonBottomMargin + ButtonHeight + ButtonTopMargin;
-    NSRect stolenCVRect = { { 0.0, Y },
-                            { rect.size.width, rect.size.height - Y } };
-    [mStolenContentView setFrame:stolenCVRect];
-    [mStolenContentView setNeedsDisplay:YES];
-
-    [[mStolenContentView superview] setNeedsDisplay:YES];
 }
 
 - (void)onOkClicked
@@ -265,7 +173,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 
 - (void)onCancelClicked
 {
-    if (mOkButton) {
+    if (mPanelButtons) {
         mClosingDueToKnownButton = true;
         [mColorPanel close];
         mQtColor = QColor();
@@ -324,6 +232,10 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
     // cleanup of modal sessions. Do this before showing the native dialog, otherwise it will
     // close down during the cleanup.
     qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
+
+    // Make sure we don't interrupt the runModalForWindow call.
+    QCocoaEventDispatcher::clearCurrentThreadCocoaEventDispatcherInterruptFlag();
+
     [NSApp runModalForWindow:mColorPanel];
     mDialogIsExecuting = false;
     return (mResultCode == NSOKButton);
@@ -337,7 +249,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSColorPanelDelegate);
 - (BOOL)windowShouldClose:(id)window
 {
     Q_UNUSED(window);
-    if (!mOkButton)
+    if (!mPanelButtons)
         [self updateQtColor];
     if (mDialogIsExecuting) {
         [self finishOffWithCode:NSCancelButton];
@@ -483,6 +395,14 @@ bool QCocoaColorDialogHelper::show(Qt::WindowFlags, Qt::WindowModality windowMod
 {
     if (windowModality == Qt::WindowModal)
         windowModality = Qt::ApplicationModal;
+
+    // Workaround for Apple rdar://25792119: If you invoke
+    // -setShowsAlpha: multiple times before showing the color
+    // picker, its height grows irrevocably.  Instead, only
+    // invoke it once, when we show the dialog.
+    [[NSColorPanel sharedColorPanel] setShowsAlpha:
+            options()->testOption(QColorDialogOptions::ShowAlphaChannel)];
+
     sharedColorPanel()->init(this);
     return sharedColorPanel()->show(windowModality, parent);
 }

@@ -546,7 +546,7 @@ void QLayout::invalidate()
     update();
 }
 
-static bool removeWidgetRecursively(QLayoutItem *li, QWidget *w)
+static bool removeWidgetRecursively(QLayoutItem *li, QObject *w)
 {
     QLayout *lay = li->layout();
     if (!lay)
@@ -609,12 +609,11 @@ void QLayout::widgetEvent(QEvent *e)
         {
             QChildEvent *c = (QChildEvent *)e;
             if (c->child()->isWidgetType()) {
-                QWidget *w = (QWidget *)c->child();
 #ifndef QT_NO_MENUBAR
-                if (w == d->menubar)
+                if (c->child() == d->menubar)
                     d->menubar = 0;
 #endif
-                removeWidgetRecursively(this, w);
+                removeWidgetRecursively(this, c->child());
             }
         }
         break;
@@ -810,7 +809,7 @@ static bool layoutDebug()
 {
     static int checked_env = -1;
     if(checked_env == -1)
-        checked_env = !!qgetenv("QT_LAYOUT_DEBUG").toInt();
+        checked_env = !!qEnvironmentVariableIntValue("QT_LAYOUT_DEBUG");
 
     return checked_env;
 }
@@ -945,12 +944,7 @@ void QLayout::addChildWidget(QWidget *w)
 void QLayout::setMenuBar(QWidget *widget)
 {
     Q_D(QLayout);
-
-#ifdef Q_OS_WINCE_WM
-    if (widget && widget->size().height() > 0)
-#else
         if (widget)
-#endif
             addChildWidget(widget);
     d->menubar = widget;
 }

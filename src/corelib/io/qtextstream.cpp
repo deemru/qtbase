@@ -231,9 +231,7 @@ static const int QTEXTSTREAM_BUFFERSIZE = 16384;
 #include "qnumeric.h"
 #include "qvarlengtharray.h"
 
-#ifndef Q_OS_WINCE
 #include <locale.h>
-#endif
 #include "private/qlocale_p.h"
 
 #include <stdlib.h>
@@ -2646,6 +2644,7 @@ QTextStream &QTextStream::operator<<(const char *string)
 {
     Q_D(QTextStream);
     CHECK_VALID_STREAM(*this);
+    // ### Qt6: consider changing to UTF-8
     d->putString(QLatin1String(string));
     return *this;
 }

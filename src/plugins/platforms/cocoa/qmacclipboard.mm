@@ -87,6 +87,7 @@ QMacPasteboard::QMacPasteboard(PasteboardRef p, uchar mt)
     mime_type = mt ? mt : uchar(QMacInternalPasteboardMime::MIME_ALL);
     paste = p;
     CFRetain(paste);
+    resolvingBeforeDestruction = false;
 }
 
 QMacPasteboard::QMacPasteboard(uchar mt)
@@ -100,6 +101,7 @@ QMacPasteboard::QMacPasteboard(uchar mt)
     } else {
         qDebug("PasteBoard: Error creating pasteboard: [%d]", (int)err);
     }
+    resolvingBeforeDestruction = false;
 }
 
 QMacPasteboard::QMacPasteboard(CFStringRef name, uchar mt)
@@ -111,25 +113,16 @@ QMacPasteboard::QMacPasteboard(CFStringRef name, uchar mt)
     if (err == noErr) {
         PasteboardSetPromiseKeeper(paste, promiseKeeper, this);
     } else {
-        qDebug("PasteBoard: Error creating pasteboard: %s [%d]", QCFString::toQString(name).toLatin1().constData(), (int)err);
+        qDebug("PasteBoard: Error creating pasteboard: %s [%d]", QString::fromCFString(name).toLatin1().constData(), (int)err);
     }
+    resolvingBeforeDestruction = false;
 }
 
 QMacPasteboard::~QMacPasteboard()
 {
     // commit all promises for paste after exit close
-    for (int i = 0; i < promises.count(); ++i) {
-        const Promise &promise = promises.at(i);
-        // At this point app teardown has started and control is somewhere in the Q[Core]Application
-        // destructor. Skip "lazy" promises where the application has not provided data;
-        // the application will generally not be in a state to provide it.
-        if (promise.dataRequestType == LazyRequest)
-            continue;
-        QCFString flavor = QCFString(promise.convertor->flavorFor(promise.mime));
-        NSInteger pbItemId = promise.itemId;
-        promiseKeeper(paste, reinterpret_cast<PasteboardItemID>(pbItemId), flavor, this);
-    }
-
+    resolvingBeforeDestruction = true;
+    PasteboardResolvePromises(paste);
     if (paste)
         CFRelease(paste);
 }
@@ -146,7 +139,7 @@ OSStatus QMacPasteboard::promiseKeeper(PasteboardRef paste, PasteboardItemID id,
     const long promise_id = (long)id;
 
     // Find the kept promise
-    const QString flavorAsQString = QCFString::toQString(flavor);
+    const QString flavorAsQString = QString::fromCFString(flavor);
     QMacPasteboard::Promise promise;
     for (int i = 0; i < qpaste->promises.size(); i++){
         QMacPasteboard::Promise tmp = qpaste->promises[i];
@@ -181,7 +174,7 @@ OSStatus QMacPasteboard::promiseKeeper(PasteboardRef paste, PasteboardItemID id,
     // to request the data from the application.
     QVariant promiseData;
     if (promise.dataRequestType == LazyRequest) {
-        if (!promise.mimeData.isNull())
+        if (!qpaste->resolvingBeforeDestruction && !promise.mimeData.isNull())
             promiseData = promise.mimeData->variantData(promise.mime);
     } else {
         promiseData = promise.variantData;
@@ -387,7 +380,7 @@ QMacPasteboard::formats() const
 
         const int type_count = CFArrayGetCount(types);
         for (int i = 0; i < type_count; ++i) {
-            const QString flavor = QCFString::toQString((CFStringRef)CFArrayGetValueAtIndex(types, i));
+            const QString flavor = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(types, i));
 #ifdef DEBUG_PASTEBOARD
             qDebug(" -%s", qPrintable(QString(flavor)));
 #endif
@@ -430,7 +423,7 @@ QMacPasteboard::hasFormat(const QString &format) const
 
         const int type_count = CFArrayGetCount(types);
         for (int i = 0; i < type_count; ++i) {
-            const QString flavor = QCFString::toQString((CFStringRef)CFArrayGetValueAtIndex(types, i));
+            const QString flavor = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(types, i));
 #ifdef DEBUG_PASTEBOARD
             qDebug(" -%s [0x%x]", qPrintable(QString(flavor)), mime_type);
 #endif
@@ -494,13 +487,13 @@ QMacPasteboard::retrieveData(const QString &format, QVariant::Type) const
                 const int type_count = CFArrayGetCount(types);
                 for (int i = 0; i < type_count; ++i) {
                     CFStringRef flavor = static_cast<CFStringRef>(CFArrayGetValueAtIndex(types, i));
-                    if (c_flavor == QCFString::toQString(flavor)) {
+                    if (c_flavor == QString::fromCFString(flavor)) {
                         QCFType<CFDataRef> macBuffer;
                         if (PasteboardCopyItemFlavorData(paste, id, flavor, &macBuffer) == noErr) {
                             QByteArray buffer((const char *)CFDataGetBytePtr(macBuffer), CFDataGetLength(macBuffer));
                             if (!buffer.isEmpty()) {
 #ifdef DEBUG_PASTEBOARD
-                                qDebug("  - %s [%s] (%s)", qPrintable(format), qPrintable(QCFString::toQString(flavor)), qPrintable(c->convertorName()));
+                                qDebug("  - %s [%s] (%s)", qPrintable(format), qPrintable(QString::fromNSString(flavor)), qPrintable(c->convertorName()));
 #endif
                                 buffer.detach(); //detach since we release the macBuffer
                                 retList.append(buffer);
@@ -509,7 +502,7 @@ QMacPasteboard::retrieveData(const QString &format, QVariant::Type) const
                         }
                     } else {
 #ifdef DEBUG_PASTEBOARD
-                        qDebug("  - NoMatch %s [%s] (%s)", qPrintable(c_flavor), qPrintable(QCFString::toQString(flavor)), qPrintable(c->convertorName()));
+                        qDebug("  - NoMatch %s [%s] (%s)", qPrintable(c_flavor), qPrintable(QString::fromNSString(flavor)), qPrintable(c->convertorName()));
 #endif
                     }
                 }
@@ -572,7 +565,7 @@ QString qt_mac_get_pasteboardString(PasteboardRef paste)
     if (pb) {
         NSString *text = [pb stringForType:NSStringPboardType];
         if (text)
-            return QCFString::toQString(text);
+            return QString::fromNSString(text);
     }
     return QString();
 }

@@ -106,6 +106,8 @@ private slots:
 
     void eagainBlockingAccept();
 
+    void canAccessPendingConnectionsWhileNotListening();
+
 private:
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkSession *networkSession;
@@ -467,11 +469,7 @@ void tst_QTcpServer::waitForConnectionTest()
     ThreadConnector connector(findLocalIpSocket.localAddress(), server.serverPort());
     connector.start();
 
-#if defined(Q_OS_WINCE)
-    QVERIFY(server.waitForNewConnection(9000, &timeout));
-#else
     QVERIFY(server.waitForNewConnection(3000, &timeout));
-#endif
     QVERIFY(!timeout);
 }
 
@@ -562,21 +560,6 @@ void tst_QTcpServer::addressReusable()
         QSKIP("No proxy support");
 #endif // QT_NO_NETWORKPROXY
     }
-#if defined(Q_OS_WINCE)
-    QString signalName = QString::fromLatin1("/test_signal.txt");
-    QFile::remove(signalName);
-    // The crashingServer process will crash once it gets a connection.
-    QProcess process;
-    QString processExe = crashingServerDir + "/crashingServer";
-    process.start(processExe);
-    QVERIFY2(process.waitForStarted(), qPrintable(
-        QString::fromLatin1("Could not start %1: %2").arg(processExe, process.errorString())));
-    int waitCount = 5;
-    while (waitCount-- && !QFile::exists(signalName))
-        QTest::qWait(1000);
-    QVERIFY(QFile::exists(signalName));
-    QFile::remove(signalName);
-#else
     // The crashingServer process will crash once it gets a connection.
     QProcess process;
     QString processExe = crashingServerDir + "/crashingServer";
@@ -584,7 +567,6 @@ void tst_QTcpServer::addressReusable()
     QVERIFY2(process.waitForStarted(), qPrintable(
         QString::fromLatin1("Could not start %1: %2").arg(processExe, process.errorString())));
     QVERIFY(process.waitForReadyRead(5000));
-#endif
 
     QTcpSocket socket;
     socket.connectToHost(QHostAddress::LocalHost, 49199);
@@ -947,15 +929,16 @@ void tst_QTcpServer::linkLocal()
 
     //each server should have two connections
     foreach (QTcpServer* server, servers) {
-        QTcpSocket* remote;
         //qDebug() << "checking for connections" << server->serverAddress() << ":" << server->serverPort();
         QVERIFY(server->waitForNewConnection(5000));
-        QVERIFY(remote = server->nextPendingConnection());
+        QTcpSocket* remote = server->nextPendingConnection();
+        QVERIFY(remote != nullptr);
         remote->close();
         delete remote;
         if (!server->hasPendingConnections())
             QVERIFY(server->waitForNewConnection(5000));
-        QVERIFY(remote = server->nextPendingConnection());
+        remote = server->nextPendingConnection();
+        QVERIFY(remote != nullptr);
         remote->close();
         delete remote;
         QVERIFY(!server->hasPendingConnections());
@@ -988,6 +971,23 @@ void tst_QTcpServer::eagainBlockingAccept()
     QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 2, 500);
     s.close();
     server.close();
+}
+
+class NonListeningTcpServer : public QTcpServer
+{
+public:
+    void addSocketFromOutside(QTcpSocket* s)
+    {
+        addPendingConnection(s);
+    }
+};
+
+void tst_QTcpServer::canAccessPendingConnectionsWhileNotListening()
+{
+    NonListeningTcpServer server;
+    QTcpSocket socket;
+    server.addSocketFromOutside(&socket);
+    QCOMPARE(&socket, server.nextPendingConnection());
 }
 
 QTEST_MAIN(tst_QTcpServer)

@@ -146,9 +146,11 @@ inline QStringList QDirPrivate::splitFilters(const QString &nameFilter, QChar se
 {
     if (sep.isNull())
         sep = getFilterSepChar(nameFilter);
-    QStringList ret = nameFilter.split(sep);
-    for (int i = 0; i < ret.count(); ++i)
-        ret[i] = ret[i].trimmed();
+    const QVector<QStringRef> split = nameFilter.splitRef(sep);
+    QStringList ret;
+    ret.reserve(split.size());
+    for (const auto &e : split)
+        ret.append(e.trimmed().toString());
     return ret;
 }
 
@@ -692,7 +694,7 @@ QString QDir::filePath(const QString &fileName) const
 {
     const QDirPrivate* d = d_ptr.constData();
     if (isAbsolutePath(fileName))
-        return QString(fileName);
+        return fileName;
 
     QString ret = d->dirEntry.filePath();
     if (!fileName.isEmpty()) {
@@ -2187,7 +2189,7 @@ QString QDir::cleanPath(const QString &path)
        name.replace(dir_separator, QLatin1Char('/'));
 
     bool allowUncPaths = false;
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT) //allow unc paths
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT) //allow unc paths
     allowUncPaths = true;
 #endif
 

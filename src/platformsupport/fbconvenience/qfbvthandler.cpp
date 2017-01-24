@@ -39,8 +39,9 @@
 
 #include "qfbvthandler_p.h"
 #include <QtCore/QSocketNotifier>
+#include <QtCore/private/qglobal_p.h>
 
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && (!defined(QT_NO_EVDEV) || !defined(QT_NO_LIBINPUT))
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && (QT_CONFIG(evdev) || QT_CONFIG(libinput))
 
 #define VTH_ENABLED
 
@@ -116,14 +117,16 @@ QFbVtHandler::QFbVtHandler(QObject *parent)
     m_signalNotifier = new QSocketNotifier(m_sigFd[1], QSocketNotifier::Read, this);
     connect(m_signalNotifier, &QSocketNotifier::activated, this, &QFbVtHandler::handleSignal);
 
-    struct sigaction sa;
-    sa.sa_flags = 0;
-    sa.sa_handler = signalHandler;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, 0); // Ctrl+C
-    sigaction(SIGTSTP, &sa, 0); // Ctrl+Z
-    sigaction(SIGCONT, &sa, 0);
-    sigaction(SIGTERM, &sa, 0); // default signal used by kill
+    if (!qEnvironmentVariableIntValue("QT_QPA_NO_SIGNAL_HANDLER")) {
+        struct sigaction sa;
+        sa.sa_flags = 0;
+        sa.sa_handler = signalHandler;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, 0); // Ctrl+C
+        sigaction(SIGTSTP, &sa, 0); // Ctrl+Z
+        sigaction(SIGCONT, &sa, 0);
+        sigaction(SIGTERM, &sa, 0); // default signal used by kill
+    }
 #endif
 }
 
@@ -169,7 +172,7 @@ void QFbVtHandler::handleSignal()
     char sigNo;
     if (QT_READ(m_sigFd[1], &sigNo, sizeof(sigNo)) == sizeof(sigNo)) {
         switch (sigNo) {
-        case SIGINT: // fallthrough
+        case SIGINT:
         case SIGTERM:
             handleInt();
             break;

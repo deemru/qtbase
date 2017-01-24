@@ -41,9 +41,11 @@ QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN32
 #define QT_POPEN _popen
+#define QT_POPEN_READ "rb"
 #define QT_PCLOSE _pclose
 #else
 #define QT_POPEN popen
+#define QT_POPEN_READ "r"
 #define QT_PCLOSE pclose
 #endif
 
@@ -153,6 +155,8 @@ protected:
         };
         uint flags, type;
     };
+    friend class QTypeInfo<Compiler>;
+
     void initCompiler(const Compiler &comp);
     enum VPATHFlag {
         VPATH_NoFlag             = 0x00,
@@ -262,6 +266,7 @@ public:
     bool isWindowsShell() const { return Option::dir_sep == QLatin1String("\\"); }
     QString shellQuote(const QString &str);
 };
+Q_DECLARE_TYPEINFO(MakefileGenerator::Compiler, Q_MOVABLE_TYPE);
 Q_DECLARE_OPERATORS_FOR_FLAGS(MakefileGenerator::FileFixifyTypes)
 
 inline void MakefileGenerator::setNoIO(bool o)

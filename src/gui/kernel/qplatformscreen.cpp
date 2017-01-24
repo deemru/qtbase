@@ -93,7 +93,7 @@ QPixmap QPlatformScreen::grabWindow(WId window, int x, int y, int width, int hei
 */
 QWindow *QPlatformScreen::topLevelAt(const QPoint & pos) const
 {
-    QWindowList list = QGuiApplication::topLevelWindows();
+    const QWindowList list = QGuiApplication::topLevelWindows();
     for (int i = list.size()-1; i >= 0; --i) {
         QWindow *w = list[i];
         if (w->isVisible() && QHighDpi::toNativePixels(w->geometry(), w).contains(pos))
@@ -341,6 +341,10 @@ void QPlatformScreen::resizeMaximizedWindows()
     // make sure maximized and fullscreen windows are updated
     for (int i = 0; i < windows.size(); ++i) {
         QWindow *w = windows.at(i);
+
+        // Skip non-platform windows, e.g., offscreen windows.
+        if (!w->handle())
+            continue;
 
         if (platformScreenForWindow(w) != this)
             continue;

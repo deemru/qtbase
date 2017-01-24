@@ -42,6 +42,7 @@
 #define QGLOBAL_H
 
 #ifdef __cplusplus
+#  include <type_traits>
 #  include <cstddef>
 #endif
 
@@ -618,32 +619,6 @@ private:
 
 class QDataStream;
 
-#if defined(Q_OS_VXWORKS)
-#  define QT_NO_CRASHHANDLER     // no popen
-#  define QT_NO_PROCESS          // no exec*, no fork
-#  define QT_NO_SHAREDMEMORY     // only POSIX, no SysV and in the end...
-#  define QT_NO_SYSTEMSEMAPHORE  // not needed at all in a flat address space
-#endif
-
-#if defined(Q_OS_WINRT)
-#  define QT_NO_FILESYSTEMWATCHER
-#  define QT_NO_NETWORKPROXY
-#  define QT_NO_PROCESS
-#  define QT_NO_SOCKETNOTIFIER
-#  define QT_NO_SOCKS5
-#endif
-
-#if defined(QT_PLATFORM_UIKIT)
-#  define QT_NO_PROCESS
-#endif
-
-#if defined(Q_OS_INTEGRITY)
-#  define QT_NO_CRASHHANDLER     // no popen
-#  define QT_NO_PROCESS          // no exec*, no fork
-#  define QT_NO_SYSTEMSEMAPHORE  // not needed at all in a single AddressSpace
-#  define QT_NO_MULTIPROCESS      // no system
-#endif
-
 inline void qt_noop(void) {}
 
 /* These wrap try/catch so we can switch off exceptions later.
@@ -946,10 +921,10 @@ template <typename T>
 class QForeachContainer {
     QForeachContainer &operator=(const QForeachContainer &) Q_DECL_EQ_DELETE;
 public:
-    QForeachContainer(const T &t) : c(t) {}
-    QForeachContainer(T &&t) : c(std::move(t)) {}
+    QForeachContainer(const T &t) : c(t), i(c.begin()), e(c.end()) {}
+    QForeachContainer(T &&t) : c(std::move(t)), i(c.begin()), e(c.end())  {}
     const T c;
-    typename T::const_iterator i = c.begin(), e = c.end();
+    typename T::const_iterator i, e;
     int control = 1;
 };
 
@@ -963,7 +938,7 @@ public:
 //  - if there was a break inside the inner loop, it will exit with control still
 //    set to 1; in that case, the outer loop will invert it to 0 and will exit too
 #define Q_FOREACH(variable, container)                                \
-for (QForeachContainer<typename QtPrivate::remove_reference<decltype(container)>::type> _container_((container)); \
+for (QForeachContainer<typename std::remove_reference<decltype(container)>::type> _container_((container)); \
      _container_.control && _container_.i != _container_.e;         \
      ++_container_.i, _container_.control ^= 1)                     \
     for (variable = *_container_.i; _container_.control; _container_.control = 0)

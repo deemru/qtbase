@@ -41,6 +41,7 @@
 #include "qwindowsintegration.h"
 #include "qwindowswindow.h"
 #include "qwindowscontext.h"
+#include "qwin10helpers.h"
 #include "qwindowsopenglcontext.h"
 
 #include "qwindowsscreen.h"
@@ -510,6 +511,7 @@ QVariant QWindowsIntegration::styleHint(QPlatformIntegration::StyleHint hint) co
     case KeyboardAutoRepeatRate:
         return QVariant(keyBoardAutoRepeatRateMS());
 #endif
+    case QPlatformIntegration::ShowIsMaximized:
     case QPlatformIntegration::StartDragTime:
     case QPlatformIntegration::StartDragDistance:
     case QPlatformIntegration::KeyboardInputInterval:

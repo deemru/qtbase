@@ -354,8 +354,8 @@ static QRect inputItemRectangle()
         ? QHighDpiScaling::factor(window)
         : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
     if (pixelDensity != 1.0) {
-        rect.setX(rect.x() * pixelDensity);
-        rect.setY(rect.y() * pixelDensity);
+        rect.moveLeft(rect.x() * pixelDensity);
+        rect.moveTop(rect.y() * pixelDensity);
         rect.setWidth(rect.width() * pixelDensity);
         rect.setHeight(rect.height() * pixelDensity);
     }
@@ -578,6 +578,11 @@ void QAndroidInputContext::updateSelectionHandles()
  */
 void QAndroidInputContext::handleLocationChanged(int handleId, int x, int y)
 {
+    if (m_batchEditNestingLevel.load() || m_blockUpdateSelection)
+        return;
+
+    finishComposingText();
+
     auto im = qGuiApp->inputMethod();
     auto leftRect = im->cursorRectangle();
     // The handle is down of the cursor, but we want the position in the middle.

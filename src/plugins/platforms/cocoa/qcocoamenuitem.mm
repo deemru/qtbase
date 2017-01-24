@@ -288,7 +288,7 @@ NSMenuItem *QCocoaMenuItem::sync()
         }
 
         default:
-            qWarning() << "menu item" << m_text << "has unsupported role" << (int)m_role;
+            qWarning() << "Menu item" << m_text << "has unsupported role" << m_role;
         }
 
         if (mergeItem) {
@@ -360,7 +360,7 @@ NSMenuItem *QCocoaMenuItem::sync()
 
     NSImage *img = nil;
     if (!m_icon.isNull()) {
-        img = qt_mac_create_nsimage(m_icon);
+        img = qt_mac_create_nsimage(m_icon, m_iconSize);
         [img setSize:NSMakeSize(m_iconSize, m_iconSize)];
     }
     [m_native setImage:img];

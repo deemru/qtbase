@@ -49,6 +49,7 @@
 #include <QtCore/private/qsystemlibrary_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
+#include <QtGui/private/qhighdpiscaling_p.h>
 
 #if defined(QT_USE_DIRECTWRITE2)
 #  include <dwrite_2.h>
@@ -185,6 +186,9 @@ namespace {
 
 static DWRITE_RENDERING_MODE hintingPreferenceToRenderingMode(QFont::HintingPreference hintingPreference)
 {
+    if (QHighDpiScaling::isActive() && hintingPreference == QFont::PreferDefaultHinting)
+        hintingPreference = QFont::PreferVerticalHinting;
+
     switch (hintingPreference) {
     case QFont::PreferNoHinting:
         return DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
@@ -659,7 +663,7 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
     glyphRun.glyphOffsets = &glyphOffset;
 
     QTransform xform = originalTransform;
-    if (fontDef.stretch != 100)
+    if (fontDef.stretch != 100 && fontDef.stretch != QFont::AnyStretch)
         xform.scale(fontDef.stretch / 100.0, 1.0);
 
     DWRITE_MATRIX transform;
@@ -929,7 +933,7 @@ glyph_metrics_t QWindowsFontEngineDirectWrite::alphaMapBoundingBox(glyph_t glyph
     Q_UNUSED(format);
 
     QTransform matrix = originalTransform;
-    if (fontDef.stretch != 100)
+    if (fontDef.stretch != 100 && fontDef.stretch != QFont::AnyStretch)
         matrix.scale(fontDef.stretch / 100.0, 1.0);
 
     glyph_metrics_t bbox = QFontEngine::boundingBox(glyph, matrix); // To get transformed advance

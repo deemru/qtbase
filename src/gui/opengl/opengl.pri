@@ -3,7 +3,7 @@
 qtConfig(opengl): CONFIG += opengl
 qtConfig(opengles2): CONFIG += opengles2
 
-qtConfig(opengl(es2)?) {
+qtConfig(opengl) {
 
     HEADERS += opengl/qopengl.h \
                opengl/qopengl_p.h \
@@ -24,7 +24,6 @@ qtConfig(opengl(es2)?) {
                opengl/qopenglcustomshaderstage_p.h \
                opengl/qopengltextureglyphcache_p.h \
                opengl/qopenglshadercache_p.h \
-               opengl/qopenglshadercache_meego_p.h \
                opengl/qopenglversionfunctions.h \
                opengl/qopenglversionfunctionsfactory_p.h \
                opengl/qopenglvertexarrayobject.h \

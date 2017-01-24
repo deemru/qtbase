@@ -9,6 +9,7 @@
         "options": {
             "android-style-assets": "boolean",
             "angle": "boolean",
+            "direct2d": "boolean",
             "directfb": "boolean",
             "directwrite": "boolean",
             "egl": "boolean",
@@ -446,8 +447,7 @@
         },
         "direct2d": {
             "label": "Direct 2D",
-            "autoDetect": false,
-            "condition": "config.win32 && libs.direct2d",
+            "condition": "config.win32 && !config.winrt && libs.direct2d",
             "output": [ "privateFeature" ]
         },
         "evdev": {
@@ -847,6 +847,12 @@
             "condition": "features.library",
             "output": [ "publicFeature", "feature" ]
         },
+        "highdpiscaling": {
+            "label": "High DPI Scaling",
+            "purpose": "Provides automatic scaling of DPI-unaware applications on high-DPI displays.",
+            "section": "Kernel",
+            "output": [ "publicFeature", "feature" ]
+        },
         "validator": {
             "label": "QValidator",
             "purpose": "Supports validation of input text.",
@@ -958,6 +964,13 @@
             "section": "Utilities",
             "condition": "features.properties",
             "output": [ "publicFeature", "feature" ]
+        },
+        "multiprocess": {
+            "label": "Multi process",
+            "description": "Provides support for detecting the desktop environment, launching external processes and opening URLs.",
+            "section": "Utilities",
+            "condition": "!config.integrity",
+            "output": [ "privateFeature" ]
         }
     },
 

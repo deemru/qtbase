@@ -163,14 +163,14 @@ void QLibrarySettings::load()
 
 QSettings *QLibraryInfoPrivate::findConfiguration()
 {
-    QString qtconfig = QStringLiteral(":/qt/etc/qt.conf");
-    if (QFile::exists(qtconfig))
-        return new QSettings(qtconfig, QSettings::IniFormat);
 #ifdef QT_BUILD_QMAKE
-    qtconfig = qmake_libraryInfoFile();
+    QString qtconfig = qmake_libraryInfoFile();
     if (QFile::exists(qtconfig))
         return new QSettings(qtconfig, QSettings::IniFormat);
 #else
+    QString qtconfig = QStringLiteral(":/qt/etc/qt.conf");
+    if (QFile::exists(qtconfig))
+        return new QSettings(qtconfig, QSettings::IniFormat);
 #ifdef Q_OS_DARWIN
     CFBundleRef bundleRef = CFBundleGetMainBundle();
     if (bundleRef) {
@@ -318,8 +318,10 @@ QLibraryInfo::buildDate()
 #    define COMPILER_STRING "MSVC 2012"
 #  elif _MSC_VER < 1900
 #    define COMPILER_STRING "MSVC 2013"
-#  elif _MSC_VER < 2000
+#  elif _MSC_VER < 1910
 #    define COMPILER_STRING "MSVC 2015"
+#  elif _MSC_VER < 2000
+#    define COMPILER_STRING "MSVC 2017"
 #  else
 #    define COMPILER_STRING "MSVC _MSC_VER " QT_STRINGIFY(_MSC_VER)
 #  endif
@@ -449,6 +451,8 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
 {
 #endif // QT_BUILD_QMAKE, started inside location !
     QString ret;
+    bool fromConf = false;
+#ifndef QT_NO_SETTINGS
 #ifdef QT_BUILD_QMAKE
     // Logic for choosing the right data source: if EffectivePaths are requested
     // and qt.conf with that section is present, use it, otherwise fall back to
@@ -457,40 +461,18 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
     // EffectiveSourcePaths falls back to EffectivePaths.
     // DevicePaths falls back to FinalPaths.
     PathGroup orig_group = group;
-    if (!QLibraryInfoPrivate::haveGroup(group)
-        && !(group == EffectiveSourcePaths
-             && (group = EffectivePaths, QLibraryInfoPrivate::haveGroup(group)))
-        && !((group == EffectivePaths || group == DevicePaths)
-             && (group = FinalPaths, QLibraryInfoPrivate::haveGroup(group)))
-        && (group = orig_group, true))
-#elif !defined(QT_NO_SETTINGS)
-    if (!QLibraryInfoPrivate::configuration())
+    if (QLibraryInfoPrivate::haveGroup(group)
+        || (group == EffectiveSourcePaths
+            && (group = EffectivePaths, QLibraryInfoPrivate::haveGroup(group)))
+        || ((group == EffectivePaths || group == DevicePaths)
+            && (group = FinalPaths, QLibraryInfoPrivate::haveGroup(group)))
+        || (group = orig_group, false))
+#else
+    if (QLibraryInfoPrivate::configuration())
 #endif
     {
-        const char * volatile path = 0;
-        if (loc == PrefixPath) {
-            path =
-#ifdef QT_BUILD_QMAKE
-                (group != DevicePaths) ?
-                    QT_CONFIGURE_EXT_PREFIX_PATH :
-#endif
-                    QT_CONFIGURE_PREFIX_PATH;
-        } else if (unsigned(loc) <= sizeof(qt_configure_str_offsets)/sizeof(qt_configure_str_offsets[0])) {
-            path = qt_configure_strs + qt_configure_str_offsets[loc - 1];
-#ifndef Q_OS_WIN // On Windows we use the registry
-        } else if (loc == SettingsPath) {
-            path = QT_CONFIGURE_SETTINGS_PATH;
-#endif
-#ifdef QT_BUILD_QMAKE
-        } else if (loc == HostPrefixPath) {
-            path = QT_CONFIGURE_HOST_PREFIX_PATH;
-#endif
-        }
+        fromConf = true;
 
-        if (path)
-            ret = QString::fromLocal8Bit(path);
-#ifndef QT_NO_SETTINGS
-    } else {
         QString key;
         QString defaultValue;
         if (unsigned(loc) < sizeof(qtConfEntries)/sizeof(qtConfEntries[0])) {
@@ -522,7 +504,9 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
                     ret = config->value(QLatin1String(qtConfEntries[PrefixPath].key),
                                         QLatin1String(qtConfEntries[PrefixPath].value)).toString();
                 else if (loc == TargetSpecPath || loc == HostSpecPath)
-                    ret = QString::fromLocal8Bit(qt_configure_strs + qt_configure_str_offsets[loc - 1]);
+                    fromConf = false;
+                // The last case here is SysrootPath, which can be legitimately empty.
+                // All other keys have non-empty fallbacks to start with.
             }
 #endif
 
@@ -540,7 +524,32 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
 
             ret = QDir::fromNativeSeparators(ret);
         }
+    }
 #endif // QT_NO_SETTINGS
+
+    if (!fromConf) {
+        const char * volatile path = 0;
+        if (loc == PrefixPath) {
+            path =
+#ifdef QT_BUILD_QMAKE
+                (group != DevicePaths) ?
+                    QT_CONFIGURE_EXT_PREFIX_PATH :
+#endif
+                    QT_CONFIGURE_PREFIX_PATH;
+        } else if (unsigned(loc) <= sizeof(qt_configure_str_offsets)/sizeof(qt_configure_str_offsets[0])) {
+            path = qt_configure_strs + qt_configure_str_offsets[loc - 1];
+#ifndef Q_OS_WIN // On Windows we use the registry
+        } else if (loc == SettingsPath) {
+            path = QT_CONFIGURE_SETTINGS_PATH;
+#endif
+#ifdef QT_BUILD_QMAKE
+        } else if (loc == HostPrefixPath) {
+            path = QT_CONFIGURE_HOST_PREFIX_PATH;
+#endif
+        }
+
+        if (path)
+            ret = QString::fromLocal8Bit(path);
     }
 
 #ifdef QT_BUILD_QMAKE

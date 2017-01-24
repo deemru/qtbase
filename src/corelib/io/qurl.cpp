@@ -410,7 +410,9 @@
 #include "qhash.h"
 #include "qdir.h"         // for QDir::fromNativeSeparators
 #include "qdatastream.h"
+#if QT_CONFIG(topleveldomain)
 #include "qtldurl_p.h"
+#endif
 #include "private/qipaddress_p.h"
 #include "qurlquery.h"
 
@@ -3687,6 +3689,9 @@ bool QUrl::matches(const QUrl &url, FormattingOptions options) const
 
     if ((d->sectionIsPresent & mask) != (url.d->sectionIsPresent & mask))
         return false;
+
+    if (options & QUrl::RemovePath)
+        return true;
 
     // Compare paths, after applying path-related options
     QString path1;

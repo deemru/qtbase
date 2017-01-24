@@ -519,6 +519,10 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     t << "all: " << escapeDependencyPath(fileFixify(Option::output.fileName()))
       << ' ' << depVar("ALL_DEPS") << " $(DESTDIR_TARGET)\n\n";
     t << "$(DESTDIR_TARGET): " << depVar("PRE_TARGETDEPS") << " $(OBJECTS) " << depVar("POST_TARGETDEPS");
+    if (templateName == "aux") {
+        t << "\n\n";
+        return;
+    }
 
     if(!project->isEmpty("QMAKE_PRE_LINK"))
         t << "\n\t" <<var("QMAKE_PRE_LINK");
@@ -526,7 +530,7 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
         t << "\n\t$(LIBAPP) $(LIBFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) @<<\n\t  "
           << "$(OBJECTS)"
           << "\n<<";
-    } else if (templateName != "aux") {
+    } else {
         const bool embedManifest = ((templateName == "app" && project->isActiveConfig("embed_manifest_exe"))
                                     || (templateName == "lib" && project->isActiveConfig("embed_manifest_dll")
                                         && !(project->isActiveConfig("plugin") && project->isActiveConfig("no_plugin_manifest"))

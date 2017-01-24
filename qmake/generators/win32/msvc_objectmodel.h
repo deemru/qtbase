@@ -52,7 +52,8 @@ enum DotNET {
     NET2010 = 0xa0,
     NET2012 = 0xb0,
     NET2013 = 0xc0,
-    NET2015 = 0xd0
+    NET2015 = 0xd0,
+    NET2017 = 0xe0
 };
 
 /*
@@ -276,6 +277,10 @@ enum inlineExpansionOption {
     expandOnlyInline,
     expandAnySuitable,
     expandDefault // Not useful number, but stops the output
+};
+enum linkerDebugOption {
+    linkerDebugOptionNone,
+    linkerDebugOptionFastLink
 };
 enum linkIncrementalType {
     linkIncrementalDefault,
@@ -590,6 +595,7 @@ public:
     QStringList             ForceSymbolReferences;
     QString                 FunctionOrder;
     triState                GenerateDebugInformation;
+    linkerDebugOption       DebugInfoOption;
     triState                GenerateMapFile;
     qlonglong               HeapCommitSize;
     qlonglong               HeapReserveSize;

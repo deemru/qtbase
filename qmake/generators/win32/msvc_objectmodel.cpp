@@ -1425,8 +1425,10 @@ bool VCLinkerTool::parseOption(const char* option)
         }else
             EnableUAC = _True;
         break;
-    case 0x3389797: // /DEBUG
+    case 0x3389797: // /DEBUG[:FASTLINK]
         GenerateDebugInformation = _True;
+        if (config->CompilerVersion >= NET2015 && strcmp(option + 7, "FASTLINK") == 0)
+            DebugInfoOption = linkerDebugOptionFastLink;
         break;
     case 0x0033896: // /DEF:filename
         ModuleDefinitionFile = option+5;
@@ -2258,10 +2260,14 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
     QString inFile = info.file;
 
     // is the extracompiler rule on a file with a built in compiler?
-    const QStringList &objectMappedFile = Project->extraCompilerOutputs[inFile];
+    const QString objectMappedFile = Project->extraCompilerOutputs.value(inFile);
     bool hasBuiltIn = false;
     if (!objectMappedFile.isEmpty()) {
-        hasBuiltIn = Project->hasBuiltinCompiler(objectMappedFile.at(0));
+        hasBuiltIn = Project->hasBuiltinCompiler(objectMappedFile);
+
+        // Remove the fake file suffix we've added initially to generate correct command lines.
+        inFile.chop(Project->customBuildToolFilterFileSuffix.length());
+
 //        qDebug("*** Extra compiler file has object mapped file '%s' => '%s'", qPrintable(inFile), qPrintable(objectMappedFile.join(' ')));
     }
 
@@ -2303,7 +2309,7 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         // compiler, too bad..
         if (hasBuiltIn) {
             out = inFile;
-            inFile = objectMappedFile.at(0);
+            inFile = objectMappedFile;
         }
 
         // Dependency for the output

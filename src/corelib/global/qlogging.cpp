@@ -1041,6 +1041,10 @@ void QMessagePattern::setPattern(const QString &pattern)
         delete [] literals;
     }
     delete [] tokens;
+    timeArgs.clear();
+#ifdef QLOGGING_HAVE_BACKTRACE
+    backtraceArgs.clear();
+#endif
 
     // scanner
     QList<QString> lexemes;
@@ -1779,7 +1783,7 @@ void qErrnoWarning(int code, const char *msg, ...)
 
     \snippet code/src_corelib_global_qglobal.cpp 23
 
-    \sa QtMessageHandler, QtMsgType, qDebug(), qWarning(), qCritical(), qFatal(),
+    \sa QtMessageHandler, QtMsgType, qDebug(), qInfo(), qWarning(), qCritical(), qFatal(),
     {Debugging Techniques}
 */
 

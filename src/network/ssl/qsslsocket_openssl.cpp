@@ -1275,15 +1275,15 @@ void QSslSocketBackendPrivate::storePeerCertificates()
 #ifdef MSSPISSL
     if( msh )
     {
-        void * bufs[64];
+        const char * bufs[64];
         int lens[64];
-        int count = 64;
+        size_t count = 64;
 
         if( msspi_get_peercerts( msh, bufs, lens, &count ) )
         {
             configuration.peerCertificateChain.clear();
 
-            for( int i = 0; i < count; i++ )
+            for( size_t i = 0; i < count; i++ )
             {
                 const unsigned char * buf = (const unsigned char *)bufs[i];
                 X509 * x509 = q_d2i_X509( NULL, &buf, lens[i] );
@@ -1298,8 +1298,6 @@ void QSslSocketBackendPrivate::storePeerCertificates()
 
                 q_X509_free( x509 );
             }
-
-            msspi_get_peercerts_free( msh, bufs, count );
         }
 
         return;

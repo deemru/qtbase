@@ -683,7 +683,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
             if( !msspi_set_mycert( msh, clientCert.constData(), clientCert.length() ) )
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
-                                 QSslSocket::tr( "Unable to set Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );
+                                 QSslSocket::tr( "Unable to set Client Authentication with:\n%1" ).arg( q->localCertificate().toText() ) );
                 return;
             }
 
@@ -691,7 +691,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
                 !msspi_set_mycert_silent( msh ) )
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
-                                 QSslSocket::tr( "Unable to set Silent Client Authentication with: \"%1\"" ).arg( QString::fromLocal8Bit( clientCert ) ) );
+                                 QSslSocket::tr( "Unable to set Silent Client Authentication with:\n%1" ).arg( q->localCertificate().toText() ) );
                 return;
             }
         }

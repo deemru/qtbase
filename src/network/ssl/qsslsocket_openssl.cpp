@@ -679,6 +679,9 @@ void QSslSocketBackendPrivate::startClientEncryption()
 
         if( !q->localCertificate().isNull() )
         {
+            if( !QSslConfiguration::msspiCertStore.isNull() )
+                msspi_set_certstore( msh, QSslConfiguration::msspiCertStore.data() );
+
             const QByteArray clientCert = q->localCertificate().toDer();
             if( !msspi_set_mycert( msh, clientCert.constData(), clientCert.length() ) )
             {

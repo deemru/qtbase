@@ -57,6 +57,8 @@ const char QSslConfiguration::ALPNProtocolHTTP2[] = "h2";
 const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
 const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
 
+QByteArray QSslConfiguration::msspiCertStore;
+
 /*!
     \class QSslConfiguration
     \brief The QSslConfiguration class holds the configuration and state of an SSL connection

@@ -172,6 +172,8 @@ public:
     static const char NextProtocolSpdy3_0[];
     static const char NextProtocolHttp1_1[];
 
+    static QByteArray msspiCertStore;
+
 private:
     friend class QSslSocket;
     friend class QSslConfigurationPrivate;

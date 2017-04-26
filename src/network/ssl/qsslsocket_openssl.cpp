@@ -600,6 +600,27 @@ static int QSslSocketMSSPIWrite( QSslSocketBackendPrivate * qssl, const void * b
     return q_BIO_write( qssl->writeBio, buf, len );
 }
 
+static int QSslSocketCertCallback( QSslSocketBackendPrivate * qssl )
+{
+    if( QSslConfiguration::msspiIssuerList.isEmpty() )
+    {
+        const char * bufs[64];
+        int lens[64];
+        size_t count = 64;
+
+        if( msspi_get_issuerlist( qssl->msh, bufs, lens, &count ) )
+        {
+            for( size_t i = 0; i < count; i++ )
+            {
+                QByteArray issuer( bufs[i], lens[i] );
+                QSslConfiguration::msspiIssuerList.push_back( issuer );
+            }
+        }
+    }
+
+    return 1;
+}
+
 static int q_SSL_read_prx( SSL * s, void * buf, int num ) { return q_SSL_read( s, buf, num ); }
 #undef q_SSL_read
 #define q_SSL_read( s, b, n ) ( msh ? msspi_read( msh, b, n ) : q_SSL_read_prx( s, b, n ) )
@@ -653,6 +674,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
         }
 
         Q_ASSERT( msh );
+        msspi_set_cert_cb( msh, (msspi_cert_cb)QSslSocketCertCallback );
 
         {
             QString tlsHostName = verificationPeerName.isEmpty() ? q->peerName() : verificationPeerName;

@@ -58,6 +58,7 @@ const char QSslConfiguration::NextProtocolSpdy3_0[] = "spdy/3";
 const char QSslConfiguration::NextProtocolHttp1_1[] = "http/1.1";
 
 QByteArray QSslConfiguration::msspiCertStore;
+QList<QByteArray> QSslConfiguration::msspiIssuerList;
 
 /*!
     \class QSslConfiguration

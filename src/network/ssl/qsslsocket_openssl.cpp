@@ -684,13 +684,8 @@ void QSslSocketBackendPrivate::startClientEncryption()
 
             QByteArray ace = QUrl::toAce( tlsHostName );
 
-            // only send the SNI header if the URL is valid and not an IP
-            if( !ace.isEmpty() &&
-                !QHostAddress().setAddress( tlsHostName ) &&
-                !( configuration.sslOptions & QSsl::SslOptionDisableServerNameIndication ) )
+            if( !ace.isEmpty() )
             {
-                // We don't send the trailing dot from the host header if present see
-                // https://tools.ietf.org/html/rfc6066#section-3
                 if( ace.endsWith( '.' ) )
                     ace.chop( 1 );
 

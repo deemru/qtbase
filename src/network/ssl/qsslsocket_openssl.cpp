@@ -632,21 +632,22 @@ static int q_SSL_write_prx( SSL * s, const void * buf, int num ) { return q_SSL_
 static int q_SSL_get_error_prx( SSL * s, int i ) { return q_SSL_get_error( s, i ); }
 static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
 {
-    switch( msspi_state( h ) )
-    {
-    case MSSPI_NOTHING:
-        return SSL_ERROR_NONE;
-    case MSSPI_READING:
-        return SSL_ERROR_WANT_READ;
-    case MSSPI_WRITING:
-        return SSL_ERROR_WANT_WRITE;
-    case MSSPI_SHUTDOWN:
-        return SSL_ERROR_ZERO_RETURN;
-    case MSSPI_ERROR:
+    int err = msspi_state( h );
+    if( err & MSSPI_ERROR )
         return SSL_ERROR_SSL;
-    default:
+    if( err & MSSPI_SENT_SHUTDOWN && err & MSSPI_RECEIVED_SHUTDOWN )
         return SSL_ERROR_ZERO_RETURN;
+    if( err & MSSPI_WRITING )
+    {
+        if( err & MSSPI_LAST_PROC_WRITE )
+            return SSL_ERROR_WANT_WRITE;
+        if( err & MSSPI_READING )
+            return SSL_ERROR_WANT_READ;
+        return SSL_ERROR_WANT_WRITE;
     }
+    if( err & MSSPI_READING )
+        return SSL_ERROR_WANT_READ;
+    return SSL_ERROR_NONE;
 }
 #undef q_SSL_get_error
 #define q_SSL_get_error( s, i ) ( msh ? q_SSL_get_error_msspi( msh ) : q_SSL_get_error_prx( s, i ) )
@@ -708,7 +709,7 @@ void QSslSocketBackendPrivate::startClientEncryption()
             }
 
             if( ( configuration.sslOptions & QSsl::SslOptionEnableSilent ) &&
-                !msspi_set_mycert_silent( msh ) )
+                !msspi_set_mycert_options( msh, 1, NULL, 0 ) )
             {
                 setErrorAndEmit( QAbstractSocket::SslInternalError,
                                  QSslSocket::tr( "Unable to set Silent Client Authentication with:\n%1" ).arg( q->localCertificate().toText() ) );

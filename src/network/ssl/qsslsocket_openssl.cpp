@@ -913,9 +913,9 @@ void QSslSocketBackendPrivate::transmit()
                                 break;
                             case CERT_E_UNTRUSTEDROOT:
                             case CERT_E_UNTRUSTEDTESTROOT:
+                            case CERT_E_CHAINING:
                                 err = QSslError::CertificateUntrusted;
                                 break;
-                            case CERT_E_CHAINING:
                             case CERT_E_REVOCATION_FAILURE:
                             case CRYPT_E_NO_REVOCATION_CHECK:
                             case CRYPT_E_REVOCATION_OFFLINE:

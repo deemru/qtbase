@@ -1025,6 +1025,9 @@ void QSslSocketBackendPrivate::transmit()
         if (!ssl)
 #endif
             continue;
+        
+        if( !readChannelCount )
+            continue;
 
         // We always read everything from the SSL decryption buffers, even if
         // we have a readBufferMaxSize. There's no point in leaving data there

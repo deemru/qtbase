@@ -196,7 +196,6 @@ void tst_QFocusEvent::checkReason_BackTab()
 
     // Now test the backtab key
     QTest::keyClick( childFocusWidgetOne, Qt::Key_Backtab );
-    QTest::qWait(200);
 
     QTRY_VERIFY(childFocusWidgetOne->focusOutEventRecieved);
     QVERIFY(childFocusWidgetTwo->focusInEventRecieved);
@@ -217,7 +216,6 @@ void tst_QFocusEvent::checkReason_Popup()
     QMenu* popupMenu = new QMenu( testFocusWidget );
     popupMenu->addMenu( "Test" );
     popupMenu->popup( QPoint(0,0) );
-    QTest::qWait(50);
 
     QTRY_VERIFY(childFocusWidgetOne->focusOutEventLostFocus);
 
@@ -306,9 +304,10 @@ void tst_QFocusEvent::checkReason_focusWidget()
     frame1.setLayout(&leftLayout);
     frame2.setLayout(&rightLayout);
     window1.show();
+    QVERIFY(QTest::qWaitForWindowActive(&window1));
 
     edit1.setFocus();
-    QTest::qWait(100);
+    QTRY_VERIFY(edit1.hasFocus());
     edit2.setFocus();
 
     QVERIFY(frame1.focusWidget() != 0);
@@ -344,11 +343,6 @@ void tst_QFocusEvent::checkReason_ActiveWindow()
     QVERIFY( !childFocusWidgetOne->hasFocus() );
 
     d->hide();
-    QTest::qWait(100);
-
-#if defined(Q_OS_IRIX)
-    QEXPECT_FAIL("", "IRIX requires explicit activateWindow(), so this test does not make any sense.", Abort);
-#endif
 
     if (!QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)
         || !QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)) {

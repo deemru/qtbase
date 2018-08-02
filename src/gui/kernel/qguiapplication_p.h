@@ -70,9 +70,9 @@ class QColorProfile;
 class QPlatformIntegration;
 class QPlatformTheme;
 class QPlatformDragQtResponse;
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 class QDrag;
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 class QInputDeviceManager;
 
 class Q_GUI_EXPORT QGuiApplicationPrivate : public QCoreApplicationPrivate
@@ -85,13 +85,13 @@ public:
     void init();
 
     void createPlatformIntegration();
-    void createEventDispatcher() Q_DECL_OVERRIDE;
-    void eventDispatcherReady() Q_DECL_OVERRIDE;
+    void createEventDispatcher() override;
+    void eventDispatcherReady() override;
 
     virtual void notifyLayoutDirectionChange();
     virtual void notifyActiveWindowChange(QWindow *previous);
 
-    virtual bool shouldQuit() Q_DECL_OVERRIDE;
+    virtual bool shouldQuit() override;
 
     bool shouldQuitInternal(const QWindowList &processedWindows);
     virtual bool tryCloseAllWindows();
@@ -133,6 +133,8 @@ public:
     static void processWindowStateChangedEvent(QWindowSystemInterfacePrivate::WindowStateChangedEvent *e);
     static void processWindowScreenChangedEvent(QWindowSystemInterfacePrivate::WindowScreenChangedEvent *e);
 
+    static void processSafeAreaMarginsChangedEvent(QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *e);
+
     static void processWindowSystemEvent(QWindowSystemInterfacePrivate::WindowSystemEvent *e);
 
     static void updateFilteredScreenOrientation(QScreen *screen);
@@ -160,7 +162,7 @@ public:
     static void processContextMenuEvent(QWindowSystemInterfacePrivate::ContextMenuEvent *e);
 #endif
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     static QPlatformDragQtResponse processDrag(QWindow *w, const QMimeData *dropData, const QPoint &p, Qt::DropActions supportedActions);
     static QPlatformDropQtResponse processDrop(QWindow *w, const QMimeData *dropData, const QPoint &p, Qt::DropActions supportedActions);
 #endif
@@ -213,7 +215,7 @@ public:
     static bool highDpiScalingUpdated;
 
     struct TabletPointData {
-        TabletPointData(qint64 devId = 0) : deviceId(devId), state(Qt::NoButton), target(Q_NULLPTR) {}
+        TabletPointData(qint64 devId = 0) : deviceId(devId), state(Qt::NoButton), target(nullptr) {}
         qint64 deviceId;
         Qt::MouseButtons state;
         QWindow *target;
@@ -307,9 +309,9 @@ public:
 protected:
     virtual void notifyThemeChanged();
     bool tryCloseRemainingWindows(QWindowList processedWindows);
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     virtual void notifyDragStarted(const QDrag *);
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 private:
     friend class QDragManager;

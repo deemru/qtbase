@@ -70,7 +70,7 @@ class CursorHandle
 {
     Q_DISABLE_COPY(CursorHandle)
 public:
-    explicit CursorHandle(HCURSOR hcursor = Q_NULLPTR) : m_hcursor(hcursor) {}
+    explicit CursorHandle(HCURSOR hcursor = nullptr) : m_hcursor(hcursor) {}
     ~CursorHandle()
     {
         if (m_hcursor)
@@ -107,15 +107,16 @@ public:
     void changeCursor(QCursor * widgetCursor, QWindow * widget) override;
     void setOverrideCursor(const QCursor &cursor) override;
     void clearOverrideCursor() override;
+    bool hasOverrideCursor() const { return m_overriddenCursor != nullptr; }
 
     QPoint pos() const override;
     void setPos(const QPoint &pos) override;
 
     static HCURSOR createPixmapCursor(QPixmap pixmap, const QPoint &hotSpot, qreal scaleFactor = 1);
     static HCURSOR createPixmapCursor(const PixmapCursor &pc, qreal scaleFactor = 1) { return createPixmapCursor(pc.pixmap, pc.hotSpot, scaleFactor); }
-    static PixmapCursor customCursor(Qt::CursorShape cursorShape, const QPlatformScreen *screen = Q_NULLPTR);
+    static PixmapCursor customCursor(Qt::CursorShape cursorShape, const QPlatformScreen *screen = nullptr);
 
-    static HCURSOR createCursorFromShape(Qt::CursorShape cursorShape, const QPlatformScreen *screen = Q_NULLPTR);
+    static HCURSOR createCursorFromShape(Qt::CursorShape cursorShape, const QPlatformScreen *screen = nullptr);
     static QPoint mousePosition();
     static CursorState cursorState();
 
@@ -141,7 +142,7 @@ private:
     mutable QPixmap m_linkDragCursor;
     mutable QPixmap m_ignoreDragCursor;
 
-    HCURSOR m_overriddenCursor = nullptr;
+    static HCURSOR m_overriddenCursor;
 };
 
 QT_END_NAMESPACE

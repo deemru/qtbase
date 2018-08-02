@@ -228,13 +228,13 @@ private:
 Q_DECLARE_METATYPE(tst_QDir::UncHandling)
 
 tst_QDir::tst_QDir()
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     : m_dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
 #elif !defined(BUILTIN_TESTDATA)
     : m_dataPath(QFileInfo(QFINDTESTDATA("testData")).absolutePath())
 #endif
 {
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString resourceSourcePath = QStringLiteral(":/android_testdata/");
     QDirIterator it(resourceSourcePath, QDirIterator::Subdirectories);
     while (it.hasNext()) {
@@ -1384,16 +1384,25 @@ void tst_QDir::absoluteFilePath_data()
     QTest::addColumn<QString>("fileName");
     QTest::addColumn<QString>("expectedFilePath");
 
-    QTest::newRow("0") << "/etc" << "/passwd" << "/passwd";
-    QTest::newRow("1") << "/etc" << "passwd" << "/etc/passwd";
-    QTest::newRow("2") << "/" << "passwd" << "/passwd";
-    QTest::newRow("3") << "relative" << "path" << QDir::currentPath() + "/relative/path";
-    QTest::newRow("4") << "" << "" << QDir::currentPath();
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-    QTest::newRow("5") << "//machine" << "share" << "//machine/share";
+    QTest::newRow("UNC") << "//machine" << "share" << "//machine/share";
+    QTest::newRow("Drive") << "c:/side/town" << "/my/way/home" << "c:/my/way/home";
 #endif
 
+#ifdef Q_OS_WIN
+#define DRIVE "Q:"
+#else
+#define DRIVE
+#endif
+
+    QTest::newRow("0") << DRIVE "/etc" << "/passwd" << DRIVE "/passwd";
+    QTest::newRow("1") << DRIVE "/etc" << "passwd" << DRIVE "/etc/passwd";
+    QTest::newRow("2") << DRIVE "/" << "passwd" << DRIVE "/passwd";
+    QTest::newRow("3") << "relative" << "path" << QDir::currentPath() + "/relative/path";
+    QTest::newRow("4") << "" << "" << QDir::currentPath();
+
     QTest::newRow("resource") << ":/prefix" << "foo.bar" << ":/prefix/foo.bar";
+#undef DRIVE
 }
 
 void tst_QDir::absoluteFilePath()
@@ -2186,7 +2195,7 @@ void tst_QDir::equalityOperator_data()
     QString pathinroot(QDir::rootPath() + QLatin1String("assets/.."));
 #elif defined (Q_OS_WIN)
     QString pathinroot("c:/windows/..");
-#elif defined(Q_OS_ANDROID)
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString pathinroot("/system/..");
 #elif defined(Q_OS_HAIKU)
     QString pathinroot("/boot/..");

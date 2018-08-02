@@ -88,7 +88,7 @@ public:
         }
 
         if (!QMetaObject::connect(obj, sigIndex, this, memberOffset,
-                    Qt::DirectConnection, Q_NULLPTR)) {
+                    Qt::DirectConnection, nullptr)) {
             qWarning("QSignalSpy: QMetaObject::connect returned false. Unable to connect.");
             return;
         }
@@ -96,7 +96,8 @@ public:
         initArgs(mo->method(sigIndex), obj);
     }
 
-#ifdef Q_QDOC
+#ifdef Q_CLANG_QDOC
+    template <typename PointerToMemberFunction>
     QSignalSpy(const QObject *object, PointerToMemberFunction signal);
 #else
     template <typename Func>
@@ -136,7 +137,7 @@ public:
         sig = signalMetaMethod.methodSignature();
         initArgs(mo->method(sigIndex), obj);
     }
-#endif // Q_QDOC
+#endif // Q_CLANG_QDOC
 
     inline bool isValid() const { return !sig.isEmpty(); }
     inline QByteArray signal() const { return sig; }
@@ -151,7 +152,7 @@ public:
         return count() > origCount;
     }
 
-    int qt_metacall(QMetaObject::Call call, int methodId, void **a) Q_DECL_OVERRIDE
+    int qt_metacall(QMetaObject::Call call, int methodId, void **a) override
     {
         methodId = QObject::qt_metacall(call, methodId, a);
         if (methodId < 0)

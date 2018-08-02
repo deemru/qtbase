@@ -1034,7 +1034,7 @@ void QTabBar::removeTab(int index)
                         newIndex--;
                     if (d->validIndex(newIndex))
                         break;
-                    // else fallthrough
+                    Q_FALLTHROUGH();
                 case SelectRightTab:
                     newIndex = index;
                     if (newIndex >= d->tabList.size())
@@ -1668,7 +1668,7 @@ bool QTabBar::event(QEvent *event)
         d->updateMacBorderMetrics();
         return QWidget::event(event);
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     } else if (event->type() == QEvent::DragEnter) {
         if (d->changeCurrentOnDrag)
             event->accept();
@@ -2166,8 +2166,12 @@ void QTabBar::mouseReleaseEvent(QMouseEvent *event)
     QStyleOptionTabBarBase optTabBase;
     optTabBase.initFrom(this);
     optTabBase.documentMode = d->documentMode;
-    if (style()->styleHint(QStyle::SH_TabBar_SelectMouseType, &optTabBase, this) == QEvent::MouseButtonRelease)
+    const bool selectOnRelease =
+            (style()->styleHint(QStyle::SH_TabBar_SelectMouseType, &optTabBase, this) == QEvent::MouseButtonRelease);
+    if (selectOnRelease)
         setCurrentIndex(i);
+    if (!selectOnRelease || !d->validIndex(i) || d->currentIndex == i)
+        repaint(tabRect(i));
 }
 
 /*!\reimp
@@ -2221,7 +2225,7 @@ void QTabBar::changeEvent(QEvent *event)
             d->elideMode = Qt::TextElideMode(style()->styleHint(QStyle::SH_TabBar_ElideMode, 0, this));
         if (!d->useScrollButtonsSetByUser)
             d->useScrollButtons = !style()->styleHint(QStyle::SH_TabBar_PreferNoArrows, 0, this);
-        // fallthrough
+        Q_FALLTHROUGH();
     case QEvent::FontChange:
         d->textSizes.clear();
         d->refresh();

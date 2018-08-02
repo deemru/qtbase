@@ -65,10 +65,10 @@ public:
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     // ### Qt 6: remove; the compiler-generated ones are fine!
     QMatrix &operator=(QMatrix &&other) Q_DECL_NOTHROW // = default
-    { memcpy(this, &other, sizeof(QMatrix)); return *this; }
+    { memcpy(static_cast<void *>(this), static_cast<void *>(&other), sizeof(QMatrix)); return *this; }
     QMatrix &operator=(const QMatrix &) Q_DECL_NOTHROW; // = default
     QMatrix(QMatrix &&other) Q_DECL_NOTHROW // = default
-    { memcpy(this, &other, sizeof(QMatrix)); }
+    { memcpy(static_cast<void *>(this), static_cast<void *>(&other), sizeof(QMatrix)); }
     QMatrix(const QMatrix &other) Q_DECL_NOTHROW; // = default
 #endif
 
@@ -108,7 +108,7 @@ public:
     bool isInvertible() const { return !qFuzzyIsNull(_m11*_m22 - _m12*_m21); }
     qreal determinant() const { return _m11*_m22 - _m12*_m21; }
 
-    Q_REQUIRED_RESULT QMatrix inverted(bool *invertible = Q_NULLPTR) const;
+    Q_REQUIRED_RESULT QMatrix inverted(bool *invertible = nullptr) const;
 
     bool operator==(const QMatrix &) const;
     bool operator!=(const QMatrix &) const;

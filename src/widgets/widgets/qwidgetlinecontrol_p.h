@@ -500,8 +500,8 @@ private:
     void parseInputMask(const QString &maskFields);
     bool isValidInput(QChar key, QChar mask) const;
     bool hasAcceptableInput(const QString &text) const;
-    QString maskString(uint pos, const QString &str, bool clear = false) const;
-    QString clearString(uint pos, uint len) const;
+    QString maskString(int pos, const QString &str, bool clear = false) const;
+    QString clearString(int pos, int len) const;
     QString stripString(const QString &str) const;
     int findInMask(int pos, bool forward, bool findSeparator, QChar searchChar = QChar()) const;
 
@@ -550,7 +550,7 @@ Q_SIGNALS:
     void editFocusChange(bool);
 #endif
 protected:
-    virtual void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
+    virtual void timerEvent(QTimerEvent *event) override;
 
 private Q_SLOTS:
     void _q_deleteSelected();

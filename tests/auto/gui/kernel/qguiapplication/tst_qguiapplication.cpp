@@ -35,8 +35,11 @@
 #include <QtGui/QFont>
 #include <QtGui/QPalette>
 #include <QtGui/QStyleHints>
+#include <qpa/qplatformintegration.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <qgenericplugin.h>
+
+#include <private/qguiapplication_p.h>
 
 #if defined(Q_OS_QNX)
 #include <QOpenGLContext>
@@ -68,6 +71,7 @@ private slots:
     void changeFocusWindow();
     void keyboardModifiers();
     void palette();
+    void font();
     void modalWindow();
     void quitOnLastWindowClosed();
     void quitOnLastWindowClosedMulti();
@@ -202,8 +206,8 @@ void tst_QGuiApplication::focusObject()
     int argc = 0;
     QGuiApplication app(argc, 0);
 
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
 
     QObject obj1, obj2, obj3;
     const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
@@ -373,8 +377,8 @@ void tst_QGuiApplication::changeFocusWindow()
     int argc = 0;
     QGuiApplication app(argc, 0);
 
-    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
 
     const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
 
@@ -521,6 +525,31 @@ void tst_QGuiApplication::palette()
 
     QGuiApplication::setPalette(oldPalette);
     QCOMPARE(QGuiApplication::palette(), oldPalette);
+    QCOMPARE(signalSpy.count(), 2);
+}
+
+void tst_QGuiApplication::font()
+{
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+    QGuiApplication app(argc, argv);
+    QSignalSpy signalSpy(&app, SIGNAL(fontChanged(QFont)));
+
+    QFont oldFont = QGuiApplication::font();
+    QFont newFont = QFont("BogusFont", 33);
+
+    QGuiApplication::setFont(newFont);
+    QCOMPARE(QGuiApplication::font(), newFont);
+    QCOMPARE(signalSpy.count(), 1);
+    QCOMPARE(signalSpy.at(0).at(0), QVariant(newFont));
+
+    QGuiApplication::setFont(oldFont);
+    QCOMPARE(QGuiApplication::font(), oldFont);
+    QCOMPARE(signalSpy.count(), 2);
+    QCOMPARE(signalSpy.at(1).at(0), QVariant(oldFont));
+
+    QGuiApplication::setFont(oldFont);
+    QCOMPARE(QGuiApplication::font(), oldFont);
     QCOMPARE(signalSpy.count(), 2);
 }
 
@@ -1070,6 +1099,8 @@ void tst_QGuiApplication::staticFunctions()
     QGuiApplication::setQuitOnLastWindowClosed(true);
     QGuiApplication::quitOnLastWindowClosed();
     QGuiApplication::applicationState();
+
+    QPixmap::defaultDepth();
 }
 
 void tst_QGuiApplication::settableStyleHints_data()

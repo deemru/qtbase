@@ -1365,6 +1365,9 @@ QTableWidgetItem *QTableWidgetItem::clone() const
 /*!
     Sets the item's data for the given \a role to the specified \a value.
 
+    \note The default implementation treats Qt::EditRole and Qt::DisplayRole as
+    referring to the same data.
+
     \sa Qt::ItemDataRole, data()
 */
 void QTableWidgetItem::setData(int role, const QVariant &value)
@@ -1522,7 +1525,7 @@ QTableWidgetItem &QTableWidgetItem::operator=(const QTableWidgetItem &other)
     \snippet qtablewidget-resizing/mainwindow.cpp 0
     \snippet qtablewidget-resizing/mainwindow.cpp 1
 
-    Items are created ouside the table (with no parent widget) and inserted
+    Items are created outside the table (with no parent widget) and inserted
     into the table with setItem():
 
     \snippet qtablewidget-resizing/mainwindow.cpp 2
@@ -2615,7 +2618,7 @@ QMimeData *QTableWidget::mimeData(const QList<QTableWidgetItem*> items) const
 bool QTableWidget::dropMimeData(int row, int column, const QMimeData *data, Qt::DropAction action)
 {
     QModelIndex idx;
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     if (dropIndicatorPosition() == QAbstractItemView::OnItem) {
         // QAbstractTableModel::dropMimeData will overwrite on the index if row == -1 and column == -1
         idx = model()->index(row, column);
@@ -2652,13 +2655,27 @@ QList<QTableWidgetItem*> QTableWidget::items(const QMimeData *data) const
 
 /*!
   Returns the QModelIndex associated with the given \a item.
+
+  \note In Qt versions prior to 5.10, this function took a non-\c{const} \a item.
 */
 
-QModelIndex QTableWidget::indexFromItem(QTableWidgetItem *item) const
+QModelIndex QTableWidget::indexFromItem(const QTableWidgetItem *item) const
 {
     Q_D(const QTableWidget);
     return d->tableModel()->index(item);
 }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+/*!
+  \internal
+  \obsolete
+  \overload
+*/
+QModelIndex QTableWidget::indexFromItem(QTableWidgetItem *item) const
+{
+    return indexFromItem(const_cast<const QTableWidgetItem *>(item));
+}
+#endif
 
 /*!
   Returns a pointer to the QTableWidgetItem associated with the given \a index.
@@ -2684,7 +2701,7 @@ bool QTableWidget::event(QEvent *e)
     return QTableView::event(e);
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 /*! \reimp */
 void QTableWidget::dropEvent(QDropEvent *event) {
     Q_D(QTableWidget);

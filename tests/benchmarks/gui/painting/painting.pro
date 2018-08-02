@@ -1,10 +1,12 @@
 TEMPLATE = subdirs
 SUBDIRS = \
+        drawtexture \
         qcolor \
         qpainter \
         qregion \
         qtransform \
-        qtbench
+        qtbench \
+        lancebench
 
 !qtHaveModule(widgets): SUBDIRS -= \
     qpainter \

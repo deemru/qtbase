@@ -38,9 +38,6 @@
 ****************************************************************************/
 
 #include "qsortfilterproxymodel.h"
-
-#ifndef QT_NO_SORTFILTERPROXYMODEL
-
 #include "qitemselectionmodel.h"
 #include <qsize.h>
 #include <qdebug.h>
@@ -300,7 +297,7 @@ public:
     void updateChildrenMapping(const QModelIndex &source_parent, Mapping *parent_mapping,
                                Qt::Orientation orient, int start, int end, int delta_item_count, bool remove);
 
-    virtual void _q_sourceModelDestroyed() Q_DECL_OVERRIDE;
+    virtual void _q_sourceModelDestroyed() override;
 
     bool needsReorder(const QVector<int> &source_rows, const QModelIndex &source_parent) const;
 
@@ -1857,6 +1854,9 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
 {
     Q_D(QSortFilterProxyModel);
 
+    if (sourceModel == d->model)
+        return;
+
     beginResetModel();
 
     disconnect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)),
@@ -1909,6 +1909,10 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
 
     disconnect(d->model, SIGNAL(modelAboutToBeReset()), this, SLOT(_q_sourceAboutToBeReset()));
     disconnect(d->model, SIGNAL(modelReset()), this, SLOT(_q_sourceReset()));
+
+    // same as in _q_sourceReset()
+    d->invalidatePersistentIndexes();
+    d->_q_clearMapping();
 
     QAbstractProxyModel::setSourceModel(sourceModel);
 
@@ -1963,7 +1967,6 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
     connect(d->model, SIGNAL(modelAboutToBeReset()), this, SLOT(_q_sourceAboutToBeReset()));
     connect(d->model, SIGNAL(modelReset()), this, SLOT(_q_sourceReset()));
 
-    d->_q_clearMapping();
     endResetModel();
     if (d->update_source_sort_column() && d->dynamic_sortfilter)
         d->sort();
@@ -2682,6 +2685,7 @@ void QSortFilterProxyModel::setRecursiveFilteringEnabled(bool recursive)
     d->filter_changed();
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 /*!
     \obsolete
 
@@ -2689,12 +2693,9 @@ void QSortFilterProxyModel::setRecursiveFilteringEnabled(bool recursive)
 */
 void QSortFilterProxyModel::clear()
 {
-    Q_D(QSortFilterProxyModel);
-    emit layoutAboutToBeChanged();
-    d->_q_clearMapping();
-    emit layoutChanged();
+    invalidate();
 }
-
+#endif
 /*!
    \since 4.3
 
@@ -2710,6 +2711,7 @@ void QSortFilterProxyModel::invalidate()
     emit layoutChanged();
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 /*!
    \obsolete
 
@@ -2717,9 +2719,9 @@ void QSortFilterProxyModel::invalidate()
 */
 void QSortFilterProxyModel::filterChanged()
 {
-    Q_D(QSortFilterProxyModel);
-    d->filter_changed();
+    invalidateFilter();
 }
+#endif
 
 /*!
    \since 4.3
@@ -2881,5 +2883,3 @@ QItemSelection QSortFilterProxyModel::mapSelectionFromSource(const QItemSelectio
 QT_END_NAMESPACE
 
 #include "moc_qsortfilterproxymodel.cpp"
-
-#endif // QT_NO_SORTFILTERPROXYMODEL

@@ -560,7 +560,7 @@ QList<QAbstractTransition*> QStateMachinePrivate::selectTransitions(QEvent *even
     QList<QAbstractTransition*> enabledTransitions;
     const_cast<QStateMachine*>(q)->beginSelectTransitions(event);
     for (QAbstractState *state : qAsConst(configuration_sorted)) {
-        QVector<QState*> lst = getProperAncestors(state, Q_NULLPTR);
+        QVector<QState*> lst = getProperAncestors(state, nullptr);
         if (QState *grp = toStandardState(state))
             lst.prepend(grp);
         bool found = false;
@@ -767,7 +767,7 @@ QSet<QAbstractState*> QStateMachinePrivate::computeExitSet_Unordered(QAbstractTr
 
     QList<QAbstractState *> effectiveTargetStates = getEffectiveTargetStates(t, cache);
     QAbstractState *domain = getTransitionDomain(t, effectiveTargetStates, cache);
-    if (domain == Q_NULLPTR && !t->targetStates().isEmpty()) {
+    if (domain == nullptr && !t->targetStates().isEmpty()) {
         // So we didn't find the least common ancestor for the source and target states of the
         // transition. If there were not target states, that would be fine: then the transition
         // will fire any events or signals, but not exit the state.
@@ -909,7 +909,7 @@ QAbstractState *QStateMachinePrivate::getTransitionDomain(QAbstractTransition *t
     if (effectiveTargetStates.isEmpty())
         return 0;
 
-    QAbstractState *domain = Q_NULLPTR;
+    QAbstractState *domain = nullptr;
     if (cache->transitionDomain(t, &domain))
         return domain;
 
@@ -1721,8 +1721,8 @@ QAbstractTransition *QStateMachinePrivate::createInitialTransition() const
             : QAbstractTransition()
         { setTargetStates(targets); }
     protected:
-        virtual bool eventTest(QEvent *) Q_DECL_OVERRIDE { return true; }
-        virtual void onTransition(QEvent *) Q_DECL_OVERRIDE {}
+        virtual bool eventTest(QEvent *) override { return true; }
+        virtual void onTransition(QEvent *) override {}
     };
 
     QState *root = rootState();
@@ -2126,8 +2126,8 @@ public:
         : QAbstractTransition()
     { setTargetState(target); }
 protected:
-    void onTransition(QEvent *) Q_DECL_OVERRIDE { deleteLater(); }
-    bool eventTest(QEvent *) Q_DECL_OVERRIDE { return true; }
+    void onTransition(QEvent *) override { deleteLater(); }
+    bool eventTest(QEvent *) override { return true; }
 };
 
 } // namespace
@@ -3096,10 +3096,12 @@ int QSignalEventGenerator::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 
 void QSignalEventGenerator::execute(void **_a)
 {
+    auto machinePrivate = QStateMachinePrivate::get(qobject_cast<QStateMachine*>(parent()));
+    if (machinePrivate->state != QStateMachinePrivate::Running)
+        return;
     int signalIndex = senderSignalIndex();
     Q_ASSERT(signalIndex != -1);
-    QStateMachine *machine = qobject_cast<QStateMachine*>(parent());
-    QStateMachinePrivate::get(machine)->handleTransitionSignal(sender(), signalIndex, _a);
+    machinePrivate->handleTransitionSignal(sender(), signalIndex, _a);
 }
 
 QSignalEventGenerator::QSignalEventGenerator(QStateMachine *parent)

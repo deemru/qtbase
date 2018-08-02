@@ -72,7 +72,7 @@ public:
     };
     Q_ENUM(TransitionType)
 
-    QAbstractTransition(QState *sourceState = Q_NULLPTR);
+    QAbstractTransition(QState *sourceState = nullptr);
     virtual ~QAbstractTransition();
 
     QState *sourceState() const;
@@ -102,7 +102,7 @@ protected:
 
     virtual void onTransition(QEvent *event) = 0;
 
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
 
 protected:
     QAbstractTransition(QAbstractTransitionPrivate &dd, QState *parent);

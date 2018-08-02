@@ -1445,8 +1445,15 @@ void tst_QTcpSocket::disconnectWhileLookingUp()
     }
 
     // let anything queued happen
+
     QEventLoop loop;
-    QTimer::singleShot(50, &loop, SLOT(quit()));
+    // If 'doClose' is false then we called '::waitForDisconnected' earlier, meaning
+    // we are already 'Unconnected'. So we don't need to wait for any potentially slow host lookups.
+    QTimer::singleShot(doClose ? 4000 : 50, &loop, SLOT(quit()));
+    connect(socket, &QTcpSocket::stateChanged, [&loop](QAbstractSocket::SocketState state) {
+        if (state == QAbstractSocket::UnconnectedState)
+            loop.exit(); // we don't need to wait for the timer to expire; we're done.
+    });
     loop.exec();
 
     // recheck
@@ -2041,11 +2048,7 @@ void tst_QTcpSocket::connectToLocalHostNoService()
     // port with no service listening.
     QTcpSocket *socket = newSocket();
     socket->connectToHost("localhost", 31415); // no service running here, one suspects
-
-    while(socket->state() == QTcpSocket::HostLookupState || socket->state() == QTcpSocket::ConnectingState) {
-        QTest::qWait(100);
-    }
-    QCOMPARE(socket->state(), QTcpSocket::UnconnectedState);
+    QTRY_COMPARE(socket->state(), QTcpSocket::UnconnectedState);
     delete socket;
 }
 #endif
@@ -3124,7 +3127,7 @@ void tst_QTcpSocket::readNotificationsAfterBind()
     if (setProxy)
         return;
 
-    QAbstractSocket socket(QAbstractSocket::TcpSocket, Q_NULLPTR);
+    QAbstractSocket socket(QAbstractSocket::TcpSocket, nullptr);
     QVERIFY2(socket.bind(), "Bind error!");
 
     connect(&socket, SIGNAL(error(QAbstractSocket::SocketError)), &QTestEventLoop::instance(), SLOT(exitLoop()));

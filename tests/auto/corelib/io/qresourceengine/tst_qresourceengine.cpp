@@ -29,6 +29,7 @@
 
 #include <QtTest/QtTest>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QMimeDatabase>
 
 class tst_QResourceEngine: public QObject
 {
@@ -36,7 +37,7 @@ class tst_QResourceEngine: public QObject
 
 public:
     tst_QResourceEngine()
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
         : m_runtimeResourceRcc(QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/runtime_resource.rcc")).absoluteFilePath())
 #else
         : m_runtimeResourceRcc(QFINDTESTDATA("runtime_resource.rcc"))
@@ -64,7 +65,7 @@ private:
 
 void tst_QResourceEngine::initTestCase()
 {
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString sourcePath(QStringLiteral(":/android_testdata/"));
     QString dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 
@@ -121,13 +122,23 @@ void tst_QResourceEngine::checkStructure_data()
                  << QLatin1String("test")
                  << QLatin1String("withoutslashes");
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     rootContents.insert(1, QLatin1String("android_testdata"));
 #endif
 
+#if defined(BUILTIN_TESTDATA)
+    rootContents.insert(8, QLatin1String("testqrc"));
+#endif
+
+
     QTest::newRow("root dir")          << QString(":/")
                                        << QString()
-                                       << (QStringList() << "search_file.txt")
+                                       << (QStringList()
+#if defined(BUILTIN_TESTDATA)
+                                           << "parentdir.txt"
+                                           << "runtime_resource.rcc"
+#endif
+                                           << "search_file.txt")
                                        << rootContents
                                        << QLocale::c()
                                        << qlonglong(0);
@@ -333,6 +344,11 @@ void tst_QResourceEngine::checkStructure()
     QFETCH(QStringList, containedDirs);
     QFETCH(QLocale, locale);
     QFETCH(qlonglong, contentsSize);
+
+    // We rely on the existence of the root "qt-project.org" in resources. For
+    // static builds on MSVC these resources are only added if they are used.
+    QMimeDatabase db;
+    Q_UNUSED(db);
 
     bool directory = (containedDirs.size() + containedFiles.size() > 0);
     QLocale::setDefault(locale);

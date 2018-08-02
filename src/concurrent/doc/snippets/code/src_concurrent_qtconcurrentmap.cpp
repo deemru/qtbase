@@ -157,12 +157,25 @@ QFuture<QSet<int> > totalColorDistribution = QtConcurrent::mappedReduced(images,
 QImage QImage::scaledToWidth(int width, Qt::TransformationMode) const;
 //! [10]
 
+//! [11]
+struct ImageTransform
+{
+    void operator()(QImage &result, const QImage &value);
+};
+
+QFuture<QImage> thumbNails =
+  QtConcurrent::mappedReduced<QImage>(images,
+                                      Scaled(100),
+                                      ImageTransform(),
+                                      QtConcurrent::SequentialReduce);
+//! [11]
 
 //! [13]
 QList<QImage> images = ...;
-QFuture<QImage> thumbnails = QtConcurrent::mapped(images, [](const QImage &img) {
+std::function<QImage(const QImage &)> scale = [](const QImage &img) {
     return img.scaledToWidth(100, Qt::SmoothTransformation);
-});
+};
+QFuture<QImage> thumbnails = QtConcurrent::mapped(images, scale);
 //! [13]
 
 //! [14]

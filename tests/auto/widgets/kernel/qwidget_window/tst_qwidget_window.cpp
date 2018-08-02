@@ -81,7 +81,7 @@ private slots:
     void tst_paintEventOnSecondShow();
     void tst_paintEventOnResize_QTBUG50796();
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     void tst_dnd();
 #endif
 
@@ -214,12 +214,12 @@ class PaintTestWidget : public QWidget
 public:
     int paintEventCount;
 
-    explicit PaintTestWidget(QWidget *parent = Q_NULLPTR)
+    explicit PaintTestWidget(QWidget *parent = nullptr)
         : QWidget(parent)
         , paintEventCount(0)
     {}
 
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE
+    void paintEvent(QPaintEvent *event) override
     {
         ++paintEventCount;
         QWidget::paintEvent(event);
@@ -393,7 +393,7 @@ void tst_QWidget_window::tst_paintEventOnResize_QTBUG50796()
     QTRY_COMPARE(native->paintEventCount, 1); // Only one paint event must occur
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 
 /* DnD test for QWidgetWindow (handleDrag*Event() functions).
  * Simulates a drop onto a QWidgetWindow of a top level widget
@@ -692,7 +692,7 @@ public:
     int resizeCount;
 
 protected:
-    void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE
+    void resizeEvent(QResizeEvent *) override
     {
         resizeCount++;
     }
@@ -759,7 +759,7 @@ public:
         , moveCount(0)
     { }
 
-    void moveEvent(QMoveEvent *) Q_DECL_OVERRIDE
+    void moveEvent(QMoveEvent *) override
     {
         moveCount++;
     }
@@ -798,7 +798,7 @@ public:
     }
 
 protected:
-    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE
+    bool eventFilter(QObject *o, QEvent *e) override
     {
         if (e->type() == filterEventType())
             ++eventCount;
@@ -911,7 +911,7 @@ void tst_QWidget_window::setWindowState()
     // Minimizing keeps other states
     w.showMinimized();
     QCOMPARE(w.windowState(), state | Qt::WindowMinimized);
-    QTest::qWait(100);
+    QTest::qWait(200);
     QCOMPARE(w.windowState(), state | Qt::WindowMinimized);
     QCOMPARE(w.windowHandle()->windowStates(), state | Qt::WindowMinimized);
 }

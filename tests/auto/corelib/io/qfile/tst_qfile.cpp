@@ -68,8 +68,6 @@ QT_END_NAMESPACE
 #elif defined(Q_OS_FREEBSD)
 # include <sys/param.h>
 # include <sys/mount.h>
-#elif defined(Q_OS_IRIX)
-# include <sys/statfs.h>
 #elif defined(Q_OS_VXWORKS)
 # include <fcntl.h>
 #if defined(_WRS_KERNEL)
@@ -170,6 +168,8 @@ private slots:
     void getch();
     void ungetChar();
     void createFile();
+    void createFileNewOnly();
+    void openFileExistingOnly();
     void append();
     void permissions_data();
     void permissions();
@@ -1213,6 +1213,48 @@ void tst_QFile::createFile()
     QVERIFY( QFile::exists( "createme.txt" ) );
 }
 
+void tst_QFile::createFileNewOnly()
+{
+    QFile::remove("createme.txt");
+    QVERIFY(!QFile::exists("createme.txt"));
+
+    QFile f("createme.txt");
+    QVERIFY2(f.open(QIODevice::NewOnly), msgOpenFailed(f).constData());
+    f.close();
+    QVERIFY(QFile::exists("createme.txt"));
+
+    QVERIFY(!f.open(QIODevice::NewOnly));
+    QVERIFY(QFile::exists("createme.txt"));
+    QFile::remove("createme.txt");
+}
+
+void tst_QFile::openFileExistingOnly()
+{
+    QFile::remove("dontcreateme.txt");
+    QVERIFY(!QFile::exists("dontcreateme.txt"));
+
+    QFile f("dontcreateme.txt");
+    QVERIFY(!f.open(QIODevice::ExistingOnly | QIODevice::ReadOnly));
+    QVERIFY(!f.open(QIODevice::ExistingOnly | QIODevice::WriteOnly));
+    QVERIFY(!f.open(QIODevice::ExistingOnly | QIODevice::ReadWrite));
+    QVERIFY(!f.open(QIODevice::ExistingOnly));
+    QVERIFY(!QFile::exists("dontcreateme.txt"));
+
+    QVERIFY2(f.open(QIODevice::NewOnly), msgOpenFailed(f).constData());
+    f.close();
+    QVERIFY(QFile::exists("dontcreateme.txt"));
+
+    QVERIFY2(f.open(QIODevice::ExistingOnly | QIODevice::ReadOnly), msgOpenFailed(f).constData());
+    f.close();
+    QVERIFY2(f.open(QIODevice::ExistingOnly | QIODevice::WriteOnly), msgOpenFailed(f).constData());
+    f.close();
+    QVERIFY2(f.open(QIODevice::ExistingOnly | QIODevice::ReadWrite), msgOpenFailed(f).constData());
+    f.close();
+    QVERIFY(!f.open(QIODevice::ExistingOnly));
+    QVERIFY(QFile::exists("dontcreateme.txt"));
+    QFile::remove("dontcreateme.txt");
+}
+
 void tst_QFile::append()
 {
     const QString name("appendme.txt");
@@ -1642,6 +1684,15 @@ static bool fOpen(const QByteArray &fileName, const char *mode, FILE **file)
 
 void tst_QFile::largeUncFileSupport()
 {
+    // Currently there is a single network test server that is used by all VMs running tests in
+    // the CI. This test accesses a file shared with Samba on that server. Unfortunately many
+    // clients accessing the file at the same time is a sharing violation. This test already
+    // attempted to deal with the problem with retries, but that has led to the test timing out,
+    // not eventually succeeding. Due to the timeouts blacklisting the test wouldn't help.
+    // See https://bugreports.qt.io/browse/QTQAINFRA-1727 which will be resolved by the new
+    // test server architecture where the server is no longer shared.
+    QSKIP("Multiple instances of running this test at the same time fail due to QTQAINFRA-1727");
+
     qint64 size = Q_INT64_C(8589934592);
     qint64 dataOffset = Q_INT64_C(8589914592);
     QByteArray knownData("LargeFile content at offset 8589914592");
@@ -1957,10 +2008,6 @@ void tst_QFile::largeFileSupport()
     if (::GetDiskFreeSpaceEx((wchar_t*)QDir::currentPath().utf16(), &free, 0, 0))
         freespace = free.QuadPart;
     if (freespace != 0) {
-#elif defined(Q_OS_IRIX)
-    struct statfs info;
-    if (statfs(QDir::currentPath().local8Bit(), &info, sizeof(struct statfs), 0) == 0) {
-        freespace = qlonglong(info.f_bfree * info.f_bsize);
 #else
     struct statfs info;
     if (statfs(const_cast<char *>(QDir::currentPath().toLocal8Bit().constData()), &info) == 0) {
@@ -2831,10 +2878,6 @@ void tst_QFile::nativeHandleLeaks()
 #endif
 
     QCOMPARE( fd2, fd1 );
-
-#ifdef Q_OS_WIN
-    QCOMPARE( handle2, handle1 );
-#endif
 }
 
 void tst_QFile::readEof_data()

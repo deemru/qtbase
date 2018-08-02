@@ -41,7 +41,7 @@
 #define QQNXINTEGRATION_H
 
 #include <qpa/qplatformintegration.h>
-
+#include <private/qtguiglobal_p.h>
 #include <QtCore/qmutex.h>
 
 #include <screen/screen.h>
@@ -61,7 +61,7 @@ class QQnxServices;
 
 class QSimpleDrag;
 
-#if defined(QQNX_PPS)
+#if QT_CONFIG(qqnx_pps)
 class QQnxInputContext;
 class QQnxNavigatorEventNotifier;
 class QQnxButtonEventNotifier;
@@ -96,7 +96,7 @@ public:
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
 #endif
 
-#if defined(QQNX_PPS)
+#if QT_CONFIG(qqnx_pps)
     QPlatformInputContext *inputContext() const override;
 #endif
 
@@ -113,7 +113,7 @@ public:
 #if !defined(QT_NO_CLIPBOARD)
     QPlatformClipboard *clipboard() const override;
 #endif
-#if !defined(QT_NO_DRAGANDDROP)
+#if QT_CONFIG(draganddrop)
     QPlatformDrag *drag() const override;
 #endif
     QVariant styleHint(StyleHint hint) const override;
@@ -143,7 +143,7 @@ private:
     QQnxScreenEventThread *m_screenEventThread;
     QQnxNavigatorEventHandler *m_navigatorEventHandler;
     QQnxAbstractVirtualKeyboard *m_virtualKeyboard;
-#if defined(QQNX_PPS)
+#if QT_CONFIG(qqnx_pps)
     QQnxNavigatorEventNotifier *m_navigatorEventNotifier;
     QQnxInputContext *m_inputContext;
     QQnxButtonEventNotifier *m_buttonsNotifier;
@@ -158,7 +158,7 @@ private:
     mutable QQnxClipboard* m_clipboard;
 #endif
     QQnxAbstractNavigator *m_navigator;
-#if !defined(QT_NO_DRAGANDDROP)
+#if QT_CONFIG(draganddrop)
     QSimpleDrag *m_drag;
 #endif
     static QQnxWindowMapper ms_windowMapper;

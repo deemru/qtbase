@@ -499,30 +499,37 @@ defineTest(qtConfLibrary_inline) {
     # to make them recognize the same input variables.
     input = $$eval($${2}.alias)
 
-    # direct libs. overwrites inline libs.
-    defined(config.input.$${input}.libs, var) {
-        $${1}.libs = $$eval(config.input.$${input}.libs)
-        export($${1}.libs)
-    }
-
     # build-specific direct libs. overwrites inline libs.
     vars =
     any = false
     all = true
-    for (b, $${1}.builds._KEYS_) {
+    for (b, $$list(debug release)) {
         iv = $${input}.libs.$${b}
         vars += $$eval(config.commandline.rev_assignments.$${iv})
         defined(config.input.$${iv}, var) {
-            $${1}.builds.$${b}.libs = $$eval(config.input.$${iv})
-            export($${1}.builds.$${b}.libs)
+            $${1}.builds.$${b} = $$eval(config.input.$${iv})
+            export($${1}.builds.$${b})
+            $${1}.builds._KEYS_ *= $${b}
             any = true
         } else {
             all = false
         }
     }
-    $$any:!$$all {
-        qtConfAddError("Either none or all of $$join(vars, ", ", [, ]) must be specified.")
-        return(false)
+    $$any {
+        !$$all {
+            qtConfAddError("Either none or all of $$join(vars, ", ", [, ]) must be specified.")
+            return(false)
+        }
+        export($${1}.builds._KEYS_)
+        # we also reset the generic libs, to avoid surprises.
+        $${1}.libs =
+        export($${1}.libs)
+    }
+
+    # direct libs. overwrites inline libs.
+    defined(config.input.$${input}.libs, var) {
+        $${1}.libs = $$eval(config.input.$${input}.libs)
+        export($${1}.libs)
     }
 
     # prefix. prepends to (possibly overwritten) inline libs.
@@ -670,9 +677,10 @@ defineTest(qtConfExportLibrary) {
     NAME = $$upper($$name)
     # LIBS is emitted even if empty, as this allows the library to be "seen".
     qtConfOutputVar(assign, $$output, QMAKE_LIBS_$$NAME, $$libs)
-    for (b, $${spfx}.builds._KEYS_): \
-        qtConfOutputVar(assign, $$output, QMAKE_LIBS_$${NAME}_$$upper($$b), \
-                                          $$eval($${spfx}.builds.$${b}))
+    for (b, $${spfx}.builds._KEYS_) {
+        eval(blibs = $$eval($${spfx}.builds.$${b}))
+        qtConfOutputVar(assign, $$output, QMAKE_LIBS_$${NAME}_$$upper($$b), $$blibs)
+    }
     !isEmpty(defines): qtConfOutputVar(assign, $$output, QMAKE_DEFINES_$$NAME, $$defines)
     !isEmpty(includes): qtConfOutputVar(assign, $$output, QMAKE_INCDIR_$$NAME, $$includes)
     !isEmpty($${currentConfig}.module): \
@@ -702,13 +710,14 @@ defineTest(qtConfHandleLibrary) {
     }
     use_args = $$eval($${lpfx}.literal_args)
 
-    qtConfLoadResult($${lpfx}, $$1) {
+    qtConfLoadResult($${lpfx}, $$1, "library") {
         $$eval($${lpfx}.result): \
             qtConfExportLibrary($$1)
         return()
     }
 
     qtLogTestIntro($${lpfx}, "looking for library $${1}")
+    qtPersistLog()
 
     result = false
     for (s, $${lpfx}.sources._KEYS_) {
@@ -759,6 +768,9 @@ defineTest(qtConfHandleLibrary) {
         result = true
         break()
     }
+
+    $${lpfx}.msgs = $$qtPersistedLog()
+    export($${lpfx}.msgs)
 
     qtLogTestResult($${lpfx}, $$result)
 
@@ -1015,7 +1027,7 @@ defineTest(qtLogTestIntro) {
     label = $$eval($${1}.label)
     isEmpty(label): return()
 
-    log("Checking for $${label}... ")
+    isEmpty(3): log("Checking for $${label}... ")
     $$QMAKE_CONFIG_VERBOSE: log("$$escape_expand(\\n)")
     write_file($$QMAKE_CONFIG_LOG, 2, append)
 }
@@ -1035,17 +1047,22 @@ defineTest(qtLogTestResult) {
         msg = "test $$1 FAILED"
     }
     $$QMAKE_CONFIG_VERBOSE: log_msg = $$msg
-    logn("$$log_msg")
+    isEmpty(3): logn("$$log_msg")
     write_file($$QMAKE_CONFIG_LOG, msg, append)
 }
 
 defineTest(qtConfSaveResult) {
     equals($${1}.cache, -): \
         return()
-    keys = result $$eval($${1}.cache)
+    keys = result msgs $$eval($${1}.cache)
     cont = "cache.$${2}._KEYS_ = $$keys"
-    for (k, keys): \
+    cache.$${2}._KEYS_ = $$keys
+    export(cache.$${2}._KEYS_)
+    for (k, keys) {
         cont += "cache.$${2}.$${k} = $$val_escape($${1}.$${k})"
+        cache.$${2}.$${k} = $$eval($${1}.$${k})
+        export(cache.$${2}.$${k})
+    }
     write_file($$QMAKE_CONFIG_CACHE, cont, append)|error()
 }
 
@@ -1060,6 +1077,12 @@ defineTest(qtConfLoadResult) {
         $${1}.$${k} = $$eval(cache.$${2}.$${k})
         export($${1}.$${k})
     }
+    # we could print the cached result, but that's basically just noise -
+    # the explicitly generated summary is supposed to contain all relevant
+    # information.
+    qtLogTestIntro($$1, "loaded result for $$3 $$1", false)
+    qtLog($$eval($${1}.msgs))
+    qtLogTestResult($$1, $$eval($${1}.result), false)
     return(true)
 }
 
@@ -1140,13 +1163,17 @@ defineTest(qtRunSingleTest) {
     # note: we do this only after resolving the dependencies and the
     # preparation (which may resolve libraries), so that caching does
     # not alter the execution order (and thus the output).
-    qtConfLoadResult($${tpfx}, $$1): \
+    qtConfLoadResult($${tpfx}, $$1, "config test"): \
         return()
 
     qtLogTestIntro($${tpfx}, "executing config test $${1}")
+    qtPersistLog()
 
     result = false
     $${call}($${tpfx}): result = true
+
+    $${tpfx}.msgs = $$qtPersistedLog()
+    export($${tpfx}.msgs)
 
     qtLogTestResult($${tpfx}, $$result)
 
@@ -1257,6 +1284,12 @@ defineReplace(qtConfEvaluateSingleExpression) {
         isEmpty(QT_ARCH): \
             qtConfCheckFeature(architecture)
         contains(QT_ARCH, $$var): result = true
+    } else: contains(e, "^subarch\..*") {
+        var = $$replace(e, "^subarch\.", "")
+        result = false
+        isEmpty(QT_ARCH): \
+            qtConfCheckFeature(architecture)
+        contains(QT_CPU_FEATURES.$$QT_ARCH, $$var): result = true
     } else: contains(e, "^input\..*") {
         result = $$eval(config.$$e)
     } else: contains(e, "^var\..*") {
@@ -1918,7 +1951,8 @@ for(ever) {
     isEmpty(configsToProcess): \
         break()
 
-    currentConfig = config.$$take_first(configsToProcess)
+    thisConfig = $$take_first(configsToProcess)
+    currentConfig = config.$$thisConfig
     thisDir = $$eval($${currentConfig}.dir)
     jsonFile = $$thisDir/configure.json
     priFile = $$thisDir/configure.pri
@@ -1949,7 +1983,7 @@ for(ever) {
     subconfigs =
     for(n, $${currentConfig}.subconfigs._KEYS_) {
         subconfig = $$eval($${currentConfig}.subconfigs.$${n})
-        name = $$basename(subconfig)
+        name = $${thisConfig}_$$basename(subconfig)
         ex = $$eval(config.$${name}.dir)
         !isEmpty(ex): \
             error("Basename clash between $$thisDir/$$subconfig and $${ex}.")
@@ -2033,14 +2067,28 @@ qtConfCheckErrors()
 
 QMAKE_CONFIG_CACHE = $$OUT_PWD/config.cache
 QMAKE_CONFIG_CACHE_USE = $$eval(config.input.cache_use)
+cache_recheck = $$eval(config.input.cache_recheck)
+equals(cache_recheck, yes) {
+    QMAKE_CONFIG_CACHE_USE = positive
+    cache_recheck =
+}
 isEmpty(QMAKE_CONFIG_CACHE_USE): \
     QMAKE_CONFIG_CACHE_USE = all
 !equals(QMAKE_CONFIG_CACHE_USE, none) {
     include($$QMAKE_CONFIG_CACHE, , true)
     # this crudely determines when to discard the cache. this also catches the case
     # of no cache being there in the first place.
-    !equals(cache.platform, $$[QMAKE_SPEC])|!equals(cache.xplatform, $$[QMAKE_XSPEC]): \
+    !equals(cache.platform, $$[QMAKE_SPEC])|!equals(cache.xplatform, $$[QMAKE_XSPEC]) {
         QMAKE_CONFIG_CACHE_USE = none
+    } else: !isEmpty(cache_recheck) {
+        for (cr, $$list($$split(cache_recheck, ","))) {
+            !isEmpty(cache.$${cr}._KEYS_) {
+                cache.$${cr}._KEYS_ =
+            } else {
+                qtConfAddWarning("Attempting to discard non-cached result '$$cr'.")
+            }
+        }
+    }
 }
 equals(QMAKE_CONFIG_CACHE_USE, none) {
     cont = \

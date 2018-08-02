@@ -60,8 +60,6 @@
 
 #include "qnetworkcookiejar.h"
 
-#ifndef QT_NO_HTTP
-
 #include <string.h>             // for strchr
 
 QT_BEGIN_NAMESPACE
@@ -773,6 +771,12 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
     if (request.attribute(QNetworkRequest::HTTP2AllowedAttribute).toBool())
         httpRequest.setHTTP2Allowed(true);
 
+    if (request.attribute(QNetworkRequest::Http2DirectAttribute).toBool()) {
+        // Intentionally mutually exclusive - cannot be both direct and 'allowed'
+        httpRequest.setHTTP2Direct(true);
+        httpRequest.setHTTP2Allowed(false);
+    }
+
     if (static_cast<QNetworkRequest::LoadControl>
         (newHttpRequest.attribute(QNetworkRequest::AuthenticationReuseAttribute,
                              QNetworkRequest::Automatic).toInt()) == QNetworkRequest::Manual)
@@ -1288,7 +1292,9 @@ void QNetworkReplyHttpImplPrivate::replyDownloadMetaData(const QList<QPair<QByte
 
     q->setAttribute(QNetworkRequest::HttpPipeliningWasUsedAttribute, pu);
     const QVariant http2Allowed = request.attribute(QNetworkRequest::HTTP2AllowedAttribute);
-    if (http2Allowed.isValid() && http2Allowed.toBool()) {
+    const QVariant http2Direct = request.attribute(QNetworkRequest::Http2DirectAttribute);
+    if ((http2Allowed.isValid() && http2Allowed.toBool())
+        || (http2Direct.isValid() && http2Direct.toBool())) {
         q->setAttribute(QNetworkRequest::HTTP2WasUsedAttribute, spdyWasUsed);
         q->setAttribute(QNetworkRequest::SpdyWasUsedAttribute, false);
     } else {
@@ -2375,5 +2381,3 @@ void QNetworkReplyHttpImplPrivate::completeCacheSave()
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_HTTP

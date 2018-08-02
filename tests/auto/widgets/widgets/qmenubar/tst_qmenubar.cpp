@@ -136,7 +136,7 @@ private slots:
     void task223138_triggered();
     void task256322_highlight();
     void menubarSizeHint();
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
     void taskQTBUG4965_escapeEaten();
 #endif
     void taskQTBUG11823_crashwithInvisibleActions();
@@ -148,11 +148,12 @@ private slots:
     void taskQTBUG56275_reinsertMenuInParentlessQMenuBar();
     void QTBUG_57404_existingMenuItemException();
 #endif
+    void QTBUG_25669_menubarActionDoubleTriggered();
     void taskQTBUG55966_subMenuRemoved();
     void QTBUG_58344_invalidIcon();
-
     void platformMenu();
-
+    void addActionQt5connect();
+    void QTBUG_65488_hiddenActionTriggered();
 protected slots:
     void onSimpleActivated( QAction*);
     void onComplexActionTriggered();
@@ -1376,7 +1377,7 @@ void tst_QMenuBar::menubarSizeHint()
 }
 
 // On Mac, do not test the menubar with escape key
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
 void tst_QMenuBar::taskQTBUG4965_escapeEaten()
 {
     QMenuBar menubar;
@@ -1549,7 +1550,7 @@ void tst_QMenuBar::taskQTBUG53205_crashReparentNested()
 
     //set the new parent, a window
     QScopedPointer<QWidget> windowedParent;
-    windowedParent.reset(new QWidget(Q_NULLPTR, Qt::WindowFlags()));
+    windowedParent.reset(new QWidget(nullptr, Qt::WindowFlags()));
     windowedParent->setGeometry(400, 10, 300, 300);
 
     windowedParent->show();
@@ -1566,7 +1567,7 @@ void tst_QMenuBar::taskQTBUG53205_crashReparentNested()
     //to windowedParent<-movingParent<-containerWidget<-containedWidget<-menuBar
     movingParent.setParent(windowedParent.data(),0);
     // this resets the parenting and the menu bar's window
-    taskQTBUG53205MenuBar->setParent(Q_NULLPTR);
+    taskQTBUG53205MenuBar->setParent(nullptr);
     taskQTBUG53205MenuBar->setParent(&containedWidget);
     //from windowedParent<-movingParent<-containerWidget<-containedWidget<-menuBar
     //to : QMainWindow<-hiddenParent<-movingParent<-containerWidget<-containedWidget<-menuBar
@@ -1574,6 +1575,25 @@ void tst_QMenuBar::taskQTBUG53205_crashReparentNested()
     windowedParent.reset(); //make the old window invalid
     // trigger the aciton,  reset the menu bar's window, this used to crash here.
     testMenus.actions[0]->trigger();
+}
+
+void tst_QMenuBar::QTBUG_65488_hiddenActionTriggered()
+{
+    QMainWindow win;
+    win.menuBar()->setNativeMenuBar(false);
+    QAction *act1 = win.menuBar()->addAction("A very long named action that make menuBar item wide enough");
+    QSignalSpy spy(win.menuBar(), &QMenuBar::triggered);
+
+    QRect actRect = win.menuBar()->actionGeometry(act1);
+    // resize to action's size to make Action1 hidden
+    win.resize(actRect.width() - 10, win.size().height());
+    win.show();
+    QApplication::setActiveWindow(&win);
+    QVERIFY(QTest::qWaitForWindowExposed(&win));
+    // click center of the blank area on the menubar where Action1 resided
+    QTest::mouseClick(win.windowHandle(), Qt::LeftButton, Qt::NoModifier, win.menuBar()->geometry().center());
+    QCoreApplication::sendPostedEvents(); // make sure all queued events also dispatched
+    QCOMPARE(spy.count(), 0);
 }
 
 // QTBUG-56526
@@ -1595,10 +1615,71 @@ void tst_QMenuBar::platformMenu()
     QVERIFY(menu->platformMenu());
 }
 
+class TestObject : public QObject
+{
+    Q_OBJECT
+public:
+    bool flag = false;
+    void setFlag()
+    {
+        flag = true;
+    }
+};
+
+void tst_QMenuBar::addActionQt5connect()
+{
+    bool flag = false;
+    auto functor = [&flag](){ flag = true; };
+
+    TestObject obj;
+
+    QMenuBar menuBar;
+
+    auto action1 = menuBar.addAction(QStringLiteral("1"), &obj, &TestObject::setFlag);
+    auto action2 = menuBar.addAction(QStringLiteral("2"), functor);
+
+    action1->activate(QAction::Trigger);
+    action2->activate(QAction::Trigger);
+
+    QVERIFY(obj.flag);
+    QVERIFY(flag);
+
+    flag = false;
+
+    auto action3 = menuBar.addAction(QStringLiteral("3"), this, functor);
+    action3->activate(QAction::Trigger);
+    QVERIFY(flag);
+}
+
+void tst_QMenuBar::QTBUG_25669_menubarActionDoubleTriggered()
+{
+    QMainWindow win;
+    win.menuBar()->setNativeMenuBar(false);
+    QAction *act1 = win.menuBar()->addAction("Action1");
+    QAction *act2 = win.menuBar()->addAction("Action2");
+    QSignalSpy spy(win.menuBar(), &QMenuBar::triggered);
+
+    win.show();
+    QApplication::setActiveWindow(&win);
+    QVERIFY(QTest::qWaitForWindowExposed(&win));
+
+    QPoint posAct1 = menuBarActionWindowPos(win.menuBar(), act1);
+    QPoint posAct2 = menuBarActionWindowPos(win.menuBar(), act2);
+
+    QTest::mouseClick(win.windowHandle(), Qt::LeftButton, Qt::NoModifier, posAct1);
+    QTRY_COMPARE(spy.count(), 1);
+
+    QTest::mouseClick(win.windowHandle(), Qt::LeftButton, Qt::NoModifier, posAct2);
+    QTRY_COMPARE(spy.count(), 2);
+
+    QTest::mouseClick(win.windowHandle(), Qt::LeftButton, Qt::NoModifier, posAct2);
+    QTRY_COMPARE(spy.count(), 3);
+}
+
 void tst_QMenuBar::slotForTaskQTBUG53205()
 {
     QWidget *parent = taskQTBUG53205MenuBar->parentWidget();
-    taskQTBUG53205MenuBar->setParent(Q_NULLPTR);
+    taskQTBUG53205MenuBar->setParent(nullptr);
     taskQTBUG53205MenuBar->setParent(parent);
 }
 

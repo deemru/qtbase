@@ -56,9 +56,9 @@
 
 #include <QtCore/QObject>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(draganddrop);
 
-#ifndef QT_NO_DRAGANDDROP
+QT_BEGIN_NAMESPACE
 
 class QMouseEvent;
 class QWindow;
@@ -72,10 +72,10 @@ class Q_GUI_EXPORT QBasicDrag : public QPlatformDrag, public QObject
 public:
     virtual ~QBasicDrag();
 
-    virtual Qt::DropAction drag(QDrag *drag) Q_DECL_OVERRIDE;
-    void cancelDrag() Q_DECL_OVERRIDE;
+    virtual Qt::DropAction drag(QDrag *drag) override;
+    void cancelDrag() override;
 
-    virtual bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE;
+    virtual bool eventFilter(QObject *o, QEvent *e) override;
 
 protected:
     QBasicDrag();
@@ -105,6 +105,9 @@ protected:
 
     QDrag *drag() const { return m_drag; }
 
+protected:
+    QWindow *m_current_window;
+
 private:
     void enableEventFilter();
     void disableEventFilter();
@@ -127,16 +130,11 @@ public:
     QSimpleDrag();
 
 protected:
-    virtual void startDrag() Q_DECL_OVERRIDE;
-    virtual void cancel() Q_DECL_OVERRIDE;
-    virtual void move(const QPoint &globalPos) Q_DECL_OVERRIDE;
-    virtual void drop(const QPoint &globalPos) Q_DECL_OVERRIDE;
-
-private:
-    QWindow *m_current_window;
+    virtual void startDrag() override;
+    virtual void cancel() override;
+    virtual void move(const QPoint &globalPos) override;
+    virtual void drop(const QPoint &globalPos) override;
 };
-
-#endif // QT_NO_DRAGANDDROP
 
 QT_END_NAMESPACE
 

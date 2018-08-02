@@ -227,6 +227,31 @@ struct QOpenGLFunctionsPrivate;
 
 #undef glTexLevelParameteriv
 
+#if defined(Q_CLANG_QDOC)
+#undef GLint
+typedef int GLint;
+#undef GLsizei
+typedef int GLsizei;
+#undef GLuint
+typedef unsigned int GLuint;
+#undef GLubyte
+typedef unsigned int GLubyte;
+#undef GLenum
+typedef unsigned int GLenum;
+#undef GLbitfield
+typedef unsigned int GLbitfield;
+#undef GLfloat
+typedef float GLfloat;
+#undef GLclampf
+typedef float GLclampf;
+#undef GLboolean
+typedef bool GLboolean;
+#undef GLvoid
+typedef void GLvoid;
+#undef GLchar
+typedef char GLchar;
+#endif
+
 class Q_GUI_EXPORT QOpenGLFunctions
 {
 public:
@@ -413,7 +438,7 @@ public:
 
 protected:
     QOpenGLFunctionsPrivate *d_ptr;
-    static bool isInitialized(const QOpenGLFunctionsPrivate *d) { return d != Q_NULLPTR; }
+    static bool isInitialized(const QOpenGLFunctionsPrivate *d) { return d != nullptr; }
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QOpenGLFunctions::OpenGLFeatures)

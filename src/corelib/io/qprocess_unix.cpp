@@ -885,7 +885,7 @@ bool QProcessPrivate::waitForDeadChild()
     // read the process information from our fd
     forkfd_info info;
     int ret;
-    EINTR_LOOP(ret, forkfd_wait(forkfd, &info, Q_NULLPTR));
+    EINTR_LOOP(ret, forkfd_wait(forkfd, &info, nullptr));
 
     exitCode = info.status;
     crashed = info.code != CLD_EXITED;
@@ -925,6 +925,8 @@ bool QProcessPrivate::startDetached(qint64 *pid)
         closeChannel(&stdinChannel);
         closeChannel(&stdoutChannel);
         closeChannel(&stderrChannel);
+        qt_safe_close(pidPipe[0]);
+        qt_safe_close(pidPipe[1]);
         qt_safe_close(startedPipe[0]);
         qt_safe_close(startedPipe[1]);
         return false;

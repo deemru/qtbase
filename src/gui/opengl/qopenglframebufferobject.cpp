@@ -816,7 +816,7 @@ static inline GLenum effectiveInternalFormat(GLenum internalFormat)
     return internalFormat;
 }
 
-/*! \fn QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, GLenum target)
+/*!
 
     Constructs an OpenGL framebuffer object and binds a 2D OpenGL texture
     to the buffer of the size \a size. The texture is bound to the
@@ -847,7 +847,7 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, GLenum tar
     d->init(this, size, NoAttachment, target, effectiveInternalFormat(0));
 }
 
-/*! \overload
+/*!
 
     Constructs an OpenGL framebuffer object and binds a 2D OpenGL texture
     to the buffer of the given \a width and \a height.
@@ -859,7 +859,7 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(int width, int height, GLenum
 {
 }
 
-/*! \overload
+/*!
 
     Constructs an OpenGL framebuffer object of the given \a size based on the
     supplied \a format.
@@ -873,7 +873,7 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, const QOpe
             format.samples(), format.mipmap());
 }
 
-/*! \overload
+/*!
 
     Constructs an OpenGL framebuffer object of the given \a width and \a height
     based on the supplied \a format.
@@ -884,7 +884,7 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(int width, int height, const 
 {
 }
 
-/*! \overload
+/*!
 
     Constructs an OpenGL framebuffer object and binds a texture to the
     buffer of the given \a width and \a height.
@@ -905,7 +905,7 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(int width, int height, Attach
     d->init(this, QSize(width, height), attachment, target, effectiveInternalFormat(internalFormat));
 }
 
-/*! \overload
+/*!
 
     Constructs an OpenGL framebuffer object and binds a texture to the
     buffer of the given \a size.
@@ -927,7 +927,6 @@ QOpenGLFramebufferObject::QOpenGLFramebufferObject(const QSize &size, Attachment
 }
 
 /*!
-    \fn QOpenGLFramebufferObject::~QOpenGLFramebufferObject()
 
     Destroys the framebuffer object and frees any allocated resources.
 */
@@ -953,7 +952,7 @@ QOpenGLFramebufferObject::~QOpenGLFramebufferObject()
     QOpenGLContextPrivate *contextPrv = QOpenGLContextPrivate::get(QOpenGLContext::currentContext());
     if (contextPrv && contextPrv->qgl_current_fbo == this) {
         contextPrv->qgl_current_fbo_invalid = true;
-        contextPrv->qgl_current_fbo = Q_NULLPTR;
+        contextPrv->qgl_current_fbo = nullptr;
     }
 }
 
@@ -1116,7 +1115,7 @@ bool QOpenGLFramebufferObject::release()
 
         QOpenGLContextPrivate *contextPrv = QOpenGLContextPrivate::get(current);
         contextPrv->qgl_current_fbo_invalid = true;
-        contextPrv->qgl_current_fbo = Q_NULLPTR;
+        contextPrv->qgl_current_fbo = nullptr;
     }
 
     return true;
@@ -1425,14 +1424,17 @@ QImage QOpenGLFramebufferObject::toImage(bool flipped, int colorAttachmentIndex)
     // qt_gl_read_framebuffer doesn't work on a multisample FBO
     if (format().samples() != 0) {
         QRect rect(QPoint(0, 0), size());
+        QOpenGLFramebufferObjectFormat fmt;
         if (extraFuncs->hasOpenGLFeature(QOpenGLFunctions::MultipleRenderTargets)) {
-            QOpenGLFramebufferObject temp(d->colorAttachments[colorAttachmentIndex].size, QOpenGLFramebufferObjectFormat());
+            fmt.setInternalTextureFormat(d->colorAttachments[colorAttachmentIndex].internalFormat);
+            QOpenGLFramebufferObject temp(d->colorAttachments[colorAttachmentIndex].size, fmt);
             blitFramebuffer(&temp, rect, const_cast<QOpenGLFramebufferObject *>(this), rect,
                             GL_COLOR_BUFFER_BIT, GL_NEAREST,
                             colorAttachmentIndex, 0);
             image = temp.toImage(flipped);
         } else {
-            QOpenGLFramebufferObject temp(size(), QOpenGLFramebufferObjectFormat());
+            fmt.setInternalTextureFormat(d->colorAttachments[0].internalFormat);
+            QOpenGLFramebufferObject temp(size(), fmt);
             blitFramebuffer(&temp, rect, const_cast<QOpenGLFramebufferObject *>(this), rect);
             image = temp.toImage(flipped);
         }
@@ -1472,7 +1474,7 @@ bool QOpenGLFramebufferObject::bindDefault()
     if (ctx) {
         ctx->functions()->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
         QOpenGLContextPrivate::get(ctx)->qgl_current_fbo_invalid = true;
-        QOpenGLContextPrivate::get(ctx)->qgl_current_fbo = Q_NULLPTR;
+        QOpenGLContextPrivate::get(ctx)->qgl_current_fbo = nullptr;
     }
 #ifdef QT_DEBUG
     else

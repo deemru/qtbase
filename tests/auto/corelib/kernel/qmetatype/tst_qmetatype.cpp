@@ -39,12 +39,6 @@
 
 #include <algorithm>
 
-// At least these specific versions of MSVC2010 has a severe performance problem with this file,
-// taking about 1 hour to compile if the portion making use of variadic macros is enabled.
-#if defined(_MSC_FULL_VER) && (_MSC_FULL_VER >= 160030319) && (_MSC_FULL_VER <= 160040219)
-# define TST_QMETATYPE_BROKEN_COMPILER
-#endif
-
 // mingw gcc 4.8 also takes way too long, letting the CI system abort the test
 #if defined(__MINGW32__)
 # define TST_QMETATYPE_BROKEN_COMPILER
@@ -147,6 +141,14 @@ public:
 class CustomNonQObject {};
 class GadgetDerived : public CustomGadget {};
 
+// cannot use Q_GADGET due to moc limitations but wants to behave like
+// a Q_GADGET in Qml land
+template<typename T>
+class GadgetDerivedAndTyped : public CustomGadget {};
+
+Q_DECLARE_METATYPE(GadgetDerivedAndTyped<int>)
+Q_DECLARE_METATYPE(GadgetDerivedAndTyped<int>*)
+
 void tst_QMetaType::defined()
 {
     QCOMPARE(int(QMetaTypeId2<QString>::Defined), 1);
@@ -163,6 +165,10 @@ void tst_QMetaType::defined()
     QVERIFY(!QMetaTypeId2<CustomNonQObject>::Defined);
     QVERIFY(!QMetaTypeId2<CustomNonQObject*>::Defined);
     QVERIFY(!QMetaTypeId2<CustomGadget_NonDefaultConstructible>::Defined);
+
+    // registered with Q_DECLARE_METATYPE
+    QVERIFY(QMetaTypeId2<GadgetDerivedAndTyped<int>>::Defined);
+    QVERIFY(QMetaTypeId2<GadgetDerivedAndTyped<int>*>::Defined);
 }
 
 struct Bar
@@ -402,6 +408,10 @@ void tst_QMetaType::typeName_data()
     QTest::newRow("CustomGadget*") << ::qMetaTypeId<CustomGadget*>() << QString::fromLatin1("CustomGadget*");
     QTest::newRow("CustomQObject::CustomQEnum") << ::qMetaTypeId<CustomQObject::CustomQEnum>() << QString::fromLatin1("CustomQObject::CustomQEnum");
     QTest::newRow("Qt::ArrowType") << ::qMetaTypeId<Qt::ArrowType>() << QString::fromLatin1("Qt::ArrowType");
+
+    // template instance class derived from Q_GADGET enabled class
+    QTest::newRow("GadgetDerivedAndTyped<int>") << ::qMetaTypeId<GadgetDerivedAndTyped<int>>() << QString::fromLatin1("GadgetDerivedAndTyped<int>");
+    QTest::newRow("GadgetDerivedAndTyped<int>*") << ::qMetaTypeId<GadgetDerivedAndTyped<int>*>() << QString::fromLatin1("GadgetDerivedAndTyped<int>*");
 }
 
 void tst_QMetaType::typeName()
@@ -1709,6 +1719,9 @@ void tst_QMetaType::metaObject_data()
     QTest::newRow("MyGadget*") << ::qMetaTypeId<MyGadget*>() << &MyGadget::staticMetaObject << false << true << false;
     QTest::newRow("MyEnum") << ::qMetaTypeId<MyGadget::MyEnum>() <<  &MyGadget::staticMetaObject << false << false << false;
     QTest::newRow("Qt::ScrollBarPolicy") << ::qMetaTypeId<Qt::ScrollBarPolicy>() <<  &QObject::staticQtMetaObject << false << false << false;
+
+    QTest::newRow("GadgetDerivedAndTyped<int>") << ::qMetaTypeId<GadgetDerivedAndTyped<int>>() <<  &GadgetDerivedAndTyped<int>::staticMetaObject << true << false << false;
+    QTest::newRow("GadgetDerivedAndTyped<int>*") << ::qMetaTypeId<GadgetDerivedAndTyped<int>*>() <<  &GadgetDerivedAndTyped<int>::staticMetaObject << false << true << false;
 }
 
 

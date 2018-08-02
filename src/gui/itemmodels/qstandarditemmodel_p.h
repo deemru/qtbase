@@ -54,13 +54,14 @@
 #include <QtGui/private/qtguiglobal_p.h>
 #include "private/qabstractitemmodel_p.h"
 
-#ifndef QT_NO_STANDARDITEMMODEL
-
 #include <QtCore/qlist.h>
 #include <QtCore/qpair.h>
 #include <QtCore/qstack.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/qvector.h>
+#include <QtCore/qdebug.h>
+
+QT_REQUIRE_CONFIG(standarditemmodel);
 
 QT_BEGIN_NAMESPACE
 
@@ -69,6 +70,7 @@ class QStandardItemData
 public:
     inline QStandardItemData() : role(-1) {}
     inline QStandardItemData(int r, const QVariant &v) : role(r), value(v) {}
+    inline QStandardItemData(const std::pair<const int&, const QVariant&> &p) : role(p.first), value(p.second) {}
     int role;
     QVariant value;
     inline bool operator==(const QStandardItemData &other) const { return role == other.role && value == other.value; }
@@ -89,6 +91,15 @@ inline QDataStream &operator<<(QDataStream &out, const QStandardItemData &data)
     out << data.role;
     out << data.value;
     return out;
+}
+
+inline QDebug &operator<<(QDebug &debug, const QStandardItemData &data)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace() << data.role
+                    << " "
+                    << data.value;
+    return debug.space();
 }
 
 #endif // QT_NO_DATASTREAM
@@ -189,7 +200,7 @@ public:
     }
 
     void sort(QStandardItem *parent, int column, Qt::SortOrder order);
-    void itemChanged(QStandardItem *item);
+    void itemChanged(QStandardItem *item, const QVector<int> &roles = QVector<int>());
     void rowsAboutToBeInserted(QStandardItem *parent, int start, int end);
     void columnsAboutToBeInserted(QStandardItem *parent, int start, int end);
     void rowsAboutToBeRemoved(QStandardItem *parent, int start, int end);
@@ -212,7 +223,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_STANDARDITEMMODEL
 
 #endif // QSTANDARDITEMMODEL_P_H

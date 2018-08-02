@@ -55,6 +55,13 @@
 #include <stdio.h>
 #include <errno.h>
 
+#if QT_HAS_INCLUDE(<paths.h>)
+# include <paths.h>
+#endif
+#ifndef _PATH_TMP           // from <paths.h>
+# define _PATH_TMP          "/tmp"
+#endif
+
 #if defined(Q_OS_MAC)
 # include <QtCore/private/qcore_mac_p.h>
 # include <CoreFoundation/CFBundle.h>
@@ -84,29 +91,50 @@ extern "C" NSString *NSTemporaryDirectory();
 #  include <sys/syscall.h>
 #  include <sys/sendfile.h>
 #  include <linux/fs.h>
+#  include <linux/stat.h>
 
 // in case linux/fs.h is too old and doesn't define it:
 #ifndef FICLONE
 #  define FICLONE       _IOW(0x94, 9, int)
 #endif
 
-#  if !QT_CONFIG(renameat2) && defined(SYS_renameat2)
+#  if defined(Q_OS_ANDROID)
+// renameat2() and statx() are disabled on Android because quite a few systems
+// come with sandboxes that kill applications that make system calls outside a
+// whitelist and several Android vendors can't be bothered to update the list.
+#    undef SYS_renameat2
+#    undef SYS_statx
+#    undef STATX_BASIC_STATS
+#  else
+#    if !QT_CONFIG(renameat2) && defined(SYS_renameat2)
 static int renameat2(int oldfd, const char *oldpath, int newfd, const char *newpath, unsigned flags)
 { return syscall(SYS_renameat2, oldfd, oldpath, newfd, newpath, flags); }
-#  endif
+#    endif
 
-#  if !QT_CONFIG(statx) && defined(SYS_statx) && QT_HAS_INCLUDE(<linux/stat.h>)
-#    include <linux/stat.h>
+#    if !QT_CONFIG(statx) && defined(SYS_statx)
 static int statx(int dirfd, const char *pathname, int flag, unsigned mask, struct statx *statxbuf)
 { return syscall(SYS_statx, dirfd, pathname, flag, mask, statxbuf); }
-#  endif
+#    elif !QT_CONFIG(statx) && !defined(SYS_statx)
+#      undef STATX_BASIC_STATS
+#    endif
+#  endif // !Q_OS_ANDROID
 #endif
 
-#ifndef STATX_BASIC_STATS
-struct statx { mode_t stx_mode; };
+#ifndef STATX_ALL
+struct statx { mode_t stx_mode; };      // dummy
 #endif
 
 QT_BEGIN_NAMESPACE
+
+enum {
+#ifdef Q_OS_ANDROID
+    // On Android, the link(2) system call has been observed to always fail
+    // with EACCES, regardless of whether there are permission problems or not.
+    SupportsHardlinking = false
+#else
+    SupportsHardlinking = true
+#endif
+};
 
 #define emptyFileEntryWarning() emptyFileEntryWarning_(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC)
 static void emptyFileEntryWarning_(const char *file, int line, const char *function)
@@ -1287,7 +1315,7 @@ bool QFileSystemEngine::renameFile(const QFileSystemEntry &source, const QFileSy
     }
 #endif
 
-    if (::link(srcPath, tgtPath) == 0) {
+    if (SupportsHardlinking && ::link(srcPath, tgtPath) == 0) {
         if (::unlink(srcPath) == 0)
             return true;
 
@@ -1301,6 +1329,11 @@ bool QFileSystemEngine::renameFile(const QFileSystemEntry &source, const QFileSy
 
         error = QSystemError(savedErrno, QSystemError::StandardLibraryError);
         return false;
+    } else if (!SupportsHardlinking) {
+        // man 2 link on Linux has:
+        // EPERM  The filesystem containing oldpath and newpath does not
+        //        support the creation of hard links.
+        errno = EPERM;
     }
 
     switch (errno) {
@@ -1492,14 +1525,13 @@ QString QFileSystemEngine::tempPath()
 #else
     QString temp = QFile::decodeName(qgetenv("TMPDIR"));
     if (temp.isEmpty()) {
+        if (false) {
 #if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
-        if (NSString *nsPath = NSTemporaryDirectory()) {
+        } else if (NSString *nsPath = NSTemporaryDirectory()) {
             temp = QString::fromCFString((CFStringRef)nsPath);
-        } else {
-#else
-        {
 #endif
-            temp = QLatin1String("/tmp");
+        } else {
+            temp = QLatin1String(_PATH_TMP);
         }
     }
     return QDir::cleanPath(temp);

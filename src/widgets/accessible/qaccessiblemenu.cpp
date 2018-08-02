@@ -242,7 +242,7 @@ QObject *QAccessibleMenuItem::object() const
 /*! \reimp */
 QWindow *QAccessibleMenuItem::window() const
 {
-    QWindow *result = Q_NULLPTR;
+    QWindow *result = nullptr;
     if (!m_owner.isNull()) {
         result = m_owner->windowHandle();
         if (!result) {

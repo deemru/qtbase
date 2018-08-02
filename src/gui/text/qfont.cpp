@@ -1328,7 +1328,7 @@ QFont::StyleHint QFont::styleHint() const
            order to display them correctly. In some writing systems, such as Brahmic scripts, this is
            required in order for the text to be legible, but in e.g. Latin script, it is merely
            a cosmetic feature. The PreferNoShaping flag will disable all such features when they
-           are not required, which will improve performance in most cases.
+           are not required, which will improve performance in most cases (since Qt 5.10).
 
     Any of these may be OR-ed with one of these flags:
 
@@ -2849,7 +2849,7 @@ QFontEngine *QFontCache::findEngine(const Key &key)
                          end = engineCache.end();
     if (it == end) return 0;
 
-    Q_ASSERT(it.value().data != Q_NULLPTR);
+    Q_ASSERT(it.value().data != nullptr);
     Q_ASSERT(key.multi == (it.value().data->type() == QFontEngine::Multi));
 
     // found... update the hitcount and timestamp
@@ -2872,7 +2872,7 @@ void QFontCache::updateHitCountAndTimeStamp(Engine &value)
 
 void QFontCache::insertEngine(const Key &key, QFontEngine *engine, bool insertMulti)
 {
-    Q_ASSERT(engine != Q_NULLPTR);
+    Q_ASSERT(engine != nullptr);
     Q_ASSERT(key.multi == (engine->type() == QFontEngine::Multi));
 
 #ifdef QFONTCACHE_DEBUG

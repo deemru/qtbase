@@ -159,6 +159,7 @@ private slots:
     void taskQTBUG_34717_collapseAtBottom();
     void task20345_sortChildren();
     void getMimeDataWithInvalidItem();
+    void testVisualItemRect();
 
 public slots:
     void itemSelectionChanged();
@@ -332,9 +333,18 @@ void tst_QTreeWidget::addTopLevelItem()
         for (int i = 0; i < 10; ++i)
             tops << new TreeItem();
         int count = tree.topLevelItemCount();
-        tree.insertTopLevelItems(100000, tops);
-        // ### fixme
+        tree.insertTopLevelItems(count, tops);
         QCOMPARE(tree.topLevelItemCount(), count + 10);
+    }
+
+    // invalid insert
+    {
+        tops.clear();
+        for (int i = 0; i < 10; ++i)
+            tops << new TreeItem();
+        int count = tree.topLevelItemCount();
+        tree.insertTopLevelItems(100000, tops); // should be a no-op
+        QCOMPARE(tree.topLevelItemCount(), count);
     }
 }
 
@@ -2016,7 +2026,6 @@ void tst_QTreeWidget::setHeaderItem()
     headerItem->setText(0, "0");
     headerItem->setText(1, "1");
     testWidget->setHeaderItem(headerItem);
-    QTest::qWait(100);
     QCOMPARE(testWidget->headerItem(), headerItem);
     QCOMPARE(headerItem->treeWidget(), static_cast<QTreeWidget *>(testWidget));
 
@@ -2971,7 +2980,7 @@ void tst_QTreeWidget::task191552_rtl()
     item->setCheckState(0, Qt::Checked);
     QCOMPARE(item->checkState(0), Qt::Checked);
     tw.show();
-    QTest::qWait(50);
+    QVERIFY(QTest::qWaitForWindowActive(&tw));
     QStyleOptionViewItem opt;
     opt.initFrom(&tw);
     opt.rect = tw.visualItemRect(item);
@@ -2981,7 +2990,6 @@ void tst_QTreeWidget::task191552_rtl()
     opt.widget = &tw;
     const QRect checkRect = tw.style()->subElementRect(QStyle::SE_ViewItemCheckIndicator, &opt, &tw);
     QTest::mouseClick(tw.viewport(), Qt::LeftButton, Qt::NoModifier, checkRect.center());
-    QTest::qWait(200);
     QCOMPARE(item->checkState(0), Qt::Unchecked);
 
     qApp->setLayoutDirection(oldDir);
@@ -3078,7 +3086,7 @@ void tst_QTreeWidget::task253109_itemHeight()
     QTreeWidget treeWidget;
     treeWidget.setColumnCount(1);
     treeWidget.show();
-    QTest::qWait(200);
+    QVERIFY(QTest::qWaitForWindowActive(&treeWidget));
 
     QTreeWidgetItem item(&treeWidget);
     class MyWidget : public QWidget
@@ -3087,9 +3095,7 @@ void tst_QTreeWidget::task253109_itemHeight()
     } w;
     treeWidget.setItemWidget(&item, 0, &w);
 
-    QTest::qWait(200);
-    QCOMPARE(w.geometry(), treeWidget.visualItemRect(&item));
-
+    QTRY_COMPARE(w.geometry(), treeWidget.visualItemRect(&item));
 }
 
 void tst_QTreeWidget::task206367_duplication()
@@ -3269,7 +3275,7 @@ void tst_QTreeWidget::task239150_editorWidth()
         QVERIFY(tree.itemWidget(&item, 0) == 0);
         tree.editItem(&item);
         QVERIFY(tree.itemWidget(&item, 0));
-        QVERIFY(tree.itemWidget(&item, 0)->width() >= minWidth + tree.fontMetrics().width(item.text(0)));
+        QVERIFY(tree.itemWidget(&item, 0)->width() >= minWidth + tree.fontMetrics().horizontalAdvance(item.text(0)));
     }
 }
 
@@ -3296,16 +3302,15 @@ void tst_QTreeWidget::setTextUpdate()
 
     treeWidget.setItemDelegate(&delegate);
     treeWidget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&treeWidget));
     QStringList strList;
     strList << "variable1" << "0";
     QTreeWidgetItem *item = new QTreeWidgetItem(strList);
     treeWidget.insertTopLevelItem(0, item);
-    QTest::qWait(50);
     QTRY_VERIFY(delegate.numPaints > 0);
     delegate.numPaints = 0;
 
     item->setText(1, "42");
-    QApplication::processEvents();
     QTRY_VERIFY(delegate.numPaints > 0);
 }
 
@@ -3346,34 +3351,30 @@ void tst_QTreeWidget::setChildIndicatorPolicy()
 
     treeWidget.setItemDelegate(&delegate);
     treeWidget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&treeWidget));
 
     QTreeWidgetItem *item = new QTreeWidgetItem(QStringList("Hello"));
     treeWidget.insertTopLevelItem(0, item);
-    QTest::qWait(50);
     QTRY_VERIFY(delegate.numPaints > 0);
 
     delegate.numPaints = 0;
     delegate.expectChildren = true;
     item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-    QApplication::processEvents();
     QTRY_COMPARE(delegate.numPaints, 1);
 
     delegate.numPaints = 0;
     delegate.expectChildren = false;
     item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicatorWhenChildless);
-    QApplication::processEvents();
     QTRY_COMPARE(delegate.numPaints, 1);
 
     delegate.numPaints = 0;
     delegate.expectChildren = true;
     new QTreeWidgetItem(item);
-    QApplication::processEvents();
     QTRY_COMPARE(delegate.numPaints, 1);
 
     delegate.numPaints = 0;
     delegate.expectChildren = false;
     item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
-    QApplication::processEvents();
     QTRY_COMPARE(delegate.numPaints, 1);
 }
 
@@ -3449,8 +3450,37 @@ void tst_QTreeWidget::getMimeDataWithInvalidItem()
 {
     CustomTreeWidget w;
     QTest::ignoreMessage(QtWarningMsg, "QTreeWidget::mimeData: Null-item passed");
-    QMimeData *md = w.mimeData(QList<QTreeWidgetItem*>() << Q_NULLPTR);
+    QMimeData *md = w.mimeData(QList<QTreeWidgetItem*>() << nullptr);
     QVERIFY(!md);
+}
+
+// visualItemRect returned a wrong rect when the columns were moved
+// (-> logical index != visual index). see QTBUG-28733
+void tst_QTreeWidget::testVisualItemRect()
+{
+    QTreeWidget tw;
+    tw.setColumnCount(2);
+    QTreeWidgetItem *item = new QTreeWidgetItem(&tw);
+    item->setText(0, "text 0");
+    item->setText(1, "text 1");
+
+    static const int sectionSize = 30;
+    tw.header()->setStretchLastSection(false);
+    tw.header()->setMinimumSectionSize(sectionSize);
+    tw.header()->resizeSection(0, sectionSize);
+    tw.header()->resizeSection(1, sectionSize);
+    tw.setRootIsDecorated(false);
+    tw.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tw));
+
+    QRect r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize * 2);   // 2 columns
+    tw.header()->moveSection(1, 0);
+    r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize * 2);   // 2 columns
+    tw.hideColumn(0);
+    r = tw.visualItemRect(item);
+    QCOMPARE(r.width(), sectionSize);
 }
 
 QTEST_MAIN(tst_QTreeWidget)

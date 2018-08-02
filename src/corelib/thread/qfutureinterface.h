@@ -41,12 +41,11 @@
 #define QFUTUREINTERFACE_H
 
 #include <QtCore/qrunnable.h>
-
-#ifndef QT_NO_QFUTURE
-
 #include <QtCore/qmutex.h>
 #include <QtCore/qexception.h>
 #include <QtCore/qresultstore.h>
+
+QT_REQUIRE_CONFIG(future);
 
 QT_BEGIN_NAMESPACE
 
@@ -291,10 +290,9 @@ public:
 
     void reportResult(const void *, int) { }
     void reportResults(const QVector<void> &, int) { }
-    void reportFinished(const void * = Q_NULLPTR) { QFutureInterfaceBase::reportFinished(); }
+    void reportFinished(const void * = nullptr) { QFutureInterfaceBase::reportFinished(); }
 };
 
 QT_END_NAMESPACE
-#endif // QT_NO_QFUTURE
 
 #endif // QFUTUREINTERFACE_H

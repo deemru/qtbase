@@ -1995,19 +1995,16 @@ void tst_QComboBox::flaggedItems()
     QApplication::setActiveWindow(&comboBox);
     comboBox.activateWindow();
     comboBox.setFocus();
+    QVERIFY(QTest::qWaitForWindowActive(&comboBox));
     QTRY_VERIFY(comboBox.isVisible());
     QTRY_VERIFY(comboBox.hasFocus());
 
     if (editable)
         comboBox.lineEdit()->selectAll();
 
-    QSignalSpy indexChangedInt(&comboBox, SIGNAL(currentIndexChanged(int)));
     for (int i = 0; i < keyMovementList.count(); ++i) {
         Qt::Key key = keyMovementList[i];
         QTest::keyClick(&comboBox, key);
-        if (indexChangedInt.count() != i + 1) {
-            QTest::qWait(400);
-        }
     }
 
     QCOMPARE(comboBox.currentIndex() , expectedIndex);
@@ -2052,13 +2049,13 @@ void tst_QComboBox::mouseWheel_data()
     QTest::newRow("upper locked") << disabled << start << wheel << expected;
 
     wheel = -1;
-#ifdef Q_OS_DARWIN
+    const bool allowsWheelScroll = QApplication::style()->styleHint(QStyle::SH_ComboBox_AllowWheelScrolling);
     // on OS X & iOS mouse wheel shall have no effect on combo box
-    expected = start;
-#else
-    // on other OSes we should jump to next enabled item (no. 5)
-    expected = 5;
-#endif
+    if (!allowsWheelScroll)
+        expected = start;
+    else // on other OSes we should jump to next enabled item (no. 5)
+        expected = 5;
+
     QTest::newRow("jump over") << disabled << start << wheel << expected;
 
     disabled.clear();
@@ -2447,7 +2444,7 @@ void tst_QComboBox::task220195_keyBoardSelection2()
     combo.addItem( QLatin1String("foo3"));
     combo.show();
     QApplication::setActiveWindow(&combo);
-    QTRY_COMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&combo));
+    QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     combo.setCurrentIndex(-1);
     QVERIFY(combo.currentText().isNull());
@@ -3273,7 +3270,7 @@ void tst_QComboBox::task_QTBUG_49831_scrollerNotActivated()
 class QTBUG_56693_Model : public QStandardItemModel
 {
 public:
-    QTBUG_56693_Model(QObject *parent = Q_NULLPTR)
+    QTBUG_56693_Model(QObject *parent = nullptr)
         : QStandardItemModel(parent)
     { }
 
@@ -3301,7 +3298,7 @@ public:
 
     }
 
-    void drawControl(ControlElement element, const QStyleOption *opt, QPainter *p, const QWidget *w = Q_NULLPTR) const override
+    void drawControl(ControlElement element, const QStyleOption *opt, QPainter *p, const QWidget *w = nullptr) const override
     {
         if (element == CE_MenuItem)
             if (const QStyleOptionMenuItem *menuItem = qstyleoption_cast<const QStyleOptionMenuItem *>(opt))

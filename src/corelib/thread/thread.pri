@@ -10,30 +10,21 @@ HEADERS += thread/qmutex.h \
            thread/qthreadstorage.h \
            thread/qwaitcondition.h \
            thread/qatomic.h \
-           thread/qexception.h \
-           thread/qresultstore.h \
-           thread/qfuture.h \
-           thread/qfutureinterface.h \
-           thread/qfuturesynchronizer.h \
-           thread/qfuturewatcher.h \
+           thread/qatomic_bootstrap.h \
+           thread/qatomic_cxx11.h \
            thread/qbasicatomic.h \
            thread/qgenericatomic.h
 
 # private headers
 HEADERS += thread/qmutex_p.h \
            thread/qmutexpool_p.h \
-           thread/qfutureinterface_p.h \
-           thread/qfuturewatcher_p.h \
+           thread/qfutex_p.h \
            thread/qorderedmutexlocker_p.h \
            thread/qreadwritelock_p.h \
            thread/qthread_p.h \
            thread/qthreadpool_p.h
 
 SOURCES += thread/qatomic.cpp \
-           thread/qexception.cpp \
-           thread/qresultstore.cpp \
-           thread/qfutureinterface.cpp \
-           thread/qfuturewatcher.cpp \
            thread/qmutex.cpp \
            thread/qreadwritelock.cpp \
            thread/qrunnable.cpp \
@@ -43,7 +34,27 @@ SOURCES += thread/qatomic.cpp \
            thread/qthreadpool.cpp \
            thread/qthreadstorage.cpp
 
+qtConfig(future) {
+    HEADERS += \
+        thread/qexception.h \
+        thread/qfuture.h \
+        thread/qfutureinterface.h \
+        thread/qfutureinterface_p.h \
+        thread/qfuturesynchronizer.h \
+        thread/qfuturewatcher.h \
+        thread/qfuturewatcher_p.h \
+        thread/qresultstore.h
+
+    SOURCES += \
+        thread/qexception.cpp \
+        thread/qfutureinterface.cpp \
+        thread/qfuturewatcher.cpp \
+        thread/qresultstore.cpp
+}
+
 win32 {
+    HEADERS += thread/qatomic_msvc.h
+
     SOURCES += \
         thread/qmutex_win.cpp \
         thread/qthread_win.cpp \
@@ -60,3 +71,5 @@ win32 {
         thread/qthread_unix.cpp \
         thread/qwaitcondition_unix.cpp
 }
+
+qtConfig(std-atomic64): QMAKE_USE += libatomic

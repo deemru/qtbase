@@ -104,7 +104,7 @@ QPlatformWindow *QPlatformWindow::parent() const
 QPlatformScreen *QPlatformWindow::screen() const
 {
     QScreen *scr = window()->screen();
-    return scr ? scr->handle() : Q_NULLPTR;
+    return scr ? scr->handle() : nullptr;
 }
 
 /*!
@@ -161,6 +161,16 @@ QRect QPlatformWindow::normalGeometry() const
 }
 
 QMargins QPlatformWindow::frameMargins() const
+{
+    return QMargins();
+}
+
+/*!
+    The safe area margins of a window represent the area that is safe to
+    place content within, without intersecting areas of the screen where
+    system UI is placed, or where a screen bezel may cover the content.
+*/
+QMargins QPlatformWindow::safeAreaMargins() const
 {
     return QMargins();
 }
@@ -461,6 +471,25 @@ bool QPlatformWindow::startSystemResize(const QPoint &pos, Qt::Corner corner)
 {
     Q_UNUSED(pos)
     Q_UNUSED(corner)
+    return false;
+}
+
+/*!
+    Reimplement this method to start a system move operation if
+    the system supports it and return true to indicate success.
+
+    The \a pos is a position of MouseButtonPress event or TouchBegin
+    event from a sequence of mouse events that triggered the movement.
+    It must be specified in window coordinates.
+
+    The default implementation is empty and does nothing with \a pos.
+
+    \since 5.11
+*/
+
+bool QPlatformWindow::startSystemMove(const QPoint &pos)
+{
+    Q_UNUSED(pos)
     return false;
 }
 

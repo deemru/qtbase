@@ -60,6 +60,8 @@
 #include "QtNetwork/qhostaddress.h"
 #include "private/qobject_p.h"
 
+QT_REQUIRE_CONFIG(dnslookup);
+
 QT_BEGIN_NAMESPACE
 
 //#define QDNSLOOKUP_DEBUG
@@ -118,7 +120,7 @@ public:
         , requestName(name)
         , nameserver(nameserver)
     { }
-    void run() Q_DECL_OVERRIDE;
+    void run() override;
 
 signals:
     void finished(const QDnsLookupReply &reply);

@@ -611,15 +611,16 @@ void QAbstractSpinBox::stepDown()
 }
 /*!
     Virtual function that is called whenever the user triggers a step.
-    The \a steps parameter indicates how many steps were taken, e.g.
-    Pressing Qt::Key_Down will trigger a call to stepBy(-1),
-    whereas pressing Qt::Key_Prior will trigger a call to
-    stepBy(10).
+    The \a steps parameter indicates how many steps were taken.
+    For example, pressing \c Qt::Key_Down will trigger a call to \c stepBy(-1),
+    whereas pressing \c Qt::Key_PageUp will trigger a call to \c stepBy(10).
 
-    If you subclass QAbstractSpinBox you must reimplement this
+    If you subclass \c QAbstractSpinBox you must reimplement this
     function. Note that this function is called even if the resulting
     value will be outside the bounds of minimum and maximum. It's this
     function's job to handle these situations.
+
+    \sa stepUp(), stepDown(), keyPressEvent()
 */
 
 void QAbstractSpinBox::stepBy(int steps)
@@ -678,15 +679,20 @@ void QAbstractSpinBox::setLineEdit(QLineEdit *lineEdit)
         Q_ASSERT(lineEdit);
         return;
     }
+
+    if (lineEdit == d->edit)
+        return;
+
     delete d->edit;
     d->edit = lineEdit;
+    setProperty("_q_spinbox_lineedit", QVariant::fromValue<QWidget *>(d->edit));
     if (!d->edit->validator())
         d->edit->setValidator(d->validator);
 
     if (d->edit->parent() != this)
         d->edit->setParent(this);
 
-    d->edit->setFrame(false);
+    d->edit->setFrame(!style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this));
     d->edit->setFocusProxy(this);
     d->edit->setAcceptDrops(false);
 
@@ -818,6 +824,8 @@ void QAbstractSpinBox::changeEvent(QEvent *event)
             d->spinClickTimerInterval = style()->styleHint(QStyle::SH_SpinBox_ClickAutoRepeatRate, 0, this);
             d->spinClickThresholdTimerInterval =
                 style()->styleHint(QStyle::SH_SpinBox_ClickAutoRepeatThreshold, 0, this);
+            if (d->edit)
+                d->edit->setFrame(!style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this));
             d->reset();
             d->updateEditFieldGeometry();
             break;
@@ -870,15 +878,15 @@ QSize QAbstractSpinBox::sizeHint() const
         s = d->textFromValue(d->minimum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
         s = d->textFromValue(d->maximum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
 
         if (d->specialValueText.size()) {
             s = d->specialValueText;
-            w = qMax(w, fm.width(s));
+            w = qMax(w, fm.horizontalAdvance(s));
         }
         w += 2; // cursor blinking space
 
@@ -911,15 +919,15 @@ QSize QAbstractSpinBox::minimumSizeHint() const
         s = d->textFromValue(d->minimum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
         s = d->textFromValue(d->maximum);
         s.truncate(18);
         s += fixedContent;
-        w = qMax(w, fm.width(s));
+        w = qMax(w, fm.horizontalAdvance(s));
 
         if (d->specialValueText.size()) {
             s = d->specialValueText;
-            w = qMax(w, fm.width(s));
+            w = qMax(w, fm.horizontalAdvance(s));
         }
         w += 2; // cursor blinking space
 
@@ -964,6 +972,8 @@ void QAbstractSpinBox::paintEvent(QPaintEvent *)
     \row \li Page down
          \li This will invoke stepBy(-10)
     \endtable
+
+    \sa stepBy()
 */
 
 
@@ -1644,7 +1654,9 @@ void QAbstractSpinBox::initStyleOption(QStyleOptionSpinBox *option) const
     option->initFrom(this);
     option->activeSubControls = QStyle::SC_None;
     option->buttonSymbols = d->buttonSymbols;
-    option->subControls = QStyle::SC_SpinBoxFrame | QStyle::SC_SpinBoxEditField;
+    option->subControls = QStyle::SC_SpinBoxEditField;
+    if (style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, this))
+        option->subControls |= QStyle::SC_SpinBoxFrame;
     if (d->buttonSymbols != QAbstractSpinBox::NoButtons) {
         option->subControls |= QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown;
         if (d->buttonState & Up) {

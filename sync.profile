@@ -11,6 +11,7 @@
     "QtDBus" => "$basedir/src/dbus",
     "QtConcurrent" => "$basedir/src/concurrent",
     "QtAccessibilitySupport" => "$basedir/src/platformsupport/accessibility",
+    "QtWindowsUIAutomationSupport" => "$basedir/src/platformsupport/windowsuiautomation",
     "QtLinuxAccessibilitySupport" => "$basedir/src/platformsupport/linuxaccessibility",
     "QtClipboardSupport" => "$basedir/src/platformsupport/clipboard",
     "QtDeviceDiscoverySupport" => "$basedir/src/platformsupport/devicediscovery",
@@ -72,6 +73,9 @@
     },
     "QtDBus" => {
         "qdbusmacros.h" => "QtDbus/qtdbusglobal.h"
+    },
+    "QtTest" => {
+        "qtest_global.h" => "QtTest/qttestglobal.h"
     }
 );
 

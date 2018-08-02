@@ -53,8 +53,6 @@
 #include <qpair.h>
 #include <qdebug.h>
 
-#ifndef QT_NO_HTTP
-
 #ifndef QT_NO_SSL
 #    include <private/qsslsocket_p.h>
 #    include <QtNetwork/qsslkey.h>
@@ -83,10 +81,11 @@ QHttpNetworkConnectionPrivate::QHttpNetworkConnectionPrivate(const QString &host
   networkLayerState(Unknown),
   hostName(hostName), port(port), encrypt(encrypt), delayIpv4(true)
   , activeChannelCount(type == QHttpNetworkConnection::ConnectionTypeHTTP2
+                       || type == QHttpNetworkConnection::ConnectionTypeHTTP2Direct
 #ifndef QT_NO_SSL
-                        || type == QHttpNetworkConnection::ConnectionTypeSPDY
+                       || type == QHttpNetworkConnection::ConnectionTypeSPDY
 #endif
-                        ? 1 : defaultHttpChannelCount)
+                       ? 1 : defaultHttpChannelCount)
   , channelCount(defaultHttpChannelCount)
 #ifndef QT_NO_NETWORKPROXY
   , networkProxy(QNetworkProxy::NoProxy)
@@ -122,7 +121,7 @@ QHttpNetworkConnectionPrivate::~QHttpNetworkConnectionPrivate()
 {
     for (int i = 0; i < channelCount; ++i) {
         if (channels[i].socket) {
-            QObject::disconnect(channels[i].socket, Q_NULLPTR, &channels[i], Q_NULLPTR);
+            QObject::disconnect(channels[i].socket, nullptr, &channels[i], nullptr);
             channels[i].socket->close();
             delete channels[i].socket;
         }
@@ -355,7 +354,7 @@ void QHttpNetworkConnectionPrivate::prepareRequest(HttpMessagePair &messagePair)
             host += QByteArray::number(port);
         }
 
-        request.setHeaderField("Host", host);
+        request.prependHeaderField("Host", host);
     }
 
     reply->d_func()->requestIsPrepared = true;
@@ -647,8 +646,8 @@ QHttpNetworkReply* QHttpNetworkConnectionPrivate::queueRequest(const QHttpNetwor
 
 #ifndef Q_OS_WINRT
     // For Happy Eyeballs the networkLayerState is set to Unknown
-    // untill we have started the first connection attempt. So no
-    // request will be started untill we know if IPv4 or IPv6
+    // until we have started the first connection attempt. So no
+    // request will be started until we know if IPv4 or IPv6
     // should be used.
     if (networkLayerState == Unknown || networkLayerState == HostLookupPending) {
         startHostInfoLookup();
@@ -1065,6 +1064,7 @@ void QHttpNetworkConnectionPrivate::_q_startNextRequest()
         }
         break;
     }
+    case QHttpNetworkConnection::ConnectionTypeHTTP2Direct:
     case QHttpNetworkConnection::ConnectionTypeHTTP2:
     case QHttpNetworkConnection::ConnectionTypeSPDY: {
         if (channels[0].spdyRequestsToSend.isEmpty() && channels[0].switchedToHttp2)
@@ -1231,20 +1231,20 @@ void QHttpNetworkConnectionPrivate::_q_hostLookupFinished(const QHostInfo &info)
         if (dequeueRequest(channels[0].socket)) {
             emitReplyError(channels[0].socket, channels[0].reply, QNetworkReply::HostNotFoundError);
             networkLayerState = QHttpNetworkConnectionPrivate::Unknown;
-        }
-#ifndef QT_NO_SSL
-        else if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY) {
+        } else if (connectionType == QHttpNetworkConnection::ConnectionTypeSPDY
+                   || connectionType == QHttpNetworkConnection::ConnectionTypeHTTP2) {
             for (const HttpMessagePair &spdyPair : qAsConst(channels[0].spdyRequestsToSend)) {
                 // emit error for all replies
                 QHttpNetworkReply *currentReply = spdyPair.second;
                 Q_ASSERT(currentReply);
                 emitReplyError(channels[0].socket, currentReply, QNetworkReply::HostNotFoundError);
             }
-        }
-#endif // QT_NO_SSL
-        else {
-            // Should not happen
-            qWarning("QHttpNetworkConnectionPrivate::_q_hostLookupFinished could not de-queue request");
+        } else {
+            // Should not happen: we start a host lookup before sending a request,
+            // so it's natural to have requests either in SPDY/HTTP/2 queue,
+            // or in low/high priority queues.
+            qWarning("QHttpNetworkConnectionPrivate::_q_hostLookupFinished"
+                     " could not de-queue request, failed to report HostNotFoundError");
             networkLayerState = QHttpNetworkConnectionPrivate::Unknown;
         }
     }
@@ -1554,5 +1554,3 @@ void QHttpNetworkConnectionPrivate::emitProxyAuthenticationRequired(const QHttpN
 QT_END_NAMESPACE
 
 #include "moc_qhttpnetworkconnection_p.cpp"
-
-#endif // QT_NO_HTTP

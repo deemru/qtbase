@@ -221,6 +221,28 @@ void QWindowsInputContext::setFocusObject(QObject *)
     updateEnabled();
 }
 
+HWND QWindowsInputContext::getVirtualKeyboardWindowHandle() const
+{
+    return ::FindWindowA("IPTip_Main_Window", nullptr);
+}
+
+QRectF QWindowsInputContext::keyboardRect() const
+{
+    if (HWND hwnd = getVirtualKeyboardWindowHandle()) {
+        RECT rect;
+        if (::GetWindowRect(hwnd, &rect)) {
+            return QRectF(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+        }
+    }
+    return QRectF();
+}
+
+bool QWindowsInputContext::isInputPanelVisible() const
+{
+    HWND hwnd = getVirtualKeyboardWindowHandle();
+    return hwnd && ::IsWindowEnabled(hwnd) && ::IsWindowVisible(hwnd);
+}
+
 void QWindowsInputContext::updateEnabled()
 {
     if (!QGuiApplication::focusObject())
@@ -507,6 +529,14 @@ bool QWindowsInputContext::endComposition(HWND hwnd)
         return false;
     if (m_compositionContext.focusObject.isNull())
         return false;
+
+    // QTBUG-58300: Ignore WM_IME_ENDCOMPOSITION when CTRL is pressed to prevent
+    // for example the text being cleared when pressing CTRL+A
+    if (m_locale.language() == QLocale::Korean
+        && QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ControlModifier)) {
+        reset();
+        return true;
+    }
 
     m_endCompositionRecursionGuard = true;
 

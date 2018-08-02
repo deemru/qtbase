@@ -350,6 +350,13 @@ void QWindowsMenuItem::setIsSeparator(bool isSeparator)
     if (m_separator == isSeparator)
         return;
     m_separator = isSeparator;
+    if (m_parentMenu == nullptr)
+        return;
+    MENUITEMINFO menuItemInfo;
+    menuItemInfoInit(menuItemInfo);
+    menuItemInfo.fMask = MIIM_FTYPE;
+    menuItemInfo.fType = isSeparator ? MFT_SEPARATOR : MFT_STRING;
+    SetMenuItemInfo(parentMenuHandle(), m_id, FALSE, &menuItemInfo);
 }
 
 void QWindowsMenuItem::setCheckable(bool checkable)
@@ -383,6 +390,7 @@ void QWindowsMenuItem::setChecked(bool isChecked)
     menuItemSetChangeState(parentMenuHandle(), m_id, FALSE, m_checked, MF_CHECKED, MF_UNCHECKED);
 }
 
+#if QT_CONFIG(shortcut)
 void QWindowsMenuItem::setShortcut(const QKeySequence &shortcut)
 {
     qCDebug(lcQpaMenus) << __FUNCTION__ << '(' << shortcut << ')' << this;
@@ -392,6 +400,7 @@ void QWindowsMenuItem::setShortcut(const QKeySequence &shortcut)
     if (m_parentMenu != nullptr)
         updateText();
 }
+#endif
 
 void QWindowsMenuItem::setEnabled(bool enabled)
 {
@@ -434,10 +443,12 @@ UINT QWindowsMenuItem::state() const
 QString QWindowsMenuItem::nativeText() const
 {
     QString result = m_text;
+#if QT_CONFIG(shortcut)
     if (!m_shortcut.isEmpty()) {
         result += QLatin1Char('\t');
         result += m_shortcut.toString(QKeySequence::NativeText);
     }
+#endif
     return result;
 }
 
@@ -686,9 +697,16 @@ void QWindowsPopupMenu::showPopup(const QWindow *parentWindow, const QRect &targ
 bool QWindowsPopupMenu::trackPopupMenu(HWND windowHandle, int x, int y)
 {
     lastShownPopupMenu = this;
-    return TrackPopupMenu(menuHandle(),
+    // Emulate Show()/Hide() signals. Could be implemented by catching the
+    // WM_EXITMENULOOP, WM_ENTERMENULOOP messages; but they do not carry
+    // information telling which menu was opened.
+    emit aboutToShow();
+    const bool result =
+        TrackPopupMenu(menuHandle(),
                           QGuiApplication::layoutDirection() == Qt::RightToLeft ? UINT(TPM_RIGHTALIGN) : UINT(0),
                           x, y, 0, windowHandle, nullptr) == TRUE;
+    emit aboutToHide();
+    return result;
 }
 
 bool QWindowsPopupMenu::notifyTriggered(uint id)
@@ -880,8 +898,10 @@ void QWindowsMenuItem::formatDebug(QDebug &d) const
         d << ", subMenu=" << static_cast<const void *>(m_subMenu);
     d << ", tag=" << showbase << hex
       << tag() << noshowbase << dec << ", id=" << m_id;
+#if QT_CONFIG(shortcut)
     if (!m_shortcut.isEmpty())
         d << ", shortcut=" << m_shortcut;
+#endif
     if (m_visible)
         d << " [visible]";
     if (m_enabled)

@@ -58,6 +58,7 @@ QT_END_NAMESPACE
     QT_PREPEND_NAMESPACE(QIOSWindow) *m_qioswindow;
   @private
     QHash<UITouch *, QWindowSystemInterface::TouchPoint> m_activeTouches;
+    UITouch *m_activePencilTouch;
     int m_nextTouchId;
 
   @private
@@ -77,5 +78,6 @@ QT_END_NAMESPACE
 - (QWindow *)qwindow;
 - (UIViewController *)viewController;
 - (QIOSViewController*)qtViewController;
+@property (nonatomic, readonly) UIEdgeInsets qt_safeAreaInsets;
 @end
 

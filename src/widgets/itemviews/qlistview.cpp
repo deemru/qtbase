@@ -44,7 +44,9 @@
 #include <qapplication.h>
 #include <qpainter.h>
 #include <qbitmap.h>
+#if QT_CONFIG(draganddrop)
 #include <qdrag.h>
+#endif
 #include <qvector.h>
 #include <qstyle.h>
 #include <qevent.h>
@@ -230,7 +232,7 @@ void QListView::setMovement(Movement movement)
     d->modeProperties |= uint(QListViewPrivate::Movement);
     d->movement = movement;
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     bool movable = (movement != Static);
     setDragEnabled(movable);
     d->viewport->setAcceptDrops(movable);
@@ -494,7 +496,7 @@ void QListView::setViewMode(ViewMode mode)
             d->showElasticBand = true;
     }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     bool movable = (d->movement != Static);
     setDragEnabled(movable);
     setAcceptDrops(movable);
@@ -875,7 +877,7 @@ void QListView::resizeEvent(QResizeEvent *e)
     }
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 
 /*!
   \reimp
@@ -919,7 +921,7 @@ void QListView::startDrag(Qt::DropActions supportedActions)
         QAbstractItemView::startDrag(supportedActions);
 }
 
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 /*!
   \reimp
@@ -980,9 +982,18 @@ void QListView::paintEvent(QPaintEvent *e)
         ? qMax(viewport()->size().width(), d->contentsSize().width()) - 2 * d->spacing()
         : qMax(viewport()->size().height(), d->contentsSize().height()) - 2 * d->spacing();
 
+    const int rowCount = d->commonListView->rowCount();
     QVector<QModelIndex>::const_iterator end = toBeRendered.constEnd();
     for (QVector<QModelIndex>::const_iterator it = toBeRendered.constBegin(); it != end; ++it) {
         Q_ASSERT((*it).isValid());
+        if (rowCount == 1)
+            option.viewItemPosition = QStyleOptionViewItem::OnlyOne;
+        else if ((*it).row() == 0)
+            option.viewItemPosition = QStyleOptionViewItem::Beginning;
+        else if ((*it).row() == rowCount - 1)
+            option.viewItemPosition = QStyleOptionViewItem::End;
+        else
+            option.viewItemPosition = QStyleOptionViewItem::Middle;
         option.rect = visualRect(*it);
 
         if (flow() == TopToBottom)
@@ -1039,7 +1050,7 @@ void QListView::paintEvent(QPaintEvent *e)
         d->delegateForIndex(*it)->paint(&painter, option, *it);
     }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     d->commonListView->paintDragDrop(&painter);
 #endif
 
@@ -1820,7 +1831,7 @@ QItemSelection QListViewPrivate::selection(const QRect &rect) const
     return selection;
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 QAbstractItemView::DropIndicatorPosition QListViewPrivate::position(const QPoint &pos, const QRect &rect, const QModelIndex &idx) const
 {
     if (viewMode == QListView::ListMode && flow == QListView::LeftToRight)
@@ -1862,7 +1873,7 @@ void QCommonListViewBase::removeHiddenRow(int row)
     dd->hiddenRows.remove(dd->model->index(row, 0, qq->rootIndex()));
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void QCommonListViewBase::paintDragDrop(QPainter *painter)
 {
     // FIXME: Until the we can provide a proper drop indicator
@@ -1997,7 +2008,7 @@ QListModeViewBase::QListModeViewBase(QListView *q, QListViewPrivate *d)
 #endif
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 QAbstractItemView::DropIndicatorPosition QListModeViewBase::position(const QPoint &pos, const QRect &rect, const QModelIndex &index) const
 {
     QAbstractItemView::DropIndicatorPosition r = QAbstractItemView::OnViewport;
@@ -2156,7 +2167,7 @@ bool QListModeViewBase::dropOn(QDropEvent *event, int *dropRow, int *dropCol, QM
     return false;
 }
 
-#endif //QT_NO_DRAGANDDROP
+#endif //QT_CONFIG(draganddrop)
 
 void QListModeViewBase::updateVerticalScrollBar(const QSize &step)
 {
@@ -2731,7 +2742,7 @@ void QIconModeViewBase::removeHiddenRow(int row)
         tree.insertLeaf(items.at(row).rect(), row);
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 bool QIconModeViewBase::filterStartDrag(Qt::DropActions supportedActions)
 {
     // This function does the same thing as in QAbstractItemView::startDrag(),
@@ -2853,7 +2864,7 @@ bool QIconModeViewBase::filterDragMoveEvent(QDragMoveEvent *e)
         dd->startAutoScroll();
     return true;
 }
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 void QIconModeViewBase::setRowCount(int rowCount)
 {

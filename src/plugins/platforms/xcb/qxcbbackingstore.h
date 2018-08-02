@@ -49,7 +49,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QXcbShmImage;
+class QXcbBackingStoreImage;
 
 class QXcbBackingStore : public QXcbObject, public QPlatformBackingStore
 {
@@ -74,8 +74,11 @@ public:
     void beginPaint(const QRegion &) override;
     void endPaint() override;
 
+    static bool createSystemVShmSegment(QXcbConnection *c, size_t segmentSize = 1,
+                                        void *shmInfo = nullptr);
+
 private:
-    QXcbShmImage *m_image;
+    QXcbBackingStoreImage *m_image = nullptr;
     QStack<QRegion> m_paintRegions;
     QImage m_rgbImage;
 };

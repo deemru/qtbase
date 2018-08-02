@@ -98,7 +98,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaThemeNotificationReceiver);
 {
     Q_UNUSED(notification);
     mPrivate->reset();
-    QWindowSystemInterface::handleThemeChange(Q_NULLPTR);
+    QWindowSystemInterface::handleThemeChange(nullptr);
 }
 @end
 
@@ -127,7 +127,7 @@ QCocoaTheme::~QCocoaTheme()
 void QCocoaTheme::reset()
 {
     delete m_systemPalette;
-    m_systemPalette = Q_NULLPTR;
+    m_systemPalette = nullptr;
     qDeleteAll(m_palettes);
     m_palettes.clear();
 }
@@ -275,7 +275,7 @@ QPixmap QCocoaTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
     }
     if (iconType != 0) {
         QPixmap pixmap;
-        IconRef icon = Q_NULLPTR;
+        IconRef icon = nullptr;
         GetIconRef(kOnSystemDisk, kSystemIconsCreator, iconType, &icon);
 
         if (icon) {
@@ -347,6 +347,8 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
         return QVariant(int(HoverEffect));
     case QPlatformTheme::SpellCheckUnderlineStyle:
         return QVariant(int(QTextCharFormat::DotLine));
+    case QPlatformTheme::UseFullScreenForPopupMenu:
+        return QVariant(bool([[NSApplication sharedApplication] presentationOptions] & NSApplicationPresentationFullScreen));
     default:
         break;
     }

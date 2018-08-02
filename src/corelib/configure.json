@@ -15,7 +15,8 @@
             "posix-ipc": { "type": "boolean", "name": "ipc_posix" },
             "pps": { "type": "boolean", "name": "qqnx_pps" },
             "slog2": "boolean",
-            "syslog": "boolean"
+            "syslog": "boolean",
+            "trace": { "type": "optionalString", "values": [ "etw", "lttng", "no", "yes" ] }
         }
     },
 
@@ -129,7 +130,11 @@
             "label": "dlopen()",
             "test": {
                 "include": "dlfcn.h",
-                "main": "dlopen(0, 0);"
+                "main": [
+                    "dlclose(dlopen(0, 0));",
+                    "dlsym(RTLD_DEFAULT, 0);",
+                    "dlerror();"
+                ]
             },
             "sources": [
                 "",
@@ -147,6 +152,18 @@
                 "-lrt"
             ]
         },
+        "lttng-ust": {
+            "label": "lttng-ust",
+            "test": {
+                "include": "lttng/ust-events.h",
+                "main": "lttng_session_destroy(nullptr);"
+            },
+            "sources": [
+                { "type": "pkgConfig", "args": "lttng-ust" },
+                "-llttng-ust"
+            ],
+            "use": "libdl"
+        },
         "pcre2": {
             "label": "PCRE2",
             "test": {
@@ -159,6 +176,7 @@
                 ]
             },
             "sources": [
+                { "type": "pkgConfig", "args": "libpcre2-16" },
                 "-lpcre2-16"
             ]
         },
@@ -178,7 +196,7 @@
         "slog2": {
             "label": "slog2",
             "test": {
-                "include": "slog2.h",
+                "include": "sys/slog2.h",
                 "main": "slog2_set_default_buffer((slog2_buffer_t)-1);"
             },
             "export": "",
@@ -551,7 +569,8 @@
         },
         "linkat": {
             "label": "linkat()",
-            "autoDetect": "config.linux",
+            "comment": "Currently only used by QTemporaryFile; linkat() exists on Android, but hardlink creation fails due to security rules",
+            "autoDetect": "config.linux && !config.android",
             "condition": "tests.linkat",
             "output": [ "privateFeature" ]
         },
@@ -608,7 +627,7 @@
             "label": "PPS",
             "emitIf": "config.qnx",
             "condition": "libs.pps",
-            "output": [ "privateConfig" ]
+            "output": [ "privateFeature" ]
         },
         "qeventtransition": {
             "label": "QEventTransition class",
@@ -858,6 +877,22 @@
             "section": "Utilities",
             "output": [ "publicFeature" ]
         },
+        "lttng": {
+            "label": "LTTNG",
+            "autoDetect": false,
+            "enable": "input.trace == 'lttng' || (input.trace =='yes' && config.linux)",
+            "disable": "input.trace == 'etw' || input.trace =='no'",
+            "condition": "config.linux && libs.lttng-ust",
+            "output": [ "privateFeature" ]
+        },
+        "etw": {
+            "label": "ETW",
+            "autoDetect": false,
+            "enable": "input.trace == 'etw' || (input.trace == 'yes' && config.win32)",
+            "disable": "input.trace == 'lttng' || input.trace == 'no'",
+            "condition": "config.win32",
+            "output": [ "privateFeature" ]
+        },
         "topleveldomain": {
             "label": "QUrl::topLevelDomain()",
             "purpose": "Provides support for extracting the top level domain from URLs.
@@ -875,7 +910,7 @@ Mozilla License) is included. The data is then also used in QNetworkCookieJar::v
             "condition": "features.journald || features.syslog || (config.qnx && features.slog2)",
             "message": "journald, syslog or slog2 integration is enabled.
 If your users intend to develop applications against this build,
-ensure that the IDEs they use either set QT_LOGGING_TO_CONSOLE to 1
+ensure that the IDEs they use either set QT_FORCE_STDERR_LOGGING to 1
 or are able to read the logged output from journald, syslog or slog2."
         },
         {
@@ -907,6 +942,11 @@ Please apply the patch corresponding to your Standard Library vendor, found in
                 "glib",
                 "iconv",
                 "icu",
+                {
+                    "message": "Tracing backend",
+                    "type": "firstAvailableFeature",
+                    "args": "etw lttng"
+                },
                 {
                     "section": "Logging backends",
                     "entries": [

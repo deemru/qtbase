@@ -324,13 +324,14 @@ void *QEglFSIntegration::nativeResourceForIntegration(const QByteArray &resource
         result = qt_egl_device_integration()->wlDisplay();
         break;
     default:
+        result = qt_egl_device_integration()->nativeResourceForIntegration(resource);
         break;
     }
 
     return result;
 }
 
-void *QEglFSIntegration::nativeResourceForScreen(const QByteArray &resource, QScreen *)
+void *QEglFSIntegration::nativeResourceForScreen(const QByteArray &resource, QScreen *screen)
 {
     void *result = 0;
 
@@ -341,6 +342,7 @@ void *QEglFSIntegration::nativeResourceForScreen(const QByteArray &resource, QSc
         result = reinterpret_cast<void*>(nativeDisplay());
         break;
     default:
+        result = qt_egl_device_integration()->nativeResourceForScreen(resource, screen);
         break;
     }
 
@@ -427,11 +429,9 @@ QFunctionPointer QEglFSIntegration::platformFunction(const QByteArray &function)
 #if QT_CONFIG(evdev)
     if (function == QEglFSFunctions::loadKeymapTypeIdentifier())
         return QFunctionPointer(loadKeymapStatic);
-#else
-    Q_UNUSED(function)
 #endif
 
-    return 0;
+    return qt_egl_device_integration()->platformFunction(function);
 }
 
 void QEglFSIntegration::loadKeymapStatic(const QString &filename)

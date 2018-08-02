@@ -993,9 +993,7 @@ int QFontEngineFT::loadFlags(QGlyphSet *set, GlyphFormat format, int flags,
 static inline bool areMetricsTooLarge(const QFontEngineFT::GlyphInfo &info)
 {
     // false if exceeds QFontEngineFT::Glyph metrics
-    return (short)(info.linearAdvance) != info.linearAdvance
-            || (uchar)(info.width) != info.width
-            || (uchar)(info.height) != info.height;
+    return info.width > 0xFF || info.height > 0xFF;
 }
 
 static inline void transformBoundingBox(int *left, int *top, int *right, int *bottom, FT_Matrix *matrix)
@@ -1537,7 +1535,7 @@ QFontEngineFT::QGlyphSet *QFontEngineFT::loadGlyphSet(const QTransform &matrix)
 
     // FT_Set_Transform only supports scalable fonts
     if (!FT_IS_SCALABLE(freetype->face))
-        return matrix.type() <= QTransform::TxTranslate ? &defaultGlyphSet : Q_NULLPTR;
+        return matrix.type() <= QTransform::TxTranslate ? &defaultGlyphSet : nullptr;
 
     FT_Matrix m = QTransformToFTMatrix(matrix);
 
@@ -1969,7 +1967,7 @@ glyph_metrics_t QFontEngineFT::alphaMapBoundingBox(glyph_t glyph, QFixed subPixe
 
 static inline QImage alphaMapFromGlyphData(QFontEngineFT::Glyph *glyph, QFontEngine::GlyphFormat glyphFormat)
 {
-    if (glyph == Q_NULLPTR || glyph->height == 0 || glyph->width == 0)
+    if (glyph == nullptr || glyph->height == 0 || glyph->width == 0)
         return QImage();
 
     QImage::Format format = QImage::Format_Invalid;
@@ -2017,14 +2015,14 @@ QImage *QFontEngineFT::lockedAlphaMapForGlyph(glyph_t glyphIndex, QFixed subPixe
 
     currentlyLockedAlphaMap = alphaMapFromGlyphData(glyph, neededFormat);
 
-    const bool glyphHasGeometry = glyph != Q_NULLPTR && glyph->height != 0 && glyph->width != 0;
+    const bool glyphHasGeometry = glyph != nullptr && glyph->height != 0 && glyph->width != 0;
     if (!cacheEnabled && glyph != &emptyGlyph) {
         currentlyLockedAlphaMap = currentlyLockedAlphaMap.copy();
         delete glyph;
     }
 
     if (!glyphHasGeometry)
-        return Q_NULLPTR;
+        return nullptr;
 
     if (currentlyLockedAlphaMap.isNull())
         return QFontEngine::lockedAlphaMapForGlyph(glyphIndex, subPixelPosition, neededFormat, t, offset);
@@ -2092,10 +2090,7 @@ QImage QFontEngineFT::alphaMapForGlyph(glyph_t g, QFixed subPixelPosition, const
     if (!cacheEnabled && glyph != &emptyGlyph)
         delete glyph;
 
-    if (!img.isNull())
-        return img;
-
-    return QFontEngine::alphaMapForGlyph(g, subPixelPosition, t);
+    return img;
 }
 
 QImage QFontEngineFT::alphaRGBMapForGlyph(glyph_t g, QFixed subPixelPosition, const QTransform &t)
@@ -2122,7 +2117,7 @@ QImage QFontEngineFT::alphaRGBMapForGlyph(glyph_t g, QFixed subPixelPosition, co
 QImage QFontEngineFT::bitmapForGlyph(glyph_t g, QFixed subPixelPosition, const QTransform &t)
 {
     Glyph *glyph = loadGlyphFor(g, subPixelPosition, defaultFormat, t);
-    if (glyph == Q_NULLPTR)
+    if (glyph == nullptr)
         return QImage();
 
     QImage img;

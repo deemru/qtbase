@@ -19,7 +19,6 @@ SOURCES = \
         qxcbintegration.cpp \
         qxcbkeyboard.cpp \
         qxcbmime.cpp \
-        qxcbdrag.cpp \
         qxcbscreen.cpp \
         qxcbwindow.cpp \
         qxcbbackingstore.cpp \
@@ -35,7 +34,6 @@ HEADERS = \
         qxcbconnection.h \
         qxcbintegration.h \
         qxcbkeyboard.h \
-        qxcbdrag.h \
         qxcbmime.h \
         qxcbobject.h \
         qxcbscreen.h \
@@ -46,7 +44,13 @@ HEADERS = \
         qxcbcursor.h \
         qxcbimage.h \
         qxcbxsettings.h \
-        qxcbsystemtraytracker.h
+        qxcbsystemtraytracker.h \
+        qxcbxkbcommon.h
+
+qtConfig(draganddrop) {
+    SOURCES += qxcbdrag.cpp
+    HEADERS += qxcbdrag.h
+}
 
 load(qt_build_paths)
 
@@ -98,5 +102,7 @@ qtConfig(vulkan) {
 } else {
     QMAKE_USE += xkbcommon
 }
+
+qtConfig(dlopen): QMAKE_USE += libdl
 
 load(qt_module)

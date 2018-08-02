@@ -78,7 +78,7 @@ public:
             QWindowPrivate::setVisible(visible);
     }
 
-    QWindow *eventReceiver() Q_DECL_OVERRIDE {
+    QWindow *eventReceiver() override {
         Q_Q(QWidgetWindow);
         QWindow *w = q;
         while (w->parent() && qobject_cast<QWidgetWindow *>(w) && qobject_cast<QWidgetWindow *>(w->parent())) {
@@ -87,7 +87,7 @@ public:
         return w;
     }
 
-    void clearFocusObject() Q_DECL_OVERRIDE
+    void clearFocusObject() override
     {
         Q_Q(QWidgetWindow);
         QWidget *widget = q->widget();
@@ -95,10 +95,17 @@ public:
             widget->focusWidget()->clearFocus();
     }
 
-    QRectF closestAcceptableGeometry(const QRectF &rect) const Q_DECL_OVERRIDE;
+    QRectF closestAcceptableGeometry(const QRectF &rect) const override;
 #if QT_CONFIG(opengl)
     QOpenGLContext *shareContext() const override;
 #endif
+
+    void processSafeAreaMarginsChanged() override
+    {
+        Q_Q(QWidgetWindow);
+        if (QWidget *widget = q->widget())
+            QWidgetPrivate::get(widget)->updateContentsRect();
+    }
 };
 
 QRectF QWidgetWindowPrivate::closestAcceptableGeometry(const QRectF &rect) const
@@ -171,7 +178,7 @@ QObject *QWidgetWindow::focusObject() const
 {
     QWidget *windowWidget = m_widget;
     if (!windowWidget)
-        return Q_NULLPTR;
+        return nullptr;
 
     // A window can't have a focus object if it's being destroyed.
     if (QWidgetPrivate::get(windowWidget)->data.in_destructor)
@@ -230,6 +237,7 @@ bool QWidgetWindow::event(QEvent *event)
     switch (event->type()) {
     case QEvent::Close:
         handleCloseEvent(static_cast<QCloseEvent *>(event));
+        QWindow::event(event);
         return true;
 
     case QEvent::Enter:
@@ -241,7 +249,7 @@ bool QWidgetWindow::event(QEvent *event)
     // are sent by QApplicationPrivate::notifyActiveWindowChange()
     case QEvent::FocusIn:
         handleFocusInEvent(static_cast<QFocusEvent *>(event));
-        // Fallthrough
+        Q_FALLTHROUGH();
     case QEvent::FocusOut: {
 #ifndef QT_NO_ACCESSIBILITY
         QAccessible::State state;
@@ -301,7 +309,7 @@ bool QWidgetWindow::event(QEvent *event)
         return true;
 #endif
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     case QEvent::DragEnter:
     case QEvent::DragMove:
         handleDragEnterMoveEvent(static_cast<QDragMoveEvent *>(event));
@@ -422,7 +430,7 @@ void QWidgetWindow::handleEnterLeaveEvent(QEvent *event)
         const QEnterEvent *ee = static_cast<QEnterEvent *>(event);
         QWidget *child = m_widget->childAt(ee->pos());
         QWidget *receiver = child ? child : m_widget.data();
-        QWidget *leave = Q_NULLPTR;
+        QWidget *leave = nullptr;
         if (QApplicationPrivate::inPopupMode() && receiver == m_widget
                 && qt_last_mouse_receiver != m_widget) {
             // This allows to deliver the leave event to the native widget
@@ -529,11 +537,11 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
                     // Prevent negative mouse position on enter event - this event
                     // should be properly handled in "handleEnterLeaveEvent()".
                     if (receiverMapped.x() >= 0 && receiverMapped.y() >= 0) {
-                        QApplicationPrivate::dispatchEnterLeave(receiver, Q_NULLPTR, event->screenPos());
+                        QApplicationPrivate::dispatchEnterLeave(receiver, nullptr, event->screenPos());
                         qt_last_mouse_receiver = receiver;
                     }
                 } else {
-                    QApplicationPrivate::dispatchEnterLeave(Q_NULLPTR, qt_last_mouse_receiver, event->screenPos());
+                    QApplicationPrivate::dispatchEnterLeave(nullptr, qt_last_mouse_receiver, event->screenPos());
                     qt_last_mouse_receiver = receiver;
                     receiver = activePopupWidget;
                 }
@@ -637,12 +645,9 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
 
     QWidget *receiver = QApplicationPrivate::pickMouseReceiver(m_widget, event->windowPos().toPoint(), &mapped, event->type(), event->buttons(),
                                                                qt_button_down, widget);
-
-    if (!receiver) {
-        if (event->type() == QEvent::MouseButtonRelease)
-            QApplicationPrivate::mouse_buttons &= ~event->button();
+    if (!receiver)
         return;
-    }
+
     if ((event->type() != QEvent::MouseButtonPress)
         || !(event->flags().testFlag(Qt::MouseEventCreatedDoubleClick))) {
 
@@ -841,7 +846,7 @@ void QWidgetWindow::handleWheelEvent(QWheelEvent *event)
 
 #endif // QT_CONFIG(wheelevent)
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 
 void QWidgetWindow::handleDragEnterMoveEvent(QDragMoveEvent *event)
 {
@@ -917,7 +922,7 @@ void QWidgetWindow::handleDropEvent(QDropEvent *event)
     m_dragTarget = 0;
 }
 
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 void QWidgetWindow::handleExposeEvent(QExposeEvent *event)
 {

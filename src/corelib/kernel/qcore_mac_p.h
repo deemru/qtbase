@@ -158,6 +158,62 @@ QDebug operator<<(QDebug debug, const QMacAutoReleasePool *pool);
 #endif
 
 Q_CORE_EXPORT void qt_apple_check_os_version();
+Q_CORE_EXPORT bool qt_apple_isApplicationExtension();
+
+#if defined(Q_OS_MACOS) && !defined(QT_BOOTSTRAPPED)
+Q_CORE_EXPORT bool qt_apple_isSandboxed();
+# ifdef __OBJC__
+QT_END_NAMESPACE
+@interface NSObject (QtSandboxHelpers)
+- (id)qt_valueForPrivateKey:(NSString *)key;
+@end
+QT_BEGIN_NAMESPACE
+# endif
+#endif
+
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WATCHOS)
+QT_END_NAMESPACE
+# if defined(Q_OS_MACOS)
+Q_FORWARD_DECLARE_OBJC_CLASS(NSApplication);
+using AppleApplication = NSApplication;
+# else
+Q_FORWARD_DECLARE_OBJC_CLASS(UIApplication);
+using AppleApplication = UIApplication;
+# endif
+QT_BEGIN_NAMESPACE
+Q_CORE_EXPORT AppleApplication *qt_apple_sharedApplication();
+#endif
+
+// --------------------------------------------------------------------------
+
+#if !defined(QT_BOOTSTRAPPED) && (QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_12) || !defined(Q_OS_MACOS))
+#define QT_USE_APPLE_UNIFIED_LOGGING
+
+QT_END_NAMESPACE
+#include <os/log.h>
+
+// The compiler isn't smart enough to realize that we're calling these functions
+// guarded by __builtin_available, so we need to also tag each function with the
+// runtime requirements.
+#include <os/availability.h>
+#define OS_LOG_AVAILABILITY API_AVAILABLE(macos(10.12), ios(10.0), tvos(10.0), watchos(3.0))
+QT_BEGIN_NAMESPACE
+
+class Q_CORE_EXPORT AppleUnifiedLogger
+{
+public:
+    static bool messageHandler(QtMsgType msgType, const QMessageLogContext &context, const QString &message,
+        const QString &subsystem = QString()) OS_LOG_AVAILABILITY;
+private:
+    static os_log_type_t logTypeForMessageType(QtMsgType msgType) OS_LOG_AVAILABILITY;
+    static os_log_t cachedLog(const QString &subsystem, const QString &category) OS_LOG_AVAILABILITY;
+};
+
+#undef OS_LOG_AVAILABILITY
+
+#endif
+
+// --------------------------------------------------------------------------
 
 QT_END_NAMESPACE
 

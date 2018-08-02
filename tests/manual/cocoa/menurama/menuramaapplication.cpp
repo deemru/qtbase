@@ -28,7 +28,7 @@
 
 #include "menuramaapplication.h"
 
-MenuramaApplication::MenuramaApplication(int argc, char **argv)
+MenuramaApplication::MenuramaApplication(int &argc, char **argv)
     : QApplication (argc, argv)
 {
 #if 0
@@ -71,5 +71,5 @@ QAction *MenuramaApplication::findAction(QLatin1String title, QMenu *parentMenu)
         if (a->text() == title)
             return a;
 
-    return Q_NULLPTR;
+    return nullptr;
 }

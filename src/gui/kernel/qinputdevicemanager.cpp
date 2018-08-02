@@ -92,4 +92,27 @@ void QInputDeviceManager::setCursorPos(const QPoint &pos)
     emit cursorPositionChangeRequested(pos);
 }
 
+/*!
+    \return the keyboard modifier state stored in the QInputDeviceManager object.
+
+    Keyboard input handlers are expected to keep this up-to-date via
+    setKeyboardModifiers().
+
+    Querying the state via this function (e.g. from a mouse handler that needs
+    to include the modifier state in mouse events) is the preferred alternative
+    over QGuiApplication::keyboardModifiers() since the latter may not report
+    the current state due to asynchronous QPA event processing.
+ */
+Qt::KeyboardModifiers QInputDeviceManager::keyboardModifiers() const
+{
+    Q_D(const QInputDeviceManager);
+    return d->keyboardModifiers;
+}
+
+void QInputDeviceManager::setKeyboardModifiers(Qt::KeyboardModifiers mods)
+{
+    Q_D(QInputDeviceManager);
+    d->keyboardModifiers = mods;
+}
+
 QT_END_NAMESPACE

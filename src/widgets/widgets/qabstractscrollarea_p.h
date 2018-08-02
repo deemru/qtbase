@@ -95,6 +95,7 @@ public:
 
     void init();
     void layoutChildren();
+    void layoutChildren_helper(bool *needHorizontalScrollbar, bool *needVerticalScrollbar);
     // ### Fix for 4.4, talk to Bjoern E or Girish.
     virtual void scrollBarPolicyChanged(Qt::Orientation, Qt::ScrollBarPolicy) {}
     bool canStartScrollingAt( const QPoint &startPos );
@@ -124,7 +125,7 @@ class QAbstractScrollAreaFilter : public QObject
 public:
     QAbstractScrollAreaFilter(QAbstractScrollAreaPrivate *p) : d(p)
     { setObjectName(QLatin1String("qt_abstractscrollarea_filter")); }
-    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE
+    bool eventFilter(QObject *o, QEvent *e) override
     { return (o == d->viewport ? d->viewportEvent(e) : false); }
 private:
     QAbstractScrollAreaPrivate *d;

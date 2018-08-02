@@ -42,15 +42,18 @@
 #include "private/qguiapplication_p.h"
 #include "private/qtouchdevice_p.h"
 #include "qpa/qplatformintegration.h"
-#include "qpa/qplatformdrag.h"
 #include "private/qevent_p.h"
 #include "qfile.h"
 #include "qhashfunctions.h"
 #include "qmetaobject.h"
 #include "qmimedata.h"
-#include "private/qdnd_p.h"
 #include "qevent_p.h"
 #include "qmath.h"
+
+#if QT_CONFIG(draganddrop)
+#include <qpa/qplatformdrag.h>
+#include <private/qdnd_p.h>
+#endif
 
 #include <private/qdebug_p.h>
 
@@ -694,6 +697,13 @@ QHoverEvent::~QHoverEvent()
 */
 
 /*!
+  \enum QWheelEvent::anonymous
+  \internal
+
+  \value DefaultDeltasPerStep Defaqult deltas per step
+*/
+
+/*!
     \fn Qt::MouseButtons QWheelEvent::buttons() const
 
     Returns the mouse state when the event occurred.
@@ -972,6 +982,7 @@ QWheelEvent::QWheelEvent(const QPointF &pos, const QPointF& globalPos,
     \li scrolling is about to begin, but the distance did not yet change (Qt::ScrollBegin),
     \li or scrolling has ended and the distance did not change anymore (Qt::ScrollEnd).
     \endlist
+    \note On X11 this value is driver specific and unreliable, use angleDelta() instead
 */
 
 /*!
@@ -2399,8 +2410,9 @@ QVariant QInputMethodQueryEvent::value(Qt::InputMethodQuery query) const
   The \a tangentialPressure parameter contins the tangential pressure of an air
   brush. If the device does not support tangential pressure, pass 0 here.
 
-  \a rotation contains the device's rotation in degrees. 4D mice and the Wacom
-  Art Pen support rotation. If the device does not support rotation, pass 0 here.
+  \a rotation contains the device's rotation in degrees.
+  4D mice, the Wacom Art Pen, and the Apple Pencil support rotation.
+  If the device does not support rotation, pass 0 here.
 
   The \a button that caused the event is given as a value from the
   \l Qt::MouseButton enum. If the event \a type is not \l TabletPress or
@@ -2541,10 +2553,12 @@ Qt::MouseButtons QTabletEvent::buttons() const
 /*!
     \fn qreal QTabletEvent::rotation() const
 
-    Returns the rotation of the current device in degress. This is usually
-    given by a 4D Mouse. If the device does not support rotation this value is
-    always 0.0.
-
+    Returns the rotation of the current tool in degrees, where zero means the
+    tip of the stylus is pointing towards the top of the tablet, a positive
+    value means it's turned to the right, and a negative value means it's
+    turned to the left. This can be given by a 4D Mouse or a rotation-capable
+    stylus (such as the Wacom Art Pen or the Apple Pencil). If the device does
+    not support rotation, this value is always 0.0.
 */
 
 /*!
@@ -2872,7 +2886,7 @@ const QTouchDevice *QNativeGestureEvent::device() const
 */
 #endif // QT_NO_GESTURES
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 /*!
     Creates a QDragMoveEvent of the required \a type indicating
     that the mouse is at position \a pos given within a widget.
@@ -3216,7 +3230,7 @@ QDragLeaveEvent::QDragLeaveEvent()
 QDragLeaveEvent::~QDragLeaveEvent()
 {
 }
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 /*!
     \class QHelpEvent
@@ -3750,14 +3764,25 @@ static inline void formatInputMethodEvent(QDebug d, const QInputMethodEvent *e)
 
 static inline void formatInputMethodQueryEvent(QDebug d, const QInputMethodQueryEvent *e)
 {
+    QDebugStateSaver saver(d);
+    d.noquote();
     const Qt::InputMethodQueries queries = e->queries();
     d << "QInputMethodQueryEvent(queries=" << showbase << hex << int(queries)
       << noshowbase << dec << ", {";
-    for (unsigned mask = 1; mask <= Qt::ImTextAfterCursor; mask<<=1) {
+    for (unsigned mask = 1; mask <= Qt::ImInputItemClipRectangle; mask<<=1) {
         if (queries & mask) {
-            const QVariant value = e->value(static_cast<Qt::InputMethodQuery>(mask));
-            if (value.isValid())
-                d << '[' << showbase << hex << mask <<  noshowbase << dec << '=' << value << "],";
+            const Qt::InputMethodQuery query = static_cast<Qt::InputMethodQuery>(mask);
+            const QVariant value = e->value(query);
+            if (value.isValid()) {
+                d << '[';
+                QtDebugUtils::formatQEnum(d, query);
+                d << '=';
+                if (query == Qt::ImHints)
+                    QtDebugUtils::formatQFlags(d, Qt::InputMethodHints(value.toInt()));
+                else
+                    d << value.toString();
+                d << "],";
+            }
         }
     }
     d << "})";
@@ -3880,7 +3905,7 @@ static const char *eventClassName(QEvent::Type t)
     return "QEvent";
 }
 
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
 
 static void formatDropEvent(QDebug d, const QDropEvent *e)
 {
@@ -3901,7 +3926,7 @@ static void formatDropEvent(QDebug d, const QDropEvent *e)
     QtDebugUtils::formatQFlags(d, e->mouseButtons());
 }
 
-#  endif // !QT_NO_DRAGANDDROP
+#  endif // QT_CONFIG(draganddrop)
 
 #  if QT_CONFIG(tabletevent)
 
@@ -4064,13 +4089,13 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
         dbg << ')';
     }
         break;
-#  ifndef QT_NO_DRAGANDDROP
+#  if QT_CONFIG(draganddrop)
     case QEvent::DragEnter:
     case QEvent::DragMove:
     case QEvent::Drop:
         formatDropEvent(dbg, static_cast<const QDropEvent *>(e));
         break;
-#  endif // !QT_NO_DRAGANDDROP
+#  endif // QT_CONFIG(draganddrop)
     case QEvent::InputMethod:
         formatInputMethodEvent(dbg, static_cast<const QInputMethodEvent *>(e));
         break;
@@ -4505,7 +4530,7 @@ QTouchEvent::TouchPoint::TouchPoint(int id)
 { }
 
 /*!
-    \fn TouchPoint::TouchPoint(const TouchPoint &other)
+    \fn QTouchEvent::TouchPoint::TouchPoint(const QTouchEvent::TouchPoint &other)
     \internal
 
     Constructs a copy of \a other.
@@ -5047,12 +5072,12 @@ void QTouchEvent::TouchPoint::setFlags(InfoFlags flags)
 }
 
 /*!
-    \fn TouchPoint &TouchPoint::operator=(const TouchPoint &other)
+    \fn QTouchEvent::TouchPoint &QTouchEvent::TouchPoint::operator=(const QTouchEvent::TouchPoint &other)
     \internal
  */
 
 /*!
-    \fn TouchPoint &TouchPoint::operator=(TouchPoint &&other)
+    \fn QTouchEvent::TouchPoint &QTouchEvent::TouchPoint::operator=(QTouchEvent::TouchPoint &&other)
     \internal
  */
 /*!

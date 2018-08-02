@@ -100,7 +100,7 @@
 */
 
 /*!
-    \fn QMdiArea::subWindowActivated(QMdiSubWindow *window)
+    \fn void QMdiArea::subWindowActivated(QMdiSubWindow *window)
 
     QMdiArea emits this signal after \a window has been activated. When \a
     window is 0, QMdiArea has just deactivated its last active window, and
@@ -570,9 +570,9 @@ public:
     QMdiAreaTabBar(QWidget *parent) : QTabBar(parent) {}
 
 protected:
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void mousePressEvent(QMouseEvent *event) override;
 #ifndef QT_NO_CONTEXTMENU
-    void contextMenuEvent(QContextMenuEvent *event) Q_DECL_OVERRIDE;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 #endif
 
 private:
@@ -2638,7 +2638,7 @@ bool QMdiArea::eventFilter(QObject *object, QEvent *event)
                 d->tabBar->setTabEnabled(tabIndex, true);
         }
 #endif // QT_CONFIG(tabbar)
-        // fall through
+        Q_FALLTHROUGH();
     case QEvent::Hide:
         d->isSubWindowsTiled = false;
         break;

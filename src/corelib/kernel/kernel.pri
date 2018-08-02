@@ -120,7 +120,7 @@ mac {
 
     LIBS_PRIVATE += -framework Foundation
 
-    osx: LIBS_PRIVATE += -framework CoreServices -framework AppKit
+    osx: LIBS_PRIVATE += -framework CoreServices -framework AppKit -framework Security
 
     ios|tvos {
         # We need UIKit for UIApplication in qeventdispatcher_cf.mm
@@ -188,7 +188,7 @@ vxworks {
                 kernel/qfunctions_vxworks.h
 }
 
-qqnx_pps {
+qnx:qtConfig(qqnx_pps) {
         QMAKE_USE_PRIVATE += pps
         SOURCES += \
                 kernel/qppsattribute.cpp \
@@ -200,7 +200,7 @@ qqnx_pps {
                 kernel/qppsobjectprivate_p.h
 }
 
-android {
+android:!android-embedded {
         SOURCES += \
                    kernel/qjnionload.cpp \
                    kernel/qjnihelpers.cpp \

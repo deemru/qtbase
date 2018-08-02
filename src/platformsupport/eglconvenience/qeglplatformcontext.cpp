@@ -45,7 +45,7 @@
 #include <QtPlatformHeaders/QEGLNativeContext>
 #include <QDebug>
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <QtCore/private/qjnihelpers_p.h>
 #endif
 #ifndef Q_OS_WIN
@@ -332,7 +332,7 @@ void QEGLPlatformContext::updateFormatFromGL()
                 QByteArray version = QByteArray(reinterpret_cast<const char *>(s));
                 int major, minor;
                 if (QPlatformOpenGLContext::parseOpenGLVersion(version, major, minor)) {
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
                     // Some Android 4.2.2 devices report OpenGL ES 3.0 without the functions being available.
                     static int apiLevel = QtAndroidPrivate::androidSdkVersion();
                     if (apiLevel <= 17 && major >= 3) {
@@ -792,6 +792,53 @@ QFunctionPointer QEGLPlatformContext::getProcAddress(const char *procName)
             { "glVertexAttribIFormat", (QFunctionPointer) ::glVertexAttribIFormat },
             { "glVertexBindingDivisor", (QFunctionPointer) ::glVertexBindingDivisor },
 #endif // QT_OPENGL_ES_3_1
+
+#ifdef QT_OPENGL_ES_3_2
+            { "glBlendBarrier", (QFunctionPointer) ::glBlendBarrier },
+            { "glCopyImageSubData", (QFunctionPointer) ::glCopyImageSubData },
+            { "glDebugMessageControl", (QFunctionPointer) ::glDebugMessageControl },
+            { "glDebugMessageInsert", (QFunctionPointer) ::glDebugMessageInsert },
+            { "glDebugMessageCallback", (QFunctionPointer) ::glDebugMessageCallback },
+            { "glGetDebugMessageLog", (QFunctionPointer) ::glGetDebugMessageLog },
+            { "glPushDebugGroup", (QFunctionPointer) ::glPushDebugGroup },
+            { "glPopDebugGroup", (QFunctionPointer) ::glPopDebugGroup },
+            { "glObjectLabel", (QFunctionPointer) ::glObjectLabel },
+            { "glGetObjectLabel", (QFunctionPointer) ::glGetObjectLabel },
+            { "glObjectPtrLabel", (QFunctionPointer) ::glObjectPtrLabel },
+            { "glGetObjectPtrLabel", (QFunctionPointer) ::glGetObjectPtrLabel },
+            { "glGetPointerv", (QFunctionPointer) ::glGetPointerv },
+            { "glEnablei", (QFunctionPointer) ::glEnablei },
+            { "glDisablei", (QFunctionPointer) ::glDisablei },
+            { "glBlendEquationi", (QFunctionPointer) ::glBlendEquationi },
+            { "glBlendEquationSeparatei", (QFunctionPointer) ::glBlendEquationSeparatei },
+            { "glBlendFunci", (QFunctionPointer) ::glBlendFunci },
+            { "glBlendFuncSeparatei", (QFunctionPointer) ::glBlendFuncSeparatei },
+            { "glColorMaski", (QFunctionPointer) ::glColorMaski },
+            { "glIsEnabledi", (QFunctionPointer) ::glIsEnabledi },
+            { "glDrawElementsBaseVertex", (QFunctionPointer) ::glDrawElementsBaseVertex },
+            { "glDrawRangeElementsBaseVertex", (QFunctionPointer) ::glDrawRangeElementsBaseVertex },
+            { "glDrawElementsInstancedBaseVertex", (QFunctionPointer) ::glDrawElementsInstancedBaseVertex },
+            { "glFramebufferTexture", (QFunctionPointer) ::glFramebufferTexture },
+            { "glPrimitiveBoundingBox", (QFunctionPointer) ::glPrimitiveBoundingBox },
+            { "glGetGraphicsResetStatus", (QFunctionPointer) ::glGetGraphicsResetStatus },
+            { "glReadnPixels", (QFunctionPointer) ::glReadnPixels },
+            { "glGetnUniformfv", (QFunctionPointer) ::glGetnUniformfv },
+            { "glGetnUniformiv", (QFunctionPointer) ::glGetnUniformiv },
+            { "glGetnUniformuiv", (QFunctionPointer) ::glGetnUniformuiv },
+            { "glMinSampleShading", (QFunctionPointer) ::glMinSampleShading },
+            { "glPatchParameteri", (QFunctionPointer) ::glPatchParameteri },
+            { "glTexParameterIiv", (QFunctionPointer) ::glTexParameterIiv },
+            { "glTexParameterIuiv", (QFunctionPointer) ::glTexParameterIuiv },
+            { "glGetTexParameterIiv", (QFunctionPointer) ::glGetTexParameterIiv },
+            { "glGetTexParameterIuiv", (QFunctionPointer) ::glGetTexParameterIuiv },
+            { "glSamplerParameterIiv", (QFunctionPointer) ::glSamplerParameterIiv },
+            { "glSamplerParameterIuiv", (QFunctionPointer) ::glSamplerParameterIuiv },
+            { "glGetSamplerParameterIiv", (QFunctionPointer) ::glGetSamplerParameterIiv },
+            { "glGetSamplerParameterIuiv", (QFunctionPointer) ::glGetSamplerParameterIuiv },
+            { "glTexBuffer", (QFunctionPointer) ::glTexBuffer },
+            { "glTexBufferRange", (QFunctionPointer) ::glTexBufferRange },
+            { "glTexStorage3DMultisample", (QFunctionPointer) ::glTexStorage3DMultisample },
+#endif // QT_OPENGL_ES_3_2
         };
 
         for (size_t i = 0; i < sizeof(standardFuncs) / sizeof(StdFunc); ++i) {

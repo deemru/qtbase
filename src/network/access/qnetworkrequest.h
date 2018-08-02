@@ -92,6 +92,8 @@ public:
         HTTP2WasUsedAttribute,
         OriginalContentLengthAttribute,
         RedirectPolicyAttribute,
+        Http2DirectAttribute,
+        ResourceTypeAttribute, // internal
 
         User = 1000,
         UserMax = 32767

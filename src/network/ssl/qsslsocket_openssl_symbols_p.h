@@ -232,9 +232,10 @@ BIO *q_BIO_new_mem_buf(void *a, int b);
 int q_BIO_read(BIO *a, void *b, int c);
 Q_AUTOTEST_EXPORT int q_BIO_write(BIO *a, const void *b, int c);
 int q_BN_num_bits(const BIGNUM *a);
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+
+#if QT_CONFIG(opensslv11)
 int q_BN_is_word(BIGNUM *a, BN_ULONG w);
-#else
+#else // opensslv11
 // BN_is_word is implemented purely as a
 // macro in OpenSSL < 1.1. It doesn't
 // call any functions.
@@ -245,7 +246,8 @@ int q_BN_is_word(BIGNUM *a, BN_ULONG w);
 //
 // Users are required to include <openssl/bn.h>.
 #define q_BN_is_word BN_is_word
-#endif // OPENSSL_VERSION_NUMBER >= 0x10100000L
+#endif // !opensslv11
+
 BN_ULONG q_BN_mod_word(const BIGNUM *a, BN_ULONG w);
 #ifndef OPENSSL_NO_EC
 const EC_GROUP* q_EC_KEY_get0_group(const EC_KEY* k);
@@ -264,9 +266,13 @@ int q_EVP_CipherInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *type, const unsigned
 int q_EVP_CipherInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *impl, const unsigned char *key, const unsigned char *iv, int enc);
 int q_EVP_CipherUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl, const unsigned char *in, int inl);
 int q_EVP_CipherFinal(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl);
+#ifndef OPENSSL_NO_DES
 const EVP_CIPHER *q_EVP_des_cbc();
 const EVP_CIPHER *q_EVP_des_ede3_cbc();
+#endif
+#ifndef OPENSSL_NO_RC2
 const EVP_CIPHER *q_EVP_rc2_cbc();
+#endif
 const EVP_MD *q_EVP_sha1();
 int q_EVP_PKEY_assign(EVP_PKEY *a, int b, char *c);
 Q_AUTOTEST_EXPORT int q_EVP_PKEY_set1_RSA(EVP_PKEY *a, RSA *b);
@@ -350,6 +356,14 @@ int q_SSL_CTX_use_PrivateKey(SSL_CTX *a, EVP_PKEY *b);
 int q_SSL_CTX_use_RSAPrivateKey(SSL_CTX *a, RSA *b);
 int q_SSL_CTX_use_PrivateKey_file(SSL_CTX *a, const char *b, int c);
 X509_STORE *q_SSL_CTX_get_cert_store(const SSL_CTX *a);
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+SSL_CONF_CTX *q_SSL_CONF_CTX_new();
+void q_SSL_CONF_CTX_free(SSL_CONF_CTX *a);
+void q_SSL_CONF_CTX_set_ssl_ctx(SSL_CONF_CTX *a, SSL_CTX *b);
+unsigned int q_SSL_CONF_CTX_set_flags(SSL_CONF_CTX *a, unsigned int b);
+int q_SSL_CONF_CTX_finish(SSL_CONF_CTX *a);
+int q_SSL_CONF_cmd(SSL_CONF_CTX *a, const char *b, const char *c);
+#endif
 void q_SSL_free(SSL *a);
 STACK_OF(SSL_CIPHER) *q_SSL_get_ciphers(const SSL *a);
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
@@ -470,6 +484,9 @@ void q_PKCS12_free(PKCS12 *pkcs12);
 #define q_SSL_CTX_set_mode(ctx,op) q_SSL_CTX_ctrl((ctx),SSL_CTRL_MODE,(op),NULL)
 #define q_sk_GENERAL_NAME_num(st) q_SKM_sk_num(GENERAL_NAME, (st))
 #define q_sk_GENERAL_NAME_value(st, i) q_SKM_sk_value(GENERAL_NAME, (st), (i))
+
+void q_GENERAL_NAME_free(GENERAL_NAME *a);
+
 #define q_sk_X509_num(st) q_SKM_sk_num(X509, (st))
 #define q_sk_X509_value(st, i) q_SKM_sk_value(X509, (st), (i))
 #define q_sk_SSL_CIPHER_num(st) q_SKM_sk_num(SSL_CIPHER, (st))

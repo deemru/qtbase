@@ -281,7 +281,7 @@ void tst_QGraphicsProxyWidget::initTestCase()
 // This will be called after every test function.
 void tst_QGraphicsProxyWidget::cleanup()
 {
-    QVERIFY(QApplication::topLevelWidgets().isEmpty());
+    QTRY_VERIFY(QApplication::topLevelWidgets().isEmpty());
 }
 
 void tst_QGraphicsProxyWidget::qgraphicsproxywidget_data()
@@ -1471,6 +1471,15 @@ protected:
     }
 };
 
+// ### work around missing QVector ctor from iterator pair:
+static QVector<QRect> rects(const QRegion &region)
+{
+    QVector<QRect> result;
+    for (QRect r : region)
+        result.push_back(r);
+    return result;
+}
+
 void tst_QGraphicsProxyWidget::scrollUpdate()
 {
     ScrollWidget *widget = new ScrollWidget;
@@ -1492,10 +1501,10 @@ void tst_QGraphicsProxyWidget::scrollUpdate()
     // QRect(0, 0, 200, 12) is the first update, expanded (-2, -2, 2, 2)
     // QRect(0, 12, 102, 10) is the scroll update, expanded (-2, -2, 2, 2),
     // intersected with the above update.
-    QCOMPARE(view.paintEventRegion.rects(),
+    QCOMPARE(rects(view.paintEventRegion),
              QVector<QRect>() << QRect(0, 0, 200, 12) << QRect(0, 12, 102, 10));
     QCOMPARE(widget->npaints, 2);
-    QCOMPARE(widget->paintEventRegion.rects(),
+    QCOMPARE(rects(widget->paintEventRegion),
              QVector<QRect>() << QRect(0, 0, 200, 12) << QRect(0, 12, 102, 10));
 }
 
@@ -2566,6 +2575,22 @@ void tst_QGraphicsProxyWidget::changingCursor_basic()
 }
 #endif
 
+static bool findViewAndTipLabel(const QWidget *view)
+{
+    bool foundView = false;
+    bool foundTipLabel = false;
+    const QWidgetList &topLevels = QApplication::topLevelWidgets();
+    for (const QWidget *widget : topLevels) {
+        if (widget == view)
+            foundView = true;
+        if (widget->inherits("QTipLabel"))
+            foundTipLabel = true;
+        if (foundView && foundTipLabel)
+            return true;
+    }
+    return false;
+}
+
 void tst_QGraphicsProxyWidget::tooltip_basic()
 {
     QString toolTip = "Qt rocks!";
@@ -2618,18 +2643,7 @@ void tst_QGraphicsProxyWidget::tooltip_basic()
         QHelpEvent helpEvent(QEvent::ToolTip, view.mapFromScene(proxy->boundingRect().center()),
                              view.viewport()->mapToGlobal(view.mapFromScene(proxy->boundingRect().center())));
         QApplication::sendEvent(view.viewport(), &helpEvent);
-        QTest::qWait(350);
-
-        bool foundView = false;
-        bool foundTipLabel = false;
-        foreach (QWidget *widget, QApplication::topLevelWidgets()) {
-            if (widget == &view)
-                foundView = true;
-            if (widget->inherits("QTipLabel"))
-                foundTipLabel = true;
-        }
-        QVERIFY(foundView);
-        QVERIFY(foundTipLabel);
+        QTRY_VERIFY(findViewAndTipLabel(&view));
     }
 }
 
@@ -2661,9 +2675,6 @@ void tst_QGraphicsProxyWidget::childPos_data()
 
 void tst_QGraphicsProxyWidget::childPos()
 {
-#ifdef Q_OS_IRIX
-    QSKIP("This test is not reliable on IRIX.");
-#endif
     QFETCH(bool, moveCombo);
     QFETCH(QPoint, comboPos);
     QFETCH(QPointF, proxyPos);

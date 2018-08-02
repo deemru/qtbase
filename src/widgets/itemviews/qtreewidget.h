@@ -178,7 +178,7 @@ public:
     inline QTreeWidgetItem *parent() const { return par; }
     inline QTreeWidgetItem *child(int index) const {
         if (index < 0 || index >= children.size())
-            return Q_NULLPTR;
+            return nullptr;
         executePendingSort();
         return children.at(index);
     }
@@ -261,7 +261,7 @@ class Q_WIDGETS_EXPORT QTreeWidget : public QTreeView
     friend class QTreeModel;
     friend class QTreeWidgetItem;
 public:
-    explicit QTreeWidget(QWidget *parent = Q_NULLPTR);
+    explicit QTreeWidget(QWidget *parent = nullptr);
     ~QTreeWidget();
 
     int columnCount() const;
@@ -324,7 +324,7 @@ public:
     QTreeWidgetItem *itemAbove(const QTreeWidgetItem *item) const;
     QTreeWidgetItem *itemBelow(const QTreeWidgetItem *item) const;
 
-    void setSelectionModel(QItemSelectionModel *selectionModel) Q_DECL_OVERRIDE;
+    void setSelectionModel(QItemSelectionModel *selectionModel) override;
 
 public Q_SLOTS:
     void scrollToItem(const QTreeWidgetItem *item,
@@ -346,7 +346,7 @@ Q_SIGNALS:
     void itemSelectionChanged();
 
 protected:
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
     virtual QStringList mimeTypes() const;
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     virtual QMimeData *mimeData(const QList<QTreeWidgetItem *> &items) const;
@@ -365,15 +365,17 @@ protected:
     QList<QTreeWidgetItem*> items(const QMimeData *data) const;
 
     QModelIndex indexFromItem(const QTreeWidgetItem *item, int column = 0) const;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QModelIndex indexFromItem(QTreeWidgetItem *item, int column = 0) const; // ### Qt 6: remove
+#endif
     QTreeWidgetItem *itemFromIndex(const QModelIndex &index) const;
 
 protected:
 #if QT_CONFIG(draganddrop)
-    void dropEvent(QDropEvent *event) Q_DECL_OVERRIDE;
+    void dropEvent(QDropEvent *event) override;
 #endif
 private:
-    void setModel(QAbstractItemModel *model) Q_DECL_OVERRIDE;
+    void setModel(QAbstractItemModel *model) override;
 
     Q_DECLARE_PRIVATE(QTreeWidget)
     Q_DISABLE_COPY(QTreeWidget)
@@ -393,7 +395,7 @@ private:
 };
 
 inline void QTreeWidget::removeItemWidget(QTreeWidgetItem *item, int column)
-{ setItemWidget(item, column, Q_NULLPTR); }
+{ setItemWidget(item, column, nullptr); }
 
 inline QTreeWidgetItem *QTreeWidget::itemAt(int ax, int ay) const
 { return itemAt(QPoint(ax, ay)); }

@@ -79,9 +79,7 @@ private slots:
 
     void ctor();
     void emptyCtor();
-    void legacyNames();
     void consistentC();
-    void unixLocaleName();
     void matchingLocales();
     void stringToDouble_data();
     void stringToDouble();
@@ -108,8 +106,6 @@ private slots:
     void toDateTime();
     void negativeNumbers();
     void numberOptions();
-    void testNames_data();
-    void testNames();
     void dayName_data();
     void dayName();
     void standaloneDayName_data();
@@ -141,6 +137,18 @@ private slots:
     void formattedDataSize();
     void bcp47Name();
 
+    void systemLocale_data();
+    void systemLocale();
+
+    // *** ORDER-DEPENDENCY *** (This Is Bad.)
+    // Test order is determined by order of declaration here: *all* tests that
+    // QLocale::setDefault() *must* appear *after* all other tests !
+    void defaulted_ctor(); // This one must be the first of these.
+    void legacyNames();
+    void unixLocaleName();
+    void testNames_data();
+    void testNames();
+    // DO NOT add tests here unless they QLocale::setDefault(); see above.
 private:
     QString m_decimal, m_thousand, m_sdate, m_ldate, m_time;
     QString m_sysapp;
@@ -230,6 +238,23 @@ void tst_QLocale::ctor()
     TEST_CTOR(Chinese, LatinScript, UnitedStates, QLocale::Chinese, QLocale::SimplifiedHanScript, QLocale::China);
 
 #undef TEST_CTOR
+}
+
+void tst_QLocale::defaulted_ctor()
+{
+    QLocale default_locale = QLocale::system();
+    QLocale::Language default_lang = default_locale.language();
+    QLocale::Country default_country = default_locale.country();
+
+    qDebug("Default: %s/%s", QLocale::languageToString(default_lang).toLatin1().constData(),
+            QLocale::countryToString(default_country).toLatin1().constData());
+
+    {
+        QLocale l(QLocale::C, QLocale::AnyCountry);
+        QCOMPARE(l.language(), QLocale::C);
+        QCOMPARE(l.country(), QLocale::AnyCountry);
+    }
+
 #define TEST_CTOR(req_lang, req_country, exp_lang, exp_country) \
     { \
         QLocale l(QLocale::req_lang, QLocale::req_country); \
@@ -237,11 +262,6 @@ void tst_QLocale::ctor()
         QCOMPARE((int)l.country(), (int)exp_country); \
     }
 
-    {
-        QLocale l(QLocale::C, QLocale::AnyCountry);
-        QCOMPARE(l.language(), QLocale::C);
-        QCOMPARE(l.country(), QLocale::AnyCountry);
-    }
     TEST_CTOR(AnyLanguage, AnyCountry, default_lang, default_country)
     TEST_CTOR(C, AnyCountry, QLocale::C, QLocale::AnyCountry)
     TEST_CTOR(Aymara, AnyCountry, default_lang, default_country)
@@ -1569,6 +1589,16 @@ void tst_QLocale::toDateTime_data()
                          << "d'dd'd/MMM'M'/yysss" << "1dd1/DecM/74033";
     QTest::newRow("12C") << "C" << QDateTime(QDate(1974, 12, 1), QTime(15, 0, 0))
                          << "d'd'dd/M/yyh" << "1d01/12/7415";
+    // Unpadded value for fixed-width field is wrong:
+    QTest::newRow("bad-day-C") << "C" << QDateTime() << "dd-MMM-yy" << "4-Jun-11";
+    QTest::newRow("bad-month-C") << "C" << QDateTime() << "d-MM-yy" << "4-6-11";
+    QTest::newRow("bad-year-C") << "C" << QDateTime() << "d-MMM-yyyy" << "4-Jun-11";
+    QTest::newRow("bad-hour-C") << "C" << QDateTime() << "d-MMM-yy hh:m" << "4-Jun-11 1:2";
+    QTest::newRow("bad-min-C") << "C" << QDateTime() << "d-MMM-yy h:mm" << "4-Jun-11 1:2";
+    QTest::newRow("bad-sec-C") << "C" << QDateTime() << "d-MMM-yy h:m:ss" << "4-Jun-11 1:2:3";
+    QTest::newRow("bad-milli-C") << "C" << QDateTime() << "d-MMM-yy h:m:s.zzz" << "4-Jun-11 1:2:3.4";
+    QTest::newRow("ok-C") << "C" << QDateTime(QDate(1911, 6, 4), QTime(1, 2, 3, 400))
+                          << "d-MMM-yy h:m:s.z" << "4-Jun-11 1:2:3.4";
 
     QTest::newRow("1no_NO") << "no_NO" << QDateTime(QDate(1974, 12, 1), QTime(5, 14, 0))
                             << "d/M/yyyy hh:h:mm" << "1/12/1974 05:5:14";
@@ -1949,9 +1979,10 @@ void tst_QLocale::testNames_data()
     QTest::addColumn<int>("language");
     QTest::addColumn<int>("country");
 
+    QLocale::setDefault(QLocale(QLocale::C)); // Ensures predictable fall-backs
+
     for (int i = 0; i < locale_data_count; ++i) {
         const QLocaleData &item = locale_data[i];
-
 
         const QString testName = QLatin1String("data_") + QString::number(i) + QLatin1String(" (")
             + QLocale::languageToString((QLocale::Language)item.m_language_id)
@@ -2629,6 +2660,54 @@ void tst_QLocale::bcp47Name()
     QCOMPARE(QLocale("sr_HR").bcp47Name(), QStringLiteral("sr"));
     QCOMPARE(QLocale("sr_Cyrl_HR").bcp47Name(), QStringLiteral("sr"));
     QCOMPARE(QLocale("sr_Latn_HR").bcp47Name(), QStringLiteral("sr-Latn"));
+}
+
+class MySystemLocale : public QSystemLocale
+{
+public:
+    MySystemLocale(const QLocale &locale) : m_locale(locale)
+    {
+    }
+
+    QVariant query(QueryType /*type*/, QVariant /*in*/) const override
+    {
+        return QVariant();
+    }
+
+    QLocale fallbackUiLocale() const override
+    {
+        return m_locale;
+    }
+
+private:
+    const QLocale m_locale;
+};
+
+void tst_QLocale::systemLocale_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QLocale::Language>("language");
+    QTest::addRow("catalan") << QString("ca") << QLocale::Catalan;
+    QTest::addRow("ukrainian") << QString("uk") << QLocale::Ukrainian;
+    QTest::addRow("german") << QString("de") << QLocale::German;
+}
+
+void tst_QLocale::systemLocale()
+{
+    QLocale originalLocale;
+    QLocale originalSystemLocale = QLocale::system();
+
+    QFETCH(QString, name);
+    QFETCH(QLocale::Language, language);
+
+    {
+        MySystemLocale sLocale(name);
+        QCOMPARE(QLocale().language(), language);
+        QCOMPARE(QLocale::system().language(), language);
+    }
+
+    QCOMPARE(QLocale(), originalLocale);
+    QCOMPARE(QLocale::system(), originalSystemLocale);
 }
 
 QTEST_MAIN(tst_QLocale)

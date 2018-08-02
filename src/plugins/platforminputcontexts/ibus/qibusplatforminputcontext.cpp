@@ -60,6 +60,10 @@
 
 #ifndef IBUS_RELEASE_MASK
 #define IBUS_RELEASE_MASK (1 << 30)
+#define IBUS_SHIFT_MASK   (1 <<  0)
+#define IBUS_CONTROL_MASK (1 <<  2)
+#define IBUS_MOD1_MASK    (1 <<  3)
+#define IBUS_META_MASK    (1 << 28)
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -90,6 +94,7 @@ public:
     bool valid;
     bool busConnected;
     QString predit;
+    QList<QInputMethodEvent::Attribute> attributes;
     bool needsSurroundingText;
     QLocale locale;
 };
@@ -165,6 +170,7 @@ void QIBusPlatformInputContext::reset()
 
     d->context->Reset();
     d->predit = QString();
+    d->attributes.clear();
 }
 
 void QIBusPlatformInputContext::commit()
@@ -177,6 +183,7 @@ void QIBusPlatformInputContext::commit()
     QObject *input = qApp->focusObject();
     if (!input) {
         d->predit = QString();
+        d->attributes.clear();
         return;
     }
 
@@ -188,6 +195,7 @@ void QIBusPlatformInputContext::commit()
 
     d->context->Reset();
     d->predit = QString();
+    d->attributes.clear();
 }
 
 
@@ -246,6 +254,12 @@ void QIBusPlatformInputContext::setFocusObject(QObject *object)
     if (!d->busConnected)
         return;
 
+    // It would seem natural here to call FocusOut() on the input method if we
+    // transition from an IME accepted focus object to one that does not accept it.
+    // Mysteriously however that is not sufficient to fix bug QTBUG-63066.
+    if (!inputMethodAccepted())
+        return;
+
     if (debug)
         qDebug() << "setFocusObject" << object;
     if (object)
@@ -274,6 +288,7 @@ void QIBusPlatformInputContext::commitText(const QDBusVariant &text)
     QCoreApplication::sendEvent(input, &event);
 
     d->predit = QString();
+    d->attributes.clear();
 }
 
 void QIBusPlatformInputContext::updatePreeditText(const QDBusVariant &text, uint cursorPos, bool visible)
@@ -292,14 +307,46 @@ void QIBusPlatformInputContext::updatePreeditText(const QDBusVariant &text, uint
     if (debug)
         qDebug() << "preedit text:" << t.text;
 
-    QList<QInputMethodEvent::Attribute> attributes = t.attributes.imAttributes();
+    d->attributes = t.attributes.imAttributes();
     if (!t.text.isEmpty())
-        attributes += QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, cursorPos, visible ? 1 : 0);
+        d->attributes += QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, cursorPos, visible ? 1 : 0, QVariant());
 
-    QInputMethodEvent event(t.text, attributes);
+    QInputMethodEvent event(t.text, d->attributes);
     QCoreApplication::sendEvent(input, &event);
 
     d->predit = t.text;
+}
+
+void QIBusPlatformInputContext::forwardKeyEvent(uint keyval, uint keycode, uint state)
+{
+    if (!qApp)
+        return;
+
+    QObject *input = qApp->focusObject();
+    if (!input)
+        return;
+
+    if (debug)
+        qDebug() << "forwardKeyEvent" << keyval << keycode << state;
+
+    QEvent::Type type = QEvent::KeyPress;
+    if (state & IBUS_RELEASE_MASK)
+        type = QEvent::KeyRelease;
+
+    state &= ~IBUS_RELEASE_MASK;
+
+    Qt::KeyboardModifiers modifiers = Qt::NoModifier;
+    if (state & IBUS_SHIFT_MASK)
+        modifiers |= Qt::ShiftModifier;
+    if (state & IBUS_CONTROL_MASK)
+        modifiers |= Qt::ControlModifier;
+    if (state & IBUS_MOD1_MASK)
+        modifiers |= Qt::AltModifier;
+    if (state & IBUS_META_MASK)
+        modifiers |= Qt::MetaModifier;
+
+    QKeyEvent event(type, keyval, modifiers, QString(keyval));
+    QCoreApplication::sendEvent(input, &event);
 }
 
 void QIBusPlatformInputContext::surroundingTextRequired()
@@ -321,6 +368,27 @@ void QIBusPlatformInputContext::deleteSurroundingText(int offset, uint n_chars)
 
     QInputMethodEvent event;
     event.setCommitString("", offset, n_chars);
+    QCoreApplication::sendEvent(input, &event);
+}
+
+void QIBusPlatformInputContext::hidePreeditText()
+{
+    QObject *input = QGuiApplication::focusObject();
+    if (!input)
+        return;
+
+    QList<QInputMethodEvent::Attribute> attributes;
+    QInputMethodEvent event(QString(), attributes);
+    QCoreApplication::sendEvent(input, &event);
+}
+
+void QIBusPlatformInputContext::showPreeditText()
+{
+    QObject *input = QGuiApplication::focusObject();
+    if (!input)
+        return;
+
+    QInputMethodEvent event(d->predit, d->attributes);
     QCoreApplication::sendEvent(input, &event);
 }
 
@@ -496,8 +564,11 @@ void QIBusPlatformInputContext::connectToContextSignals()
     if (d->context) {
         connect(d->context, SIGNAL(CommitText(QDBusVariant)), SLOT(commitText(QDBusVariant)));
         connect(d->context, SIGNAL(UpdatePreeditText(QDBusVariant,uint,bool)), this, SLOT(updatePreeditText(QDBusVariant,uint,bool)));
+        connect(d->context, SIGNAL(ForwardKeyEvent(uint, uint, uint)), this, SLOT(forwardKeyEvent(uint, uint, uint)));
         connect(d->context, SIGNAL(DeleteSurroundingText(int,uint)), this, SLOT(deleteSurroundingText(int,uint)));
         connect(d->context, SIGNAL(RequireSurroundingText()), this, SLOT(surroundingTextRequired()));
+        connect(d->context, SIGNAL(HidePreeditText()), this, SLOT(hidePreeditText()));
+        connect(d->context, SIGNAL(ShowPreeditText()), this, SLOT(showPreeditText()));
     }
 }
 
@@ -582,7 +653,7 @@ QString QIBusPlatformInputContextPrivate::getSocketPath()
     if (pos2 > 0)
         displayNumber = display.mid(pos, pos2 - pos);
     else
-        displayNumber = display.right(pos);
+        displayNumber = display.mid(pos);
     if (debug)
         qDebug() << "host=" << host << "displayNumber" << displayNumber;
 

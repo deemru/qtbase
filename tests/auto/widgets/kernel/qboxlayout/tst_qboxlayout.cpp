@@ -226,15 +226,13 @@ void tst_QBoxLayout::setStyleShouldChangeSpacing()
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-    int spacing = pb2->geometry().left() - pb1->geometry().right() - 1;
-    QCOMPARE(spacing, 6);
+    auto spacing = [&]() { return pb2->geometry().left() - pb1->geometry().right() - 1; };
+    QCOMPARE(spacing(), 6);
 
     QScopedPointer<CustomLayoutStyle> style2(new CustomLayoutStyle());
     style2->hspacing = 10;
     window.setStyle(style2.data());
-    QTest::qWait(100);
-    spacing = pb2->geometry().left() - pb1->geometry().right() - 1;
-    QCOMPARE(spacing, 10);
+    QTRY_COMPARE(spacing(), 10);
 }
 
 void tst_QBoxLayout::taskQTBUG_7103_minMaxWidthNotRespected()
@@ -293,7 +291,7 @@ void tst_QBoxLayout::taskQTBUG_40609_addingWidgetToItsOwnLayout(){
     layout.setObjectName("ef9e2b42298e0e6420105bb");
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null widget to QVBoxLayout/ef9e2b42298e0e6420105bb");
-    layout.addWidget(Q_NULLPTR);
+    layout.addWidget(nullptr);
     QCOMPARE(layout.count(), 0);
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add parent widget QWidget/347b469225a24a0ef05150a to its child layout QVBoxLayout/ef9e2b42298e0e6420105bb");
@@ -309,7 +307,7 @@ void tst_QBoxLayout::taskQTBUG_40609_addingLayoutToItself(){
     layout.setObjectName("cc751dd0f50f62b05a62da");
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add a null layout to QVBoxLayout/cc751dd0f50f62b05a62da");
-    layout.addLayout(Q_NULLPTR);
+    layout.addLayout(nullptr);
     QCOMPARE(layout.count(), 0);
 
     QTest::ignoreMessage(QtWarningMsg, "QLayout: Cannot add layout QVBoxLayout/cc751dd0f50f62b05a62da to itself");

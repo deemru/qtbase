@@ -320,7 +320,7 @@ public:
     QSocks5BindData *retrieve(qintptr socketDescriptor);
 
 protected:
-    void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent * event) override;
 
     QMutex mutex;
     int sweepTimerId;

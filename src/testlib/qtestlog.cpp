@@ -55,7 +55,9 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QVariant>
+#if QT_CONFIG(regularexpression)
 #include <QtCore/QRegularExpression>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -139,7 +141,7 @@ namespace QTest {
             return tp == type
                    && (pattern.type() == QVariant::String ?
                        stringsMatch(pattern.toString(), message) :
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
                        pattern.toRegularExpression().match(message).hasMatch());
 #else
                        false);
@@ -220,6 +222,12 @@ namespace QTest {
             FOREACH_LOGGER(logger->addBenchmarkResult(result));
         }
 
+        static void addMessage(QtMsgType type, const QMessageLogContext &context,
+                               const QString &message)
+        {
+            FOREACH_LOGGER(logger->addMessage(type, context, message));
+        }
+
         static void addMessage(QAbstractTestLogger::MessageTypes type, const QString &message,
                                const char *file = 0, int line = 0)
         {
@@ -289,11 +297,10 @@ namespace QTest {
             QTEST_ASSERT(QTest::TestLoggers::loggerCount() != 0);
         }
 
-        if (handleIgnoredMessage(type, message))
+        if (handleIgnoredMessage(type, message)) {
             // the message is expected, so just swallow it.
             return;
-
-        QString msg = qFormatLogMessage(type, context, message);
+        }
 
         if (type != QtFatalMsg) {
             if (counter.load() <= 0)
@@ -306,22 +313,10 @@ namespace QTest {
             }
         }
 
-        switch (type) {
-        case QtDebugMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QDebug, msg);
-            break;
-        case QtInfoMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QInfo, msg);
-            break;
-        case QtCriticalMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QSystem, msg);
-            break;
-        case QtWarningMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QWarning, msg);
-            break;
-        case QtFatalMsg:
-            QTest::TestLoggers::addMessage(QAbstractTestLogger::QFatal, msg);
-            /* Right now, we're inside the custom message handler and we're
+        QTest::TestLoggers::addMessage(type, context, message);
+
+        if (type == QtFatalMsg) {
+             /* Right now, we're inside the custom message handler and we're
              * being qt_message_output in qglobal.cpp. After we return from
              * this function, it will proceed with calling exit() and abort()
              * and hence crash. Therefore, we call these logging functions such
@@ -329,7 +324,6 @@ namespace QTest {
             QTestResult::addFailure("Received a fatal error.", "Unknown file", 0);
             QTestLog::leaveTestFunction();
             QTestLog::stopLogging();
-            break;
         }
     }
 }
@@ -372,7 +366,7 @@ void QTestLog::printUnhandledIgnoreMessages()
         if (list->pattern.type() == QVariant::String) {
             message = QStringLiteral("Did not receive message: \"") + list->pattern.toString() + QLatin1Char('"');
         } else {
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
             message = QStringLiteral("Did not receive any message matching: \"") + list->pattern.toRegularExpression().pattern() + QLatin1Char('"');
 #endif
         }
@@ -556,14 +550,14 @@ void QTestLog::ignoreMessage(QtMsgType type, const char *msg)
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QString::fromLocal8Bit(msg));
 }
 
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
 void QTestLog::ignoreMessage(QtMsgType type, const QRegularExpression &expression)
 {
     QTEST_ASSERT(expression.isValid());
 
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QVariant(expression));
 }
-#endif // QT_NO_REGULAREXPRESSION
+#endif // QT_CONFIG(regularexpression)
 
 void QTestLog::setMaxWarnings(int m)
 {

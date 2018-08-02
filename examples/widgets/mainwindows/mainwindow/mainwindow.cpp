@@ -187,6 +187,13 @@ void MainWindow::setupMenuBar()
 #endif
 
     dockWidgetMenu = menuBar()->addMenu(tr("&Dock Widgets"));
+
+    QMenu *aboutMenu = menuBar()->addMenu(tr("About"));
+    QAction *aboutAct = aboutMenu->addAction(tr("&About"), this, &MainWindow::about);
+    aboutAct->setStatusTip(tr("Show the application's About box"));
+
+    QAction *aboutQtAct = aboutMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
+    aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
 }
 
 void MainWindow::setDockOptions()
@@ -382,7 +389,7 @@ void MainWindow::switchLayoutDirection()
 class CreateDockWidgetDialog : public QDialog
 {
 public:
-    explicit CreateDockWidgetDialog(QWidget *parent = Q_NULLPTR);
+    explicit CreateDockWidgetDialog(QWidget *parent = nullptr);
 
     QString enteredObjectName() const { return m_objectName->text(); }
     Qt::DockWidgetArea location() const;
@@ -475,4 +482,9 @@ void MainWindow::destroyDockWidget(QAction *action)
 
     if (destroyDockWidgetMenu->isEmpty())
         destroyDockWidgetMenu->setEnabled(false);
+}
+
+void MainWindow::about()
+{
+    QMessageBox::about(this, tr("About MainWindows"), message);
 }

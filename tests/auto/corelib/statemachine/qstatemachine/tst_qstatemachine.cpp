@@ -101,6 +101,7 @@ Q_OBJECT
     public:
     SignalEmitter(QObject *parent = 0)
         : QObject(parent) {}
+public Q_SLOTS:
     void emitSignalWithNoArg()
         { emit signalWithNoArg(); }
     void emitSignalWithIntArg(int arg)
@@ -251,6 +252,7 @@ private slots:
     void qtbug_46059();
     void qtbug_46703();
     void postEventFromBeginSelectTransitions();
+    void dontProcessSlotsWhenMachineIsNotRunning();
 };
 
 class TestState : public QState
@@ -4665,11 +4667,14 @@ void tst_QStateMachine::clonedSignals()
     s1->addTransition(t1);
 
     machine.setInitialState(s1);
+    QSignalSpy startedSpy(&machine, &QStateMachine::started);
     machine.start();
-    QTest::qWait(1);
+    QVERIFY(startedSpy.wait());
 
+    QSignalSpy transitionSpy(t1, &CloneSignalTransition::triggered);
     emitter.emitSignalWithDefaultArg();
-    QTest::qWait(1);
+    QTRY_COMPARE(transitionSpy.count(), 1);
+
     QCOMPARE(t1->eventSignalIndex, emitter.metaObject()->indexOfSignal("signalWithDefaultArg()"));
     TEST_ACTIVE_CHANGED(s1, 2);
     TEST_ACTIVE_CHANGED(s2, 1);
@@ -6634,7 +6639,7 @@ void tst_QStateMachine::postEventFromBeginSelectTransitions()
 {
     class StateMachine : public QStateMachine {
     protected:
-        void beginSelectTransitions(QEvent* e) Q_DECL_OVERRIDE {
+        void beginSelectTransitions(QEvent* e) override {
             if (e->type() == QEvent::Type(QEvent::User + 2))
                 postEvent(new QEvent(QEvent::Type(QEvent::User + 1)), QStateMachine::HighPriority);
         }
@@ -6656,6 +6661,39 @@ void tst_QStateMachine::postEventFromBeginSelectTransitions()
     QTRY_COMPARE(machine.configuration().contains(&success), true);
 
     QVERIFY(machine.isRunning());
+}
+
+void tst_QStateMachine::dontProcessSlotsWhenMachineIsNotRunning()
+{
+    QStateMachine machine;
+    QState initialState;
+    QFinalState finalState;
+
+    struct Emitter : SignalEmitter
+    {
+        QThread thread;
+        Emitter(QObject *parent = nullptr) : SignalEmitter(parent)
+        {
+            moveToThread(&thread);
+            thread.start();
+        }
+    } emitter;
+
+    initialState.addTransition(&emitter, &Emitter::signalWithNoArg, &finalState);
+    QTimer::singleShot(0, [&]() {
+        metaObject()->invokeMethod(&emitter, "emitSignalWithNoArg");
+        metaObject()->invokeMethod(&emitter, "emitSignalWithNoArg");
+    });
+    machine.addState(&initialState);
+    machine.addState(&finalState);
+    machine.setInitialState(&initialState);
+    connect(&machine, &QStateMachine::finished, &emitter.thread, &QThread::quit);
+    machine.start();
+    QSignalSpy emittedSpy(&emitter, &SignalEmitter::signalWithNoArg);
+    QSignalSpy finishedSpy(&machine, &QStateMachine::finished);
+    QTRY_COMPARE_WITH_TIMEOUT(emittedSpy.count(), 2, 100);
+    QTRY_COMPARE(finishedSpy.count(), 1);
+    QTRY_VERIFY(emitter.thread.isFinished());
 }
 
 QTEST_MAIN(tst_QStateMachine)

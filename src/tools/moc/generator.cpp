@@ -523,9 +523,9 @@ void Generator::generateCode()
 // Finally create and initialize the static meta object
 //
     if (isQt)
-        fprintf(out, "const QMetaObject QObject::staticQtMetaObject = {\n");
+        fprintf(out, "QT_INIT_METAOBJECT const QMetaObject QObject::staticQtMetaObject = {\n");
     else
-        fprintf(out, "const QMetaObject %s::staticMetaObject = {\n", cdef->qualified.constData());
+        fprintf(out, "QT_INIT_METAOBJECT const QMetaObject %s::staticMetaObject = {\n", cdef->qualified.constData());
 
     if (isQObject)
         fprintf(out, "    { nullptr, ");
@@ -1269,7 +1269,7 @@ void Generator::generateStaticMetacall()
                 continue;
             anythingUsed = true;
             fprintf(out, "        {\n");
-            fprintf(out, "            typedef %s (%s::*_t)(",f.type.rawName.constData() , cdef->classname.constData());
+            fprintf(out, "            using _t = %s (%s::*)(",f.type.rawName.constData() , cdef->classname.constData());
 
             int argsCount = f.arguments.count();
             for (int j = 0; j < argsCount; ++j) {

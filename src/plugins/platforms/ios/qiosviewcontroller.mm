@@ -41,6 +41,7 @@
 #import "qiosviewcontroller.h"
 
 #include <QtCore/qscopedvaluerollback.h>
+#include <QtCore/private/qcore_mac_p.h>
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
@@ -77,8 +78,7 @@
     if (!(self = [super init]))
         return nil;
 
-    QIOSIntegration *iosIntegration = QIOSIntegration::instance();
-    if (iosIntegration && iosIntegration->debugWindowManagement()) {
+    if (qEnvironmentVariableIntValue("QT_IOS_DEBUG_WINDOW_MANAGEMENT")) {
         static UIImage *gridPattern = nil;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
@@ -157,6 +157,26 @@
 
 - (void)layoutSubviews
 {
+    if (QGuiApplication::applicationState() == Qt::ApplicationSuspended) {
+        // Despite the OpenGL ES Programming Guide telling us to avoid all
+        // use of OpenGL while in the background, iOS will perform its view
+        // snapshotting for the app switcher after the application has been
+        // backgrounded; once for each orientation. Presumably the expectation
+        // is that no rendering needs to be done to provide an alternate
+        // orientation snapshot, just relayouting of views. But in our case,
+        // or any non-stretchable content case such as a OpenGL based game,
+        // this is not true. Instead of continuing layout, which will send
+        // potentially expensive geometry changes (with isExposed false,
+        // since we're in the background), we short-circuit the snapshotting
+        // here. iOS will still use the latest rendered frame to create the
+        // application switcher thumbnail, but it will be based on the last
+        // active orientation of the application.
+        QIOSScreen *screen = self.qtViewController->m_screen;
+        qCDebug(lcQpaWindow) << "ignoring layout of subviews while suspended,"
+            << "likely system snapshot of" << screen->screen()->primaryOrientation();
+        return;
+    }
+
     for (int i = int(self.subviews.count) - 1; i >= 0; --i) {
         UIView *view = static_cast<UIView *>([self.subviews objectAtIndex:i]);
         if (![view isKindOfClass:[QUIView class]])
@@ -254,6 +274,20 @@
         m_focusWindowChangeConnection = QObject::connect(qApp, &QGuiApplication::focusWindowChanged, [self]() {
             [self updateProperties];
         });
+
+        QIOSApplicationState *applicationState = &QIOSIntegration::instance()->applicationState;
+        QObject::connect(applicationState, &QIOSApplicationState::applicationStateDidChange,
+            [self](Qt::ApplicationState oldState, Qt::ApplicationState newState) {
+                if (oldState == Qt::ApplicationSuspended && newState != Qt::ApplicationSuspended) {
+                    // We may have ignored an earlier layout because the application was suspended,
+                    // and we didn't want to render anything at that moment in fear of being killed
+                    // due to rendering in the background, so we trigger an explicit layout when
+                    // coming out of the suspended state.
+                    qCDebug(lcQpaWindow) << "triggering root VC layout when coming out of suspended state";
+                    [self.view setNeedsLayout];
+                }
+            }
+        );
     }
 
     return self;
@@ -274,15 +308,17 @@
 {
     [super viewDidLoad];
 
+    Q_ASSERT(!qt_apple_isApplicationExtension());
+
 #ifndef Q_OS_TVOS
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     [center addObserver:self selector:@selector(willChangeStatusBarFrame:)
             name:UIApplicationWillChangeStatusBarFrameNotification
-            object:[UIApplication sharedApplication]];
+            object:qt_apple_sharedApplication()];
 
     [center addObserver:self selector:@selector(didChangeStatusBarOrientation:)
             name:UIApplicationDidChangeStatusBarOrientationNotification
-            object:[UIApplication sharedApplication]];
+            object:qt_apple_sharedApplication()];
 #endif
 }
 
@@ -422,7 +458,6 @@
     focusWindow = qt_window_private(focusWindow)->topLevelWindow();
 
 #ifndef Q_OS_TVOS
-    UIApplication *uiApplication = [UIApplication sharedApplication];
 
     // -------------- Status bar style and visbility ---------------
 
@@ -445,6 +480,8 @@
 
 
     // -------------- Content orientation ---------------
+
+    UIApplication *uiApplication = qt_apple_sharedApplication();
 
     static BOOL kAnimateContentOrientationChanges = YES;
 

@@ -72,8 +72,6 @@
 **
 ****************************************************************************/
 
-#define QT_MAC_SYSTEMTRAY_USE_GROWL
-
 #include "qcocoasystemtrayicon.h"
 
 #ifndef QT_NO_SYSTEMTRAYICON
@@ -86,6 +84,8 @@
 
 #include "qt_mac_p.h"
 #include "qcocoahelpers.h"
+#include "qcocoaintegration.h"
+#include "qcocoascreen.h"
 #include <QtGui/private/qcoregraphics_p.h>
 
 #import <AppKit/AppKit.h>
@@ -289,9 +289,6 @@ void QCocoaSystemTrayIcon::showMessage(const QString &title, const QString &mess
 }
 QT_END_NAMESPACE
 
-@implementation NSStatusItem (Qt)
-@end
-
 @implementation QNSImageView
 -(id)initWithParent:(QNSStatusItem*)myParent {
     self = [super init];
@@ -390,9 +387,8 @@ QT_END_NAMESPACE
 }
 -(QRectF)geometry {
     if (NSWindow *window = [[item view] window]) {
-        NSRect screenRect = [[window screen] frame];
-        NSRect windowRect = [window frame];
-        return QRectF(windowRect.origin.x, screenRect.size.height-windowRect.origin.y-windowRect.size.height, windowRect.size.width, windowRect.size.height);
+        if (QCocoaScreen *screen = QCocoaIntegration::instance()->screenForNSScreen([window screen]))
+            return screen->mapFromNative([window frame]);
     }
     return QRectF();
 }

@@ -53,7 +53,7 @@ class Q_CORE_EXPORT QAnimationGroup : public QAbstractAnimation
     Q_OBJECT
 
 public:
-    QAnimationGroup(QObject *parent = Q_NULLPTR);
+    QAnimationGroup(QObject *parent = nullptr);
     ~QAnimationGroup();
 
     QAbstractAnimation *animationAt(int index) const;
@@ -67,7 +67,7 @@ public:
 
 protected:
     QAnimationGroup(QAnimationGroupPrivate &dd, QObject *parent);
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    bool event(QEvent *event) override;
 
 private:
     Q_DISABLE_COPY(QAnimationGroup)

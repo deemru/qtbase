@@ -46,6 +46,7 @@
 
 #include <QtGui/private/qinputmethod_p.h>
 #include <QtCore/private/qobject_p.h>
+#include <QtCore/private/qcore_mac_p.h>
 
 #include "qiosglobal.h"
 #include "qiostextinputoverlay.h"
@@ -475,7 +476,7 @@ static void executeBlockWithoutAnimation(Block block)
 
     if (enabled) {
         _focusView = [reinterpret_cast<UIView *>(qApp->focusWindow()->winId()) retain];
-        _desktopView = [[UIApplication sharedApplication].keyWindow.rootViewController.view retain];
+        _desktopView = [qt_apple_sharedApplication().keyWindow.rootViewController.view retain];
         Q_ASSERT(_focusView && _desktopView && _desktopView.superview);
         [_desktopView addGestureRecognizer:self];
     } else {
@@ -608,7 +609,7 @@ static void executeBlockWithoutAnimation(Block block)
 - (QIOSLoupeLayer *)createLoupeLayer
 {
     Q_UNREACHABLE();
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 - (void)updateFocalPoint:(QPointF)touchPoint
@@ -984,13 +985,18 @@ static void executeBlockWithoutAnimation(Block block)
 
 QT_BEGIN_NAMESPACE
 
-QIOSEditMenu *QIOSTextInputOverlay::s_editMenu = Q_NULLPTR;
+QIOSEditMenu *QIOSTextInputOverlay::s_editMenu = nullptr;
 
 QIOSTextInputOverlay::QIOSTextInputOverlay()
-    : m_cursorRecognizer(Q_NULLPTR)
-    , m_selectionRecognizer(Q_NULLPTR)
-    , m_openMenuOnTapRecognizer(Q_NULLPTR)
+    : m_cursorRecognizer(nullptr)
+    , m_selectionRecognizer(nullptr)
+    , m_openMenuOnTapRecognizer(nullptr)
 {
+    if (qt_apple_isApplicationExtension()) {
+        qWarning() << "text input overlays disabled in application extensions";
+        return;
+    }
+
     connect(qApp, &QGuiApplication::focusObjectChanged, this, &QIOSTextInputOverlay::updateFocusObject);
 }
 
@@ -1012,10 +1018,10 @@ void QIOSTextInputOverlay::updateFocusObject()
         [m_selectionRecognizer release];
         [m_openMenuOnTapRecognizer release];
         [s_editMenu release];
-        m_cursorRecognizer = Q_NULLPTR;
-        m_selectionRecognizer = Q_NULLPTR;
-        m_openMenuOnTapRecognizer = Q_NULLPTR;
-        s_editMenu = Q_NULLPTR;
+        m_cursorRecognizer = nullptr;
+        m_selectionRecognizer = nullptr;
+        m_openMenuOnTapRecognizer = nullptr;
+        s_editMenu = nullptr;
     }
 
     if (platformInputContext()->inputMethodAccepted()) {

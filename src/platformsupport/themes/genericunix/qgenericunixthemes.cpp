@@ -112,9 +112,11 @@ static bool isDBusTrayAvailable() {
 #ifndef QT_NO_DBUS
 static bool checkDBusGlobalMenuAvailable()
 {
-    QDBusConnection connection = QDBusConnection::sessionBus();
-    QString registrarService = QStringLiteral("com.canonical.AppMenu.Registrar");
-    return connection.interface()->isServiceRegistered(registrarService);
+    const QDBusConnection connection = QDBusConnection::sessionBus();
+    static const QString registrarService = QStringLiteral("com.canonical.AppMenu.Registrar");
+    if (const auto iface = connection.interface())
+        return iface->isServiceRegistered(registrarService);
+    return false;
 }
 
 static bool isDBusGlobalMenuAvailable()
@@ -176,6 +178,12 @@ QStringList QGenericUnixTheme::xdgIconThemePaths()
             paths.append(xdgIconsDir.absoluteFilePath());
     }
 
+    return paths;
+}
+
+QStringList QGenericUnixTheme::iconFallbackPaths()
+{
+    QStringList paths;
     const QFileInfo pixmapsIconsDir(QStringLiteral("/usr/share/pixmaps"));
     if (pixmapsIconsDir.isDir())
         paths.append(pixmapsIconsDir.absoluteFilePath());
@@ -197,7 +205,7 @@ QPlatformSystemTrayIcon *QGenericUnixTheme::createPlatformSystemTrayIcon() const
 {
     if (isDBusTrayAvailable())
         return new QDBusTrayIcon();
-    return Q_NULLPTR;
+    return nullptr;
 }
 #endif
 
@@ -208,6 +216,8 @@ QVariant QGenericUnixTheme::themeHint(ThemeHint hint) const
         return QVariant(QString(QStringLiteral("hicolor")));
     case QPlatformTheme::IconThemeSearchPaths:
         return xdgIconThemePaths();
+    case QPlatformTheme::IconFallbackSearchPaths:
+        return iconFallbackPaths();
     case QPlatformTheme::DialogButtonBoxButtonsHaveIcons:
         return QVariant(true);
     case QPlatformTheme::StyleNames: {
@@ -672,7 +682,7 @@ QPlatformSystemTrayIcon *QKdeTheme::createPlatformSystemTrayIcon() const
 {
     if (isDBusTrayAvailable())
         return new QDBusTrayIcon();
-    return Q_NULLPTR;
+    return nullptr;
 }
 #endif
 
@@ -691,7 +701,7 @@ const char *QGnomeTheme::name = "gnome";
 class QGnomeThemePrivate : public QPlatformThemePrivate
 {
 public:
-    QGnomeThemePrivate() : systemFont(Q_NULLPTR), fixedFont(Q_NULLPTR) {}
+    QGnomeThemePrivate() : systemFont(nullptr), fixedFont(nullptr) {}
     ~QGnomeThemePrivate() { delete systemFont; delete fixedFont; }
 
     void configureFonts(const QString &gtkFontName) const
@@ -791,7 +801,7 @@ QPlatformSystemTrayIcon *QGnomeTheme::createPlatformSystemTrayIcon() const
 {
     if (isDBusTrayAvailable())
         return new QDBusTrayIcon();
-    return Q_NULLPTR;
+    return nullptr;
 }
 #endif
 
@@ -829,7 +839,7 @@ QPlatformTheme *QGenericUnixTheme::createUnixTheme(const QString &name)
 #endif
     if (name == QLatin1String(QGnomeTheme::name))
         return new QGnomeTheme;
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 QStringList QGenericUnixTheme::themeNames()

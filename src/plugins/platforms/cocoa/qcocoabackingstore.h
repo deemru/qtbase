@@ -52,11 +52,11 @@ public:
     QCocoaBackingStore(QWindow *window);
     ~QCocoaBackingStore();
 
-    void flush(QWindow *, const QRegion &, const QPoint &) Q_DECL_OVERRIDE;
+    void flush(QWindow *, const QRegion &, const QPoint &) override;
 
 private:
     bool windowHasUnifiedToolbar() const;
-    QImage::Format format() const Q_DECL_OVERRIDE;
+    QImage::Format format() const override;
     void redrawRoundedBottomCorners(CGRect) const;
 };
 

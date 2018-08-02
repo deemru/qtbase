@@ -39,8 +39,6 @@
 
 #include "qstandarditemmodel.h"
 
-#ifndef QT_NO_STANDARDITEMMODEL
-
 #include <QtCore/qdatetime.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
@@ -185,6 +183,72 @@ void QStandardItemPrivate::childDeleted(QStandardItem *child)
     emit model->dataChanged(modelIndex, modelIndex);
 }
 
+namespace {
+
+    struct ByNormalizedRole
+    {
+        static int normalizedRole(int role)
+        {
+            return role == Qt::EditRole ? Qt::DisplayRole : role;
+        }
+
+       bool operator()(const QStandardItemData& standardItemData, const std::pair<const int &, const QVariant&>& roleMapIt) const
+       {
+           return standardItemData.role < normalizedRole(roleMapIt.first);
+       }
+       bool operator()(const std::pair<const int&, const QVariant &>& roleMapIt, const QStandardItemData& standardItemData) const
+       {
+           return normalizedRole(roleMapIt.first) < standardItemData.role;
+       }
+
+    };
+
+    /*
+        Based on std::transform with a twist. The inputs are iterators of <int, QVariant> pair.
+        The variant is checked for validity and if not valid, that element is not taken into account
+        which means that the resulting output might be shorter than the input.
+    */
+    template<class Input, class OutputIt>
+    OutputIt roleMapStandardItemDataTransform(Input first1, Input last1, OutputIt d_first)
+    {
+        while (first1 != last1) {
+            if ((*first1).second.isValid())
+                *d_first++ = QStandardItemData(*first1);
+            ++first1;
+        }
+        return d_first;
+    }
+
+
+    /*
+        Based on std::set_union with a twist. The idea is to create a union of both inputs
+        with an additional constraint: if an input contains an invalid variant, it means
+        that this one should not be taken into account for generating the output.
+    */
+    template<class Input1, class Input2,
+             class OutputIt, class Compare>
+    OutputIt roleMapStandardItemDataUnion(Input1 first1, Input1 last1,
+                                          Input2 first2, Input2 last2,
+                                          OutputIt d_first, Compare comp)
+    {
+        for (; first1 != last1; ++d_first) {
+            if (first2 == last2) {
+                return roleMapStandardItemDataTransform(first1, last1, d_first);
+            }
+            if (comp(*first2, *first1)) {
+                *d_first = *first2++;
+            } else {
+                if ((*first1).second.isValid())
+                    *d_first = QStandardItemData(*first1);
+                if (!comp(*first1, *first2))
+                    ++first2;
+                ++first1;
+            }
+        }
+        return std::copy(first2, last2, d_first);
+    }
+}
+
 /*!
   \internal
 */
@@ -192,21 +256,44 @@ void QStandardItemPrivate::setItemData(const QMap<int, QVariant> &roles)
 {
     Q_Q(QStandardItem);
 
-    //let's build the vector of new values
-    QVector<QStandardItemData> newValues;
-    for (auto it = roles.begin(), end = roles.end(); it != end; ++it) {
-        const QVariant &value = it.value();
-        if (value.isValid()) {
-            int role = it.key();
-            role = (role == Qt::EditRole) ? Qt::DisplayRole : role;
-            newValues.append(QStandardItemData(role, value));
-        }
-    }
+    auto byRole = [](const QStandardItemData& item1, const QStandardItemData& item2) {
+        return item1.role < item2.role;
+    };
 
-    if (values!=newValues) {
+    std::sort(values.begin(), values.end(), byRole);
+
+    /*
+        Create a vector of QStandardItemData that will contain the original values
+        if the matching role is not contained in roles, the new value if it is and
+        if the new value is an invalid QVariant, it will be removed.
+    */
+    QVector<QStandardItemData> newValues;
+    newValues.reserve(values.size());
+    roleMapStandardItemDataUnion(roles.keyValueBegin(),
+                                 roles.keyValueEnd(),
+                                 values.cbegin(), values.cend(),
+                                 std::back_inserter(newValues), ByNormalizedRole());
+
+    if (newValues != values) {
         values.swap(newValues);
-        if (model)
-            model->d_func()->itemChanged(q);
+        if (model) {
+            QVector<int> roleKeys;
+            roleKeys.reserve(roles.size() + 1);
+            bool hasEditRole = false;
+            bool hasDisplayRole = false;
+            for (auto it = roles.keyBegin(); it != roles.keyEnd(); ++it) {
+                roleKeys.push_back(*it);
+                if (*it == Qt::EditRole)
+                    hasEditRole = true;
+                else if (*it == Qt::DisplayRole)
+                    hasDisplayRole = true;
+            }
+            if (hasEditRole && !hasDisplayRole)
+                roleKeys.push_back(Qt::DisplayRole);
+            else if (!hasEditRole && hasDisplayRole)
+                roleKeys.push_back(Qt::EditRole);
+            model->d_func()->itemChanged(q, roleKeys);
+        }
     }
 }
 
@@ -366,7 +453,7 @@ void QStandardItemModelPrivate::_q_emitItemChanged(const QModelIndex &topLeft,
 bool QStandardItemPrivate::insertRows(int row, const QList<QStandardItem*> &items)
 {
     Q_Q(QStandardItem);
-    if ((row < 0) || (row > rowCount()))
+    if ((row < 0) || (row > rowCount()) || items.isEmpty())
         return false;
     int count = items.count();
     if (model)
@@ -397,7 +484,7 @@ bool QStandardItemPrivate::insertRows(int row, const QList<QStandardItem*> &item
 bool QStandardItemPrivate::insertRows(int row, int count, const QList<QStandardItem*> &items)
 {
     Q_Q(QStandardItem);
-    if ((count < 1) || (row < 0) || (row > rowCount()))
+    if ((count < 1) || (row < 0) || (row > rowCount()) || count == 0)
         return false;
     if (model)
         model->d_func()->rowsAboutToBeInserted(q, row, row + count - 1);
@@ -439,7 +526,7 @@ bool QStandardItemPrivate::insertRows(int row, int count, const QList<QStandardI
 bool QStandardItemPrivate::insertColumns(int column, int count, const QList<QStandardItem*> &items)
 {
     Q_Q(QStandardItem);
-    if ((count < 1) || (column < 0) || (column > columnCount()))
+    if ((count < 1) || (column < 0) || (column > columnCount()) || count == 0)
         return false;
     if (model)
         model->d_func()->columnsAboutToBeInserted(q, column, column + count - 1);
@@ -481,7 +568,7 @@ bool QStandardItemPrivate::insertColumns(int column, int count, const QList<QSta
 /*!
   \internal
 */
-void QStandardItemModelPrivate::itemChanged(QStandardItem *item)
+void QStandardItemModelPrivate::itemChanged(QStandardItem *item, const QVector<int> &roles)
 {
     Q_Q(QStandardItemModel);
     Q_ASSERT(item);
@@ -497,8 +584,8 @@ void QStandardItemModelPrivate::itemChanged(QStandardItem *item)
         }
     } else {
         // Normal item
-        QModelIndex index = q->indexFromItem(item);
-        emit q->dataChanged(index, index);
+        const QModelIndex index = q->indexFromItem(item);
+        emit q->dataChanged(index, index, roles);
     }
 }
 
@@ -812,6 +899,9 @@ void QStandardItem::setData(const QVariant &value, int role)
 {
     Q_D(QStandardItem);
     role = (role == Qt::EditRole) ? Qt::DisplayRole : role;
+    const QVector<int> roles((role == Qt::DisplayRole) ?
+                                QVector<int>({Qt::DisplayRole, Qt::EditRole}) :
+                                QVector<int>({role}));
     QVector<QStandardItemData>::iterator it;
     for (it = d->values.begin(); it != d->values.end(); ++it) {
         if ((*it).role == role) {
@@ -823,13 +913,13 @@ void QStandardItem::setData(const QVariant &value, int role)
                 d->values.erase(it);
             }
             if (d->model)
-                d->model->d_func()->itemChanged(this);
+                d->model->d_func()->itemChanged(this, roles);
             return;
         }
     }
     d->values.append(QStandardItemData(role, value));
     if (d->model)
-        d->model->d_func()->itemChanged(this);
+        d->model->d_func()->itemChanged(this, roles);
 }
 
 /*!
@@ -1324,7 +1414,7 @@ void QStandardItem::setTristate(bool tristate)
 }
 #endif
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 
 /*!
   Sets whether the item is drag enabled. If \a dragEnabled is true, the item
@@ -1382,7 +1472,7 @@ void QStandardItem::setDropEnabled(bool dropEnabled)
   \sa setDropEnabled(), isDragEnabled(), flags()
 */
 
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 /*!
   Returns the row where the item is located in its parent's child table, or
@@ -3167,5 +3257,3 @@ bool QStandardItemModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
 QT_END_NAMESPACE
 
 #include "moc_qstandarditemmodel.cpp"
-
-#endif // QT_NO_STANDARDITEMMODEL

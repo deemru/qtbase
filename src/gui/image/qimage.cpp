@@ -931,7 +931,8 @@ QImage::QImage(const uchar *data, int width, int height, int bytesPerLine, Forma
 
     The loader attempts to read the image using the specified \a
     format. If the \a format is not specified (which is the default),
-    the loader probes the file for a header to guess the file format.
+    it is auto-detected based on the file's suffix and header. For
+    details, see {QImageReader::setAutoDetectImageFormat()}{QImageReader}.
 
     If the loading of the image failed, this object is a null image.
 
@@ -1975,7 +1976,8 @@ QImage::Format QImage::format() const
 }
 
 /*!
-    \fn QImage QImage::convertToFormat(Format format, Qt::ImageConversionFlags flags) const
+    \fn QImage QImage::convertToFormat(Format format, Qt::ImageConversionFlags flags) const &
+    \fn QImage QImage::convertToFormat(Format format, Qt::ImageConversionFlags flags) &&
 
     Returns a copy of the image in the given \a format.
 
@@ -2133,8 +2135,8 @@ QImage QImage::convertToFormat(Format format, const QVector<QRgb> &colorTable, Q
 /*!
     \since 5.9
 
-    Changes the \a format of the image without changing the data. Only
-    works between formats of the same depth.
+    Changes the format of the image to \a format without changing the
+    data. Only works between formats of the same depth.
 
     Returns \c true if successful.
 
@@ -2987,7 +2989,9 @@ QImage QImage::createMaskFromColor(QRgb color, Qt::MaskMode mode) const
 }
 
 /*!
-    \fn QImage QImage::mirrored(bool horizontal = false, bool vertical = true) const
+    \fn QImage QImage::mirrored(bool horizontal = false, bool vertical = true) const &
+    \fn QImage QImage::mirrored(bool horizontal = false, bool vertical = true) &&
+
     Returns a mirror of the image, mirrored in the horizontal and/or
     the vertical direction depending on whether \a horizontal and \a
     vertical are set to true or false.
@@ -3192,7 +3196,9 @@ void QImage::mirrored_inplace(bool horizontal, bool vertical)
 }
 
 /*!
-    \fn QImage QImage::rgbSwapped() const
+    \fn QImage QImage::rgbSwapped() const &
+    \fn QImage QImage::rgbSwapped() &&
+
     Returns a QImage in which the values of the red and blue
     components of all pixels have been swapped, effectively converting
     an RGB image to an BGR image.
@@ -3261,14 +3267,31 @@ QImage QImage::rgbSwapped_helper() const
             res.d->colortable[i] = QRgb(((c << 16) & 0xff0000) | ((c >> 16) & 0xff) | (c & 0xff00ff00));
         }
         break;
-    case Format_RGB32:
-    case Format_ARGB32:
-    case Format_ARGB32_Premultiplied:
-#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
     case Format_RGBX8888:
     case Format_RGBA8888:
     case Format_RGBA8888_Premultiplied:
+#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+        res = QImage(d->width, d->height, d->format);
+        QIMAGE_SANITYCHECK_MEMORY(res);
+        for (int i = 0; i < d->height; i++) {
+            uint *q = (uint*)res.scanLine(i);
+            const uint *p = (const uint*)constScanLine(i);
+            const uint *end = p + d->width;
+            while (p < end) {
+                uint c = *p;
+                *q = ((c << 16) & 0xff000000) | ((c >> 16) & 0xff00) | (c & 0x00ff00ff);
+                p++;
+                q++;
+            }
+        }
+        break;
+#else
+        // On little-endian rgba8888 is abgr32 and can use same rgb-swap as argb32
+        Q_FALLTHROUGH();
 #endif
+    case Format_RGB32:
+    case Format_ARGB32:
+    case Format_ARGB32_Premultiplied:
         res = QImage(d->width, d->height, d->format);
         QIMAGE_SANITYCHECK_MEMORY(res);
         for (int i = 0; i < d->height; i++) {
@@ -3352,14 +3375,27 @@ void QImage::rgbSwapped_inplace()
             d->colortable[i] = QRgb(((c << 16) & 0xff0000) | ((c >> 16) & 0xff) | (c & 0xff00ff00));
         }
         break;
-    case Format_RGB32:
-    case Format_ARGB32:
-    case Format_ARGB32_Premultiplied:
-#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
     case Format_RGBX8888:
     case Format_RGBA8888:
     case Format_RGBA8888_Premultiplied:
+#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+        for (int i = 0; i < d->height; i++) {
+            uint *p = (uint*)scanLine(i);
+            uint *end = p + d->width;
+            while (p < end) {
+                uint c = *p;
+                *p = ((c << 16) & 0xff000000) | ((c >> 16) & 0xff00) | (c & 0x00ff00ff);
+                p++;
+            }
+        }
+        break;
+#else
+        // On little-endian rgba8888 is abgr32 and can use same rgb-swap as argb32
+        Q_FALLTHROUGH();
 #endif
+    case Format_RGB32:
+    case Format_ARGB32:
+    case Format_ARGB32_Premultiplied:
         for (int i = 0; i < d->height; i++) {
             uint *p = (uint*)scanLine(i);
             uint *end = p + d->width;
@@ -3406,8 +3442,9 @@ void QImage::rgbSwapped_inplace()
     and returns \c false.
 
     The loader attempts to read the image using the specified \a format, e.g.,
-    PNG or JPG. If \a format is not specified (which is the default), the
-    loader probes the file for a header to guess the file format.
+    PNG or JPG. If \a format is not specified (which is the default), it is
+    auto-detected based on the file's suffix and header. For details, see
+    {QImageReader::setAutoDetectImageFormat()}{QImageReader}.
 
     The file name can either refer to an actual file on disk or to one
     of the application's embedded resources. See the
@@ -3474,14 +3511,10 @@ bool QImage::loadFromData(const uchar *data, int len, const char *format)
     Constructs a QImage from the first \a size bytes of the given
     binary \a data. The loader attempts to read the image using the
     specified \a format. If \a format is not specified (which is the default),
-    the loader probes the file for a header to guess the file format.
-    binary \a data. The loader attempts to read the image, either using the
-    optional image \a format specified or by determining the image format from
-    the data.
+    the loader probes the data for a header to guess the file format.
 
-    If \a format is not specified (which is the default), the loader probes the
-    file for a header to determine the file format. If \a format is specified,
-    it must be one of the values returned by QImageReader::supportedImageFormats().
+    If \a format is specified, it must be one of the values returned by
+    QImageReader::supportedImageFormats().
 
     If the loading of the image fails, the image returned will be a null image.
 
@@ -4781,8 +4814,8 @@ bool QImageData::convertInPlace(QImage::Format newFormat, Qt::ImageConversionFla
 QDebug operator<<(QDebug dbg, const QImage &i)
 {
     QDebugStateSaver saver(dbg);
-    dbg.resetFormat();
     dbg.nospace();
+    dbg.noquote();
     dbg << "QImage(";
     if (i.isNull()) {
         dbg << "null";
@@ -4790,8 +4823,15 @@ QDebug operator<<(QDebug dbg, const QImage &i)
         dbg << i.size() << ",format=" << i.format() << ",depth=" << i.depth();
         if (i.colorCount())
             dbg << ",colorCount=" << i.colorCount();
+        const int bytesPerLine = i.bytesPerLine();
         dbg << ",devicePixelRatio=" << i.devicePixelRatio()
-            << ",bytesPerLine=" << i.bytesPerLine() << ",sizeInBytes=" << i.sizeInBytes();
+            << ",bytesPerLine=" << bytesPerLine << ",sizeInBytes=" << i.sizeInBytes();
+        if (dbg.verbosity() > 2 && i.height() > 0) {
+            const int outputLength = qMin(bytesPerLine, 24);
+            dbg << ",line0="
+                << QByteArray(reinterpret_cast<const char *>(i.scanLine(0)), outputLength).toHex()
+                << "...";
+        }
     }
     dbg << ')';
     return dbg;

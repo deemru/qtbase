@@ -1427,7 +1427,7 @@ void QTextDocumentLayoutPrivate::drawListItem(const QPointF &offset, QPainter *p
     case QTextListFormat::ListLowerRoman:
     case QTextListFormat::ListUpperRoman:
         itemText = static_cast<QTextList *>(object)->itemText(bl);
-        size.setWidth(fontMetrics.width(itemText));
+        size.setWidth(fontMetrics.horizontalAdvance(itemText));
         size.setHeight(fontMetrics.height());
         break;
 
@@ -1445,7 +1445,7 @@ void QTextDocumentLayoutPrivate::drawListItem(const QPointF &offset, QPainter *p
 
     QRectF r(pos, size);
 
-    qreal xoff = fontMetrics.width(QLatin1Char(' '));
+    qreal xoff = fontMetrics.horizontalAdvance(QLatin1Char(' '));
     if (dir == Qt::LeftToRight)
         xoff = -xoff - size.width();
     r.translate( xoff, (fontMetrics.height() / 2) - (size.height() / 2));
@@ -2494,7 +2494,7 @@ void QTextDocumentLayoutPrivate::layoutFlow(QTextFrame::Iterator it, QTextLayout
                     QTextTableData *td = static_cast<QTextTableData *>(data(lastIt.currentFrame()));
                     QTextLayout *layout = block.layout();
 
-                    QFixed height = QFixed::fromReal(layout->lineAt(0).height());
+                    QFixed height = layout->lineCount() > 0 ? QFixed::fromReal(layout->lineAt(0).height()) : QFixed();
 
                     if (layoutStruct->pageBottom == origPageBottom) {
                         layoutStruct->y -= height;
@@ -2506,10 +2506,12 @@ void QTextDocumentLayoutPrivate::layoutFlow(QTextFrame::Iterator it, QTextLayout
                         layoutBlock(block, docPos, blockFormat, layoutStruct, layoutFrom, layoutTo, previousBlockFormatPtr);
                     }
 
-                    QPointF linePos((td->position.x + td->size.width).toReal(),
-                                    (td->position.y + td->size.height - height).toReal());
+                    if (layout->lineCount() > 0) {
+                        QPointF linePos((td->position.x + td->size.width).toReal(),
+                                        (td->position.y + td->size.height - height).toReal());
 
-                    layout->lineAt(0).setPosition(linePos - layout->position());
+                        layout->lineAt(0).setPosition(linePos - layout->position());
+                    }
                 }
 
                 if (blockFormat.pageBreakPolicy() & QTextFormat::PageBreak_AlwaysAfter)
@@ -2613,7 +2615,7 @@ void QTextDocumentLayoutPrivate::layoutBlock(const QTextBlock &bl, int blockPosi
     QFixed extraMargin;
     if (docPrivate->defaultTextOption.flags() & QTextOption::AddSpaceForLineAndParagraphSeparators) {
         QFontMetricsF fm(bl.charFormat().font());
-        extraMargin = QFixed::fromReal(fm.width(QChar(QChar(0x21B5))));
+        extraMargin = QFixed::fromReal(fm.horizontalAdvance(QChar(QChar(0x21B5))));
     }
 
     const QFixed indent = this->blockIndent(blockFormat);

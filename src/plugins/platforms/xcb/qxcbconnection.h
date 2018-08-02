@@ -92,6 +92,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQpaScreen)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaEvents)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaXcb)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaPeeker)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaKeyboard)
 
 class QXcbVirtualDesktop;
 class QXcbScreen;
@@ -409,12 +410,21 @@ public:
     const xcb_setup_t *setup() const { return m_setup; }
     const xcb_format_t *formatForDepth(uint8_t depth) const;
 
+    bool imageNeedsEndianSwap() const
+    {
+#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+        return m_setup->image_byte_order != XCB_IMAGE_ORDER_MSB_FIRST;
+#else
+        return m_setup->image_byte_order != XCB_IMAGE_ORDER_LSB_FIRST;
+#endif
+    }
+
     QXcbKeyboard *keyboard() const { return m_keyboard; }
 
 #ifndef QT_NO_CLIPBOARD
     QXcbClipboard *clipboard() const { return m_clipboard; }
 #endif
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     QXcbDrag *drag() const { return m_drag; }
 #endif
 
@@ -432,6 +442,7 @@ public:
     void sync();
 
     void handleXcbError(xcb_generic_error_t *error);
+    void printXcbError(const char *message, xcb_generic_error_t *error);
     void handleXcbEvent(xcb_generic_event_t *event);
     void printXcbEvent(const QLoggingCategory &log, const char *message,
                        xcb_generic_event_t *event) const;
@@ -467,8 +478,16 @@ public:
     bool hasXRandr() const { return has_randr_extension; }
     bool hasInputShape() const { return has_input_shape; }
     bool hasXKB() const { return has_xkb; }
-    bool hasXRender() const { return has_render_extension; }
+    bool hasXRender(int major = -1, int minor = -1) const
+    {
+        if (has_render_extension && major != -1 && minor != -1)
+            return m_xrenderVersion >= qMakePair(major, minor);
+
+        return has_render_extension;
+    }
     bool hasXInput2() const { return m_xi2Enabled; }
+    bool hasShm() const { return has_shm; }
+    bool hasShmFd() const { return has_shm_fd; }
 
     bool threadedEventHandling() const { return m_reader->isRunning(); }
 
@@ -476,8 +495,9 @@ public:
     xcb_window_t getSelectionOwner(xcb_atom_t atom) const;
     xcb_window_t getQtSelectionOwner();
 
-    void setButtonState(Qt::MouseButton button, bool down) { m_buttonState.setFlag(button, down); }
+    void setButtonState(Qt::MouseButton button, bool down);
     Qt::MouseButtons buttonState() const { return m_buttonState; }
+    Qt::MouseButton button() const { return m_button; }
     Qt::MouseButton translateMouseButton(xcb_button_t s);
 
     QXcbWindow *focusWindow() const { return m_focusWindow; }
@@ -513,7 +533,7 @@ public:
     void xi2UpdateScrollingDevices();
 #endif
 #ifdef XCB_USE_XINPUT22
-    bool startSystemResizeForTouchBegin(xcb_window_t window, const QPoint &point, Qt::Corner corner);
+    bool startSystemMoveResizeForTouchBegin(xcb_window_t window, const QPoint &point, int corner);
     bool isTouchScreen(int id);
 #endif
 #endif
@@ -535,6 +555,7 @@ private slots:
 private:
     void initializeAllAtoms();
     void sendConnectionEvent(QXcbAtom::Atom atom, uint id = 0);
+    void initializeShm();
     void initializeXFixes();
     void initializeXRender();
     void initializeXRandr();
@@ -652,7 +673,7 @@ private:
 #ifndef QT_NO_CLIPBOARD
     QXcbClipboard *m_clipboard = nullptr;
 #endif
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     QXcbDrag *m_drag = nullptr;
 #endif
     QScopedPointer<QXcbWMSupport> m_wmSupport;
@@ -666,12 +687,12 @@ private:
 #if QT_CONFIG(xinput2)
     QHash<int, TouchDeviceData> m_touchDevices;
 #ifdef XCB_USE_XINPUT22
-    struct StartSystemResizeInfo {
+    struct StartSystemMoveResizeInfo {
         xcb_window_t window = XCB_NONE;
         uint16_t deviceid;
         uint32_t pointid;
-        Qt::Corner corner;
-    } m_startSystemResizeInfo;
+        int corner;
+    } m_startSystemMoveResizeInfo;
 #endif
 #endif
     WindowMapper m_mapper;
@@ -689,8 +710,13 @@ private:
     bool has_input_shape;
     bool has_xkb = false;
     bool has_render_extension = false;
+    bool has_shm = false;
+    bool has_shm_fd = false;
+
+    QPair<int, int> m_xrenderVersion;
 
     Qt::MouseButtons m_buttonState = 0;
+    Qt::MouseButton m_button = Qt::NoButton;
 
     QXcbWindow *m_focusWindow = nullptr;
     QXcbWindow *m_mouseGrabber = nullptr;
@@ -701,6 +727,7 @@ private:
     QXcbSystemTrayTracker *m_systemTrayTracker = nullptr;
     QXcbGlIntegration *m_glIntegration = nullptr;
     bool m_xiGrab = false;
+    QVector<int> m_xiMasterPointerIds;
 
     xcb_window_t m_qtSelectionOwner = 0;
 
@@ -746,16 +773,18 @@ private:
 
 #define Q_XCB_REPLY_CONNECTION_ARG(connection, ...) connection
 
+struct QStdFreeDeleter {
+    void operator()(void *p) const Q_DECL_NOTHROW { return std::free(p); }
+};
+
 #define Q_XCB_REPLY(call, ...) \
-    std::unique_ptr<call##_reply_t, decltype(std::free) *>( \
-        call##_reply(Q_XCB_REPLY_CONNECTION_ARG(__VA_ARGS__), call(__VA_ARGS__), nullptr), \
-        std::free \
+    std::unique_ptr<call##_reply_t, QStdFreeDeleter>( \
+        call##_reply(Q_XCB_REPLY_CONNECTION_ARG(__VA_ARGS__), call(__VA_ARGS__), nullptr) \
     )
 
 #define Q_XCB_REPLY_UNCHECKED(call, ...) \
-    std::unique_ptr<call##_reply_t, decltype(std::free) *>( \
-        call##_reply(Q_XCB_REPLY_CONNECTION_ARG(__VA_ARGS__), call##_unchecked(__VA_ARGS__), nullptr), \
-        std::free \
+    std::unique_ptr<call##_reply_t, QStdFreeDeleter>( \
+        call##_reply(Q_XCB_REPLY_CONNECTION_ARG(__VA_ARGS__), call##_unchecked(__VA_ARGS__), nullptr) \
     )
 
 template <typename T>

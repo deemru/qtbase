@@ -39,6 +39,7 @@
 
 #include "qnswindowdelegate.h"
 #include "qcocoahelpers.h"
+#include "qcocoascreen.h"
 
 #include <QDebug>
 #include <qpa/qplatformscreen.h>
@@ -68,33 +69,39 @@ static QRegExp whitespaceRegex = QRegExp(QStringLiteral("\\s*"));
 /*!
     Overridden to ensure that the zoomed state always results in a maximized
     window, which would otherwise not be the case for borderless windows.
-*/
-- (NSRect)windowWillUseStandardFrame:(NSWindow *)window defaultFrame:(NSRect)newFrame
-{
-    Q_UNUSED(newFrame);
 
-    // We explicitly go through the QScreen API here instead of just using
-    // window.screen.visibleFrame directly, as that ensures we have the same
-    // behavior for both use-cases/APIs.
-    Q_ASSERT(window == m_cocoaWindow->nativeWindow());
-    return NSRectFromCGRect(m_cocoaWindow->screen()->availableGeometry().toCGRect());
-}
-
-#if QT_MACOS_DEPLOYMENT_TARGET_BELOW(__MAC_10_11)
-/*
-    AppKit on OS X 10.10 wrongly calls windowWillUseStandardFrame:defaultFrame
-    from -[NSWindow _frameForFullScreenMode] when going into fullscreen, resulting
-    in black bars on top and bottom of the window. By implementing the following
-    method, AppKit will choose that instead, and resolve the right fullscreen
-    geometry.
+    We also keep the window on the same screen as before; something AppKit
+    sometimes fails to do using its built in logic.
 */
-- (NSSize)window:(NSWindow *)window willUseFullScreenContentSize:(NSSize)proposedSize
+- (NSRect)windowWillUseStandardFrame:(NSWindow *)window defaultFrame:(NSRect)proposedFrame
 {
-    Q_UNUSED(proposedSize);
+    Q_UNUSED(proposedFrame);
     Q_ASSERT(window == m_cocoaWindow->nativeWindow());
-    return NSSizeFromCGSize(m_cocoaWindow->screen()->geometry().size().toCGSize());
+    const QWindow *w = m_cocoaWindow->window();
+
+    // maximumSize() refers to the client size, but AppKit expects the full frame size
+    QSizeF maximumSize = w->maximumSize() + QSize(0, w->frameMargins().top());
+
+    // The window should never be larger than the current screen geometry
+    const QRectF screenGeometry = m_cocoaWindow->screen()->geometry();
+    maximumSize = maximumSize.boundedTo(screenGeometry.size());
+
+    // Use the current frame position for the initial maximized frame,
+    // so that the window stays put and just expand, in case its maximum
+    // size is within the screen bounds.
+    QRectF maximizedFrame = QRectF(w->framePosition(), maximumSize);
+
+    // But constrain the frame to the screen bounds in case the frame
+    // extends beyond the screen bounds as a result of starting out
+    // with the current frame position.
+    maximizedFrame.translate(QPoint(
+        qMax(screenGeometry.left() - maximizedFrame.left(), 0.0) +
+        qMin(screenGeometry.right() - maximizedFrame.right(), 0.0),
+        qMax(screenGeometry.top() - maximizedFrame.top(), 0.0) +
+        qMin(screenGeometry.bottom() - maximizedFrame.bottom(), 0.0)));
+
+    return QCocoaScreen::mapToNative(maximizedFrame);
 }
-#endif
 
 - (BOOL)window:(NSWindow *)window shouldPopUpDocumentPathMenu:(NSMenu *)menu
 {

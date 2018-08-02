@@ -224,6 +224,7 @@ bool QSslConfiguration::operator==(const QSslConfiguration &other) const
         d->peerVerifyMode == other.d->peerVerifyMode &&
         d->peerVerifyDepth == other.d->peerVerifyDepth &&
         d->allowRootCertOnDemandLoading == other.d->allowRootCertOnDemandLoading &&
+        d->backendConfig == other.d->backendConfig &&
         d->sslOptions == other.d->sslOptions &&
         d->sslSession == other.d->sslSession &&
         d->sslSessionTicketLifeTimeHint == other.d->sslSessionTicketLifeTimeHint &&
@@ -266,6 +267,7 @@ bool QSslConfiguration::isNull() const
             d->privateKey.isNull() &&
             d->peerCertificate.isNull() &&
             d->peerCertificateChain.count() == 0 &&
+            d->backendConfig.isEmpty() &&
             d->sslOptions == QSslConfigurationPrivate::defaultSslOptions &&
             d->sslSession.isNull() &&
             d->sslSessionTicketLifeTimeHint == -1 &&
@@ -873,6 +875,60 @@ void QSslConfiguration::setDiffieHellmanParameters(const QSslDiffieHellmanParame
 }
 
 /*!
+    \since 5.11
+
+    Returns the backend-specific configuration.
+
+    Only options set by setBackendConfigurationOption() or setBackendConfiguration() will be
+    returned. The internal standard configuration of the backend is not reported.
+
+    \sa setBackendConfigurationOption(), setBackendConfiguration()
+ */
+QMap<QByteArray, QVariant> QSslConfiguration::backendConfiguration() const
+{
+    return d->backendConfig;
+}
+
+/*!
+    \since 5.11
+
+    Sets the option \a name in the backend-specific configuration to \a value.
+
+    Options supported by the OpenSSL (>= 1.0.2) backend are available in the \l
+    {https://www.openssl.org/docs/manmaster/man3/SSL_CONF_cmd.html#SUPPORTED-CONFIGURATION-FILE-COMMANDS}
+    {supported configuration file commands} documentation. The expected type for
+    the \a value parameter is a QByteArray for all options. The \l
+    {https://www.openssl.org/docs/manmaster/man3/SSL_CONF_cmd.html#EXAMPLES}{examples}
+    show how to use some of the options.
+
+    \note The backend-specific configuration will be applied after the general
+    configuration. Using the backend-specific configuration to set a general
+    configuration option again will overwrite the general configuration option.
+
+    \sa backendConfiguration(), setBackendConfiguration()
+ */
+void QSslConfiguration::setBackendConfigurationOption(const QByteArray &name, const QVariant &value)
+{
+    d->backendConfig[name] = value;
+}
+
+/*!
+    \since 5.11
+
+    Sets or clears the backend-specific configuration.
+
+    Without a \a backendConfiguration parameter this function will clear the
+    backend-specific configuration. More information about the supported
+    options is available in the documentation of setBackendConfigurationOption().
+
+    \sa backendConfiguration(), setBackendConfigurationOption()
+ */
+void QSslConfiguration::setBackendConfiguration(const QMap<QByteArray, QVariant> &backendConfiguration)
+{
+    d->backendConfig = backendConfiguration;
+}
+
+/*!
   \since 5.3
 
   This function returns the protocol negotiated with the server
@@ -952,7 +1008,7 @@ QSslConfiguration::NextProtocolNegotiationStatus QSslConfiguration::nextProtocol
 
     \list
       \li no local certificate and no private key
-      \li protocol SecureProtocols (meaning either TLS 1.0 or SSL 3 will be used)
+      \li protocol \l{QSsl::SecureProtocols}{SecureProtocols}
       \li the system's default CA certificate list
       \li the cipher list equal to the list of the SSL libraries'
          supported SSL ciphers that are 128 bits or more

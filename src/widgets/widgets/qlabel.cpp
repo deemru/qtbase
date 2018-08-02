@@ -66,16 +66,16 @@ QLabelPrivate::QLabelPrivate()
       sh(),
       msh(),
       text(),
-      pixmap(Q_NULLPTR),
-      scaledpixmap(Q_NULLPTR),
-      cachedimage(Q_NULLPTR),
+      pixmap(nullptr),
+      scaledpixmap(nullptr),
+      cachedimage(nullptr),
 #ifndef QT_NO_PICTURE
-      picture(Q_NULLPTR),
+      picture(nullptr),
 #endif
 #if QT_CONFIG(movie)
       movie(),
 #endif
-      control(Q_NULLPTR),
+      control(nullptr),
       shortcutCursor(),
 #ifndef QT_NO_CURSOR
       cursor(),
@@ -583,7 +583,7 @@ QSize QLabelPrivate::sizeForWidth(int w) const
         int m = indent;
 
         if (m < 0 && q->frameWidth()) // no indent, but we do have a frame
-            m = fm.width(QLatin1Char('x')) - margin*2;
+            m = fm.horizontalAdvance(QLatin1Char('x')) - margin*2;
         if (m > 0) {
             if ((align & Qt::AlignLeft) || (align & Qt::AlignRight))
                 hextra += m;
@@ -963,7 +963,9 @@ bool QLabel::event(QEvent *e)
     if (type == QEvent::Shortcut) {
         QShortcutEvent *se = static_cast<QShortcutEvent *>(e);
         if (se->shortcutId() == d->shortcutId) {
-            QWidget * w = d->buddy;
+            QWidget *w = d->buddy;
+            if (!w)
+                return QFrame::event(e);
             if (w->focusPolicy() != Qt::NoFocus)
                 w->setFocus(Qt::ShortcutFocusReason);
 #if QT_CONFIG(abstractbutton)
@@ -1006,7 +1008,7 @@ void QLabel::paintEvent(QPaintEvent *)
                                                        : layoutDirection(), QFlag(d->align));
 
 #if QT_CONFIG(movie)
-    if (d->movie) {
+    if (d->movie && !d->movie->currentPixmap().isNull()) {
         if (d->scaledcontents)
             style->drawItemPixmap(&painter, cr, align, d->movie->currentPixmap().scaled(cr.size()));
         else
@@ -1163,7 +1165,15 @@ void QLabelPrivate::updateLabel()
 void QLabel::setBuddy(QWidget *buddy)
 {
     Q_D(QLabel);
+
+    if (d->buddy)
+        disconnect(d->buddy, SIGNAL(destroyed()), this, SLOT(_q_buddyDeleted()));
+
     d->buddy = buddy;
+
+    if (buddy)
+        connect(buddy, SIGNAL(destroyed()), this, SLOT(_q_buddyDeleted()));
+
     if (d->isTextLabel) {
         if (d->shortcutId)
             releaseShortcut(d->shortcutId);
@@ -1202,6 +1212,13 @@ void QLabelPrivate::updateShortcut()
         return;
     hasShortcut = true;
     shortcutId = q->grabShortcut(QKeySequence::mnemonic(text));
+}
+
+
+void QLabelPrivate::_q_buddyDeleted()
+{
+    Q_Q(QLabel);
+    q->setBuddy(nullptr);
 }
 
 #endif // QT_NO_SHORTCUT
@@ -1440,7 +1457,7 @@ QRect QLabelPrivate::documentRect() const
                                                           : q->layoutDirection(), QFlag(this->align));
     int m = indent;
     if (m < 0 && q->frameWidth()) // no indent, but we do have a frame
-        m = q->fontMetrics().width(QLatin1Char('x')) / 2 - margin;
+        m = q->fontMetrics().horizontalAdvance(QLatin1Char('x')) / 2 - margin;
     if (m > 0) {
         if (align & Qt::AlignLeft)
             cr.setLeft(cr.left() + m);

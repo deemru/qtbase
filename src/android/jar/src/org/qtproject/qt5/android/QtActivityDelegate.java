@@ -677,12 +677,13 @@ public class QtActivityDelegate
             final int timeOut = 30000; // ms until we give up on ping and pong
             final int maxAttempts = timeOut / napTime;
 
+            DataOutputStream outToClient = null;
             try {
                 LocalSocket connectionFromClient = socket.accept();
                 debugLog("Debug socket accepted");
                 BufferedReader inFromClient =
                         new BufferedReader(new InputStreamReader(connectionFromClient.getInputStream()));
-                DataOutputStream outToClient = new DataOutputStream(connectionFromClient.getOutputStream());
+                outToClient = new DataOutputStream(connectionFromClient.getOutputStream());
                 outToClient.writeBytes("" + android.os.Process.myPid());
 
                 for (int i = 0; i < maxAttempts; i++) {
@@ -704,6 +705,11 @@ public class QtActivityDelegate
             } catch (InterruptedException interruptEx) {
                 wasFailure = true;
                 Log.e(QtNative.QtTAG,"Can't start debugger" + interruptEx.getMessage());
+            } finally {
+                try {
+                    if (outToClient != null)
+                        outToClient.close();
+                } catch (IOException ignored) { }
             }
         }
 
@@ -921,6 +927,7 @@ public class QtActivityDelegate
     public void onTerminate()
     {
         QtNative.terminateQt();
+        QtNative.m_qtThread.exit();
     }
 
     public void onCreate(Bundle savedInstanceState)
@@ -1076,7 +1083,8 @@ public class QtActivityDelegate
             QtNative.setActivity(null, null);
             if (m_debuggerProcess != null)
                 m_debuggerProcess.destroy();
-            System.exit(0);// FIXME remove it or find a better way
+            QtNative.m_qtThread.exit();
+            System.exit(0);
         }
     }
 
@@ -1156,7 +1164,7 @@ public class QtActivityDelegate
             return false;
 
         m_metaState = MetaKeyKeyListener.handleKeyDown(m_metaState, keyCode, event);
-        int c = event.getUnicodeChar(MetaKeyKeyListener.getMetaState(m_metaState));
+        int c = event.getUnicodeChar(MetaKeyKeyListener.getMetaState(m_metaState) | event.getMetaState());
         int lc = c;
         m_metaState = MetaKeyKeyListener.adjustMetaAfterKeypress(m_metaState);
 

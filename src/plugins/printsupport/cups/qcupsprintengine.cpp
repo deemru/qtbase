@@ -104,10 +104,9 @@ void QCupsPrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &v
         break;
     case PPK_QPageLayout: {
         QPageLayout pageLayout = value.value<QPageLayout>();
-        if (pageLayout.isValid() && d->m_printDevice.isValidPageLayout(pageLayout, d->resolution)) {
+        if (pageLayout.isValid() && (d->m_printDevice.isValidPageLayout(pageLayout, d->resolution) || d->m_printDevice.supportsCustomPageSizes())) {
             d->m_pageLayout = pageLayout;
-            // Replace the page size with the CUPS page size
-            d->setPageSize(d->m_printDevice.supportedPageSize(pageLayout.pageSize()));
+            d->setPageSize(pageLayout.pageSize());
         }
         break;
     }
@@ -239,45 +238,16 @@ void QCupsPrintEnginePrivate::closePrintDevice()
             cupsOptStruct.append(opt);
         }
 
-        // Print the file.
+        // Print the file
+        // Cups expect the printer original name without instance, the full name is used only to retrieve the configuration
+        const auto parts = printerName.splitRef(QLatin1Char('/'));
+        const auto printerOriginalName = parts.at(0);
         cups_option_t* optPtr = cupsOptStruct.size() ? &cupsOptStruct.first() : 0;
-        cupsPrintFile(printerName.toLocal8Bit().constData(), tempFile.toLocal8Bit().constData(),
+        cupsPrintFile(printerOriginalName.toLocal8Bit().constData(), tempFile.toLocal8Bit().constData(),
                       title.toLocal8Bit().constData(), cupsOptStruct.size(), optPtr);
 
         QFile::remove(tempFile);
     }
-}
-
-void QCupsPrintEnginePrivate::setupDefaultPrinter()
-{
-    // Should never have reached here if no plugin available, but check just in case
-    QPlatformPrinterSupport *ps = QPlatformPrinterSupportPlugin::get();
-    if (!ps)
-        return;
-
-    // Get default printer id, if no default then use the first available
-    // TODO Find way to remove printerName from base class?
-    printerName = ps->defaultPrintDeviceId();
-    if (printerName.isEmpty()) {
-        QStringList list = ps->availablePrintDeviceIds();
-        if (list.size() > 0)
-            printerName = list.at(0);
-    }
-
-    // Should never have reached here if no printers available, but check just in case
-    if (printerName.isEmpty())
-        return;
-
-    m_printDevice = ps->createPrintDevice(printerName);
-    if (!m_printDevice.isValid())
-        return;
-
-    // Setup the printer defaults
-    duplex = m_printDevice.defaultDuplexMode();
-    grayscale = m_printDevice.defaultColorMode() == QPrint::GrayScale;
-    // CUPS server always supports collation, even if individual m_printDevice doesn't
-    collate = true;
-    setPageSize(m_printDevice.defaultPageSize());
 }
 
 void QCupsPrintEnginePrivate::changePrinter(const QString &newPrinter)
@@ -306,7 +276,10 @@ void QCupsPrintEnginePrivate::changePrinter(const QString &newPrinter)
         grayscale = m_printDevice.defaultColorMode() == QPrint::GrayScale;
 
     // Get the equivalent page size for this printer as supported names may be different
-    setPageSize(m_pageLayout.pageSize());
+    if (m_printDevice.supportedPageSize(m_pageLayout.pageSize()).isValid())
+        setPageSize(m_pageLayout.pageSize());
+    else
+        setPageSize(QPageSize(m_pageLayout.pageSize().size(QPageSize::Point), QPageSize::Point));
 }
 
 void QCupsPrintEnginePrivate::setPageSize(const QPageSize &pageSize)

@@ -71,10 +71,11 @@ static const char *candidateSignal(int which)
     case IntValueSelectedSignal:    return SIGNAL(intValueSelected(int));
     case DoubleValueSelectedSignal: return SIGNAL(doubleValueSelected(double));
 
-    case NumCandidateSignals:       ; // fall through
+    case NumCandidateSignals:
+        break;
     };
     Q_UNREACHABLE();
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 static const char *signalForMember(const char *member)
@@ -115,7 +116,7 @@ private slots:
     void notifyTextChanged() { emit textChanged(hasAcceptableInput()); }
 
 private:
-    void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE {
+    void keyPressEvent(QKeyEvent *event) override {
         if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) && !hasAcceptableInput()) {
 #ifndef QT_NO_PROPERTIES
             setProperty("value", property("value"));
@@ -126,7 +127,7 @@ private:
         notifyTextChanged();
     }
 
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE {
+    void mousePressEvent(QMouseEvent *event) override {
         QSpinBox::mousePressEvent(event);
         notifyTextChanged();
     }
@@ -150,7 +151,7 @@ private slots:
     void notifyTextChanged() { emit textChanged(hasAcceptableInput()); }
 
 private:
-    void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE {
+    void keyPressEvent(QKeyEvent *event) override {
         if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) && !hasAcceptableInput()) {
 #ifndef QT_NO_PROPERTIES
             setProperty("value", property("value"));
@@ -161,7 +162,7 @@ private:
         notifyTextChanged();
     }
 
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE {
+    void mousePressEvent(QMouseEvent *event) override {
         QDoubleSpinBox::mousePressEvent(event);
         notifyTextChanged();
     }
@@ -239,7 +240,6 @@ void QInputDialogPrivate::ensureLayout()
     QObject::connect(buttonBox, SIGNAL(rejected()), q, SLOT(reject()));
 
     mainLayout = new QVBoxLayout(q);
-    //we want to let the input dialog grow to available size on Symbian.
     mainLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
     mainLayout->addWidget(label);
     mainLayout->addWidget(inputWidget);
@@ -1312,7 +1312,7 @@ int QInputDialog::getInt(QWidget *parent, const QString &title, const QString &l
 }
 
 /*!
-    \fn QInputDialog::getInteger(QWidget *parent, const QString &title, const QString &label, int value, int min, int max, int step, bool *ok, Qt::WindowFlags flags)
+    \fn int QInputDialog::getInteger(QWidget *parent, const QString &title, const QString &label, int value, int min, int max, int step, bool *ok, Qt::WindowFlags flags)
     \deprecated use getInt()
 
     Static convenience function to get an integer input from the user.

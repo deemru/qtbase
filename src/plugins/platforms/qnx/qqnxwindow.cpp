@@ -63,6 +63,18 @@
 
 QT_BEGIN_NAMESPACE
 
+#define DECLARE_DEBUG_VAR(variable) \
+    static bool debug_ ## variable() \
+    { static bool value = qgetenv("QNX_SCREEN_DEBUG").contains(QT_STRINGIFY(variable)); return value; }
+DECLARE_DEBUG_VAR(fps)
+DECLARE_DEBUG_VAR(posts)
+DECLARE_DEBUG_VAR(blits)
+DECLARE_DEBUG_VAR(updates)
+DECLARE_DEBUG_VAR(cpu_time)
+DECLARE_DEBUG_VAR(gpu_time)
+DECLARE_DEBUG_VAR(statistics)
+#undef DECLARE_DEBUG_VAR
+
 /*!
     \class QQnxWindow
     \brief The QQnxWindow is the base class of the various classes used as instances of
@@ -211,6 +223,35 @@ QQnxWindow::QQnxWindow(QWindow *window, screen_context_t context, bool needRootW
     // it'll cause us not to join a group (the app will presumably join at some future time).
     if (windowGroup.isValid() && windowGroup.canConvert<QByteArray>())
         joinWindowGroup(windowGroup.toByteArray());
+
+    int debug = 0;
+    if (Q_UNLIKELY(debug_fps())) {
+        debug |= SCREEN_DEBUG_GRAPH_FPS;
+    }
+    if (Q_UNLIKELY(debug_posts())) {
+        debug |= SCREEN_DEBUG_GRAPH_POSTS;
+    }
+    if (Q_UNLIKELY(debug_blits())) {
+        debug |= SCREEN_DEBUG_GRAPH_BLITS;
+    }
+    if (Q_UNLIKELY(debug_updates())) {
+        debug |= SCREEN_DEBUG_GRAPH_UPDATES;
+    }
+    if (Q_UNLIKELY(debug_cpu_time())) {
+        debug |= SCREEN_DEBUG_GRAPH_CPU_TIME;
+    }
+    if (Q_UNLIKELY(debug_gpu_time())) {
+        debug |= SCREEN_DEBUG_GRAPH_GPU_TIME;
+    }
+    if (Q_UNLIKELY(debug_statistics())) {
+        debug = SCREEN_DEBUG_STATISTICS;
+    }
+
+    if (debug > 0) {
+        Q_SCREEN_CHECKERROR(screen_set_window_property_iv(nativeHandle(), SCREEN_PROPERTY_DEBUG, &debug),
+                            "Could not set SCREEN_PROPERTY_DEBUG");
+        qWindowDebug() << "window SCREEN_PROPERTY_DEBUG= " << debug;
+    }
 }
 
 QQnxWindow::~QQnxWindow()
@@ -479,7 +520,7 @@ void QQnxWindow::setParent(const QPlatformWindow *window)
     if (newParent == m_parentWindow)
         return;
 
-    if (screen()->rootWindow() == this) {
+    if (static_cast<QQnxScreen *>(screen())->rootWindow() == this) {
         qWarning("Application window cannot be reparented");
         return;
     }
@@ -539,7 +580,7 @@ void QQnxWindow::requestActivateWindow()
     if (focusWindow == this)
         return;
 
-    if (screen()->rootWindow() == this ||
+    if (static_cast<QQnxScreen *>(screen())->rootWindow() == this ||
             (focusWindow && findWindow(focusWindow->nativeHandle()))) {
         // If the focus window is a child, we can just set the focus of our own window
         // group to our window handle
@@ -550,6 +591,7 @@ void QQnxWindow::requestActivateWindow()
         QQnxWindow *currentWindow = this;
         QList<QQnxWindow*> windowList;
         while (currentWindow) {
+            auto platformScreen = static_cast<QQnxScreen *>(screen());
             windowList.prepend(currentWindow);
             // If we find the focus window, we don't have to go further
             if (currentWindow == focusWindow)
@@ -557,9 +599,9 @@ void QQnxWindow::requestActivateWindow()
 
             if (currentWindow->parent()){
                 currentWindow = static_cast<QQnxWindow*>(currentWindow->parent());
-            } else if (screen()->rootWindow() &&
-                  screen()->rootWindow()->m_windowGroupName == currentWindow->m_parentGroupName) {
-                currentWindow = screen()->rootWindow();
+            } else if (platformScreen->rootWindow() &&
+                  platformScreen->rootWindow()->m_windowGroupName == currentWindow->m_parentGroupName) {
+                currentWindow = platformScreen->rootWindow();
             } else {
                 currentWindow = 0;
             }
@@ -620,6 +662,11 @@ void QQnxWindow::clearMMRendererWindow()
 {
     m_mmRendererWindowName.clear();
     m_mmRendererWindow = 0;
+}
+
+QPlatformScreen *QQnxWindow::screen() const
+{
+    return m_screen;
 }
 
 QQnxWindow *QQnxWindow::findWindow(screen_window_t windowHandle)
@@ -775,7 +822,8 @@ void QQnxWindow::windowPosted()
 
 bool QQnxWindow::shouldMakeFullScreen() const
 {
-    return ((screen()->rootWindow() == this) && (QQnxIntegration::options() & QQnxIntegration::FullScreenApplication));
+    return ((static_cast<QQnxScreen *>(screen())->rootWindow() == this)
+            && (QQnxIntegration::options() & QQnxIntegration::FullScreenApplication));
 }
 
 QT_END_NAMESPACE

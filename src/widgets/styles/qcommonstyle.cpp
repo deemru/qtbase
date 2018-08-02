@@ -81,7 +81,9 @@
 #if QT_CONFIG(tabwidget)
 #include <qtabwidget.h>
 #endif
+#if QT_CONFIG(toolbar)
 #include <qtoolbar.h>
+#endif
 #if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
 #endif
@@ -276,7 +278,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
             }
         }
         break;
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case PE_PanelMenuBar:
         if (widget && qobject_cast<QToolBar *>(widget->parentWidget()))
             break;
@@ -295,7 +297,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
         break;
     case PE_PanelToolBar:
        break;
-#endif // QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
 #if QT_CONFIG(progressbar)
     case PE_IndicatorProgressChunk:
         {
@@ -477,7 +479,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
         }
         break;
 #endif // QT_CONFIG(dockwidget)
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case PE_IndicatorToolBarHandle:
         p->save();
         p->translate(opt->rect.x(), opt->rect.y());
@@ -515,7 +517,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
             qDrawShadeLine(p, p1, p2, opt->palette, 1, 1, 0);
             break;
         }
-#endif // QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
 #if QT_CONFIG(spinbox)
     case PE_IndicatorSpinPlus:
     case PE_IndicatorSpinMinus: {
@@ -743,8 +745,9 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
                                                           % QLatin1String(metaObject()->className()), opt, QSize(size, size))
                                  % HexString<uint>(pe);
             if (!QPixmapCache::find(pixmapName, pixmap)) {
-                int border = size/5;
-                int sqsize = 2*(size/2);
+                qreal pixelRatio = p->device()->devicePixelRatioF();
+                int border = qRound(pixelRatio*(size/5));
+                int sqsize = qRound(pixelRatio*(2*(size/2)));
                 QImage image(sqsize, sqsize, QImage::Format_ARGB32_Premultiplied);
                 image.fill(0);
                 QPainter imagePainter(&image);
@@ -796,6 +799,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
                 imagePainter.drawPolygon(a);
                 imagePainter.end();
                 pixmap = QPixmap::fromImage(image);
+                pixmap.setDevicePixelRatio(pixelRatio);
                 QPixmapCache::insert(pixmapName, pixmap);
             }
             int xOffset = r.x() + (r.width() - size)/2;
@@ -887,6 +891,13 @@ QSize QCommonStylePrivate::viewItemSize(const QStyleOptionViewItem *option, int 
                 break;
             default:
                 break;
+            }
+
+            if (wrapText) {
+                if (option->features & QStyleOptionViewItem::HasCheckIndicator)
+                    bounds.setWidth(bounds.width() - proxyStyle->pixelMetric(QStyle::PM_IndicatorWidth) - 2 * textMargin);
+                if (option->features & QStyleOptionViewItem::HasDecoration)
+                    bounds.setWidth(bounds.width() - option->decorationSize.width() - 2 * textMargin);
             }
 
             const int lineWidth = bounds.width();
@@ -994,11 +1005,14 @@ void QCommonStylePrivate::viewItemLayout(const QStyleOptionViewItem *opt,  QRect
     const bool hasCheck = checkRect->isValid();
     const bool hasPixmap = pixmapRect->isValid();
     const bool hasText = textRect->isValid();
-    const int textMargin = hasText ? proxyStyle->pixelMetric(QStyle::PM_FocusFrameHMargin, opt, widget) + 1 : 0;
-    const int pixmapMargin = hasPixmap ? proxyStyle->pixelMetric(QStyle::PM_FocusFrameHMargin, opt, widget) + 1 : 0;
-    const int checkMargin = hasCheck ? proxyStyle->pixelMetric(QStyle::PM_FocusFrameHMargin, opt, widget) + 1 : 0;
-    int x = opt->rect.left();
-    int y = opt->rect.top();
+    const bool hasMargin = (hasText | hasPixmap | hasCheck);
+    const int frameHMargin = hasMargin ?
+                proxyStyle->pixelMetric(QStyle::PM_FocusFrameHMargin, opt, widget) + 1 : 0;
+    const int textMargin = hasText ? frameHMargin : 0;
+    const int pixmapMargin = hasPixmap ? frameHMargin : 0;
+    const int checkMargin = hasCheck ? frameHMargin : 0;
+    const int x = opt->rect.left();
+    const int y = opt->rect.top();
     int w, h;
 
     if (textRect->height() == 0 && (!hasPixmap || !sizehint)) {
@@ -1571,10 +1585,11 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                               aligned.width() * pixmap.devicePixelRatio(),
                               pixmap.height() * pixmap.devicePixelRatio());
 
+                const int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, opt, widget);
                 if (header->direction == Qt::LeftToRight)
-                    rect.setLeft(rect.left() + pixw + 2);
+                    rect.setLeft(rect.left() + pixw + margin);
                 else
-                    rect.setRight(rect.right() - pixw - 2);
+                    rect.setRight(rect.right() - pixw - margin);
             }
             if (header->state & QStyle::State_On) {
                 QFont fnt = p->font();
@@ -2140,7 +2155,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         }
         break;
 #endif // QT_CONFIG(combobox)
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case CE_ToolBar:
         if (const QStyleOptionToolBar *toolBar = qstyleoption_cast<const QStyleOptionToolBar *>(opt)) {
             // Compatibility with styles that use PE_PanelToolBar
@@ -2156,7 +2171,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                             &toolBar->palette.brush(QPalette::Button));
         }
         break;
-#endif // QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
     case CE_ColumnViewGrip: {
         // draw background gradients
         QLinearGradient g(0, 0, opt->rect.width(), 0);
@@ -2499,7 +2514,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             const bool vertical = pb->orientation == Qt::Vertical;
             if (!vertical) {
                 if (pb->textVisible)
-                    textw = qMax(pb->fontMetrics.width(pb->text), pb->fontMetrics.width(QLatin1String("100%"))) + 6;
+                    textw = qMax(pb->fontMetrics.horizontalAdvance(pb->text), pb->fontMetrics.horizontalAdvance(QLatin1String("100%"))) + 6;
             }
 
             if ((pb->textAlignment & Qt::AlignCenter) == 0) {
@@ -3059,7 +3074,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                                }
         break;
 #endif // QT_CONFIG(itemviews)
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case SE_ToolBarHandle:
         if (const QStyleOptionToolBar *tbopt = qstyleoption_cast<const QStyleOptionToolBar *>(opt)) {
             if (tbopt->features & QStyleOptionToolBar::Movable) {
@@ -3077,7 +3092,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             }
         }
         break;
-#endif //QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
     default:
         break;
     }
@@ -3411,6 +3426,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 QRect ir = toolbutton->rect;
                 QStyleOptionToolButton newBtn = *toolbutton;
                 newBtn.rect = QRect(ir.right() + 5 - mbi, ir.y() + ir.height() - mbi + 4, mbi - 6, mbi - 6);
+                newBtn.rect = visualRect(toolbutton->direction, button, newBtn.rect);
                 proxy()->drawPrimitive(PE_IndicatorArrowDown, &newBtn, p, widget);
             }
         }
@@ -4154,14 +4170,10 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
 #if QT_CONFIG(combobox)
     case CC_ComboBox:
         if (const QStyleOptionComboBox *cb = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
-            int x = cb->rect.x(),
-                y = cb->rect.y(),
-                wi = cb->rect.width(),
-                he = cb->rect.height();
-            int xpos = x;
-            int margin = cb->frame ? 3 : 0;
-            int bmarg = cb->frame ? 2 : 0;
-            xpos += wi - bmarg - 16;
+            const int x = cb->rect.x(), y = cb->rect.y(), wi = cb->rect.width(), he = cb->rect.height();
+            const int margin = cb->frame ? qRound(QStyleHelper::dpiScaled(3)) : 0;
+            const int bmarg = cb->frame ? qRound(QStyleHelper::dpiScaled(2)) : 0;
+            const int xpos = x + wi - bmarg - qRound(QStyleHelper::dpiScaled(16));
 
 
             switch (sc) {
@@ -4169,10 +4181,10 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
                 ret = cb->rect;
                 break;
             case SC_ComboBoxArrow:
-                ret.setRect(xpos, y + bmarg, 16, he - 2*bmarg);
+                ret.setRect(xpos, y + bmarg, qRound(QStyleHelper::dpiScaled(16)), he - 2*bmarg);
                 break;
             case SC_ComboBoxEditField:
-                ret.setRect(x + margin, y + margin, wi - 2 * margin - 16, he - 2 * margin);
+                ret.setRect(x + margin, y + margin, wi - 2 * margin - qRound(QStyleHelper::dpiScaled(16)), he - 2 * margin);
                 break;
             case SC_ComboBoxListBoxPopup:
                 ret = cb->rect;
@@ -4560,7 +4572,7 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
         ret = 0;
         break;
 
-#ifndef QT_NO_TOOLBAR
+#if QT_CONFIG(toolbar)
     case PM_ToolBarFrameWidth:
         ret = 1;
         break;
@@ -4584,7 +4596,7 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
     case PM_ToolBarExtensionExtent:
         ret = int(QStyleHelper::dpiScaled(12.));
         break;
-#endif // QT_NO_TOOLBAR
+#endif // QT_CONFIG(toolbar)
 
 #if QT_CONFIG(tabbar)
     case PM_TabBarTabOverlap:
@@ -5289,6 +5301,12 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
     case SH_Widget_Animation_Duration:
         ret = styleHint(SH_Widget_Animate, opt, widget, hret) ? 200 : 0;
         break;
+    case SH_ComboBox_AllowWheelScrolling:
+        ret = true;
+        break;
+    case SH_SpinBox_ButtonsInsideFrame:
+        ret = true;
+        break;
     default:
         ret = 0;
         break;
@@ -5694,6 +5712,22 @@ QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *opti
 
     return QPixmap();
 }
+
+#if QT_CONFIG(imageformat_png)
+static inline QString iconResourcePrefix() { return QStringLiteral(":/qt-project.org/styles/commonstyle/images/"); }
+static inline QString iconPngSuffix() { return QStringLiteral(".png"); }
+
+static void addIconFiles(const QString &prefix, const int sizes[], size_t count, QIcon &icon)
+{
+    for (size_t i = 0; i < count; ++i) {
+        const int size = sizes[i];
+        icon.addFile(prefix + QString::number(size) + iconPngSuffix(), QSize(size, size));
+    }
+}
+
+static const int dockTitleIconSizes[] = {10, 16, 20, 32, 48, 64};
+
+#endif // imageformat_png
 
 /*!
     \internal
@@ -6201,11 +6235,19 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
     case SP_MediaVolumeMuted:
         icon.addFile(QLatin1String(":/qt-project.org/styles/commonstyle/images/media-volume-muted-16.png"), QSize(16, 16));
         break;
+    case SP_TitleBarCloseButton:
+        addIconFiles(iconResourcePrefix() + QStringLiteral("closedock-"),
+                     dockTitleIconSizes, sizeof(dockTitleIconSizes)/sizeof(dockTitleIconSizes[0]), icon);
+        break;
     case SP_TitleBarMenuButton:
 #  ifndef QT_NO_IMAGEFORMAT_XPM
         icon.addPixmap(titleBarMenuCachedPixmapFromXPM());
 #  endif
         icon.addFile(QLatin1String(":/qt-project.org/qmessagebox/images/qtlogo-64.png"));
+        break;
+    case SP_TitleBarNormalButton:
+        addIconFiles(iconResourcePrefix() + QStringLiteral("normalizedockup-"),
+                     dockTitleIconSizes, sizeof(dockTitleIconSizes)/sizeof(dockTitleIconSizes[0]), icon);
         break;
 #endif // QT_NO_IMAGEFORMAT_PNG
     default:
@@ -6251,7 +6293,7 @@ QPixmap QCommonStyle::generatedIconPixmap(QIcon::Mode iconMode, const QPixmap &p
 
         // High intensity colors needs dark shifting in the color table, while
         // low intensity colors needs light shifting. This is to increase the
-        // percieved contrast.
+        // perceived contrast.
         if ((red - factor > green && red - factor > blue)
             || (green - factor > red && green - factor > blue)
             || (blue - factor > red && blue - factor > green))

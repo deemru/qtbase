@@ -44,6 +44,10 @@
 #include <AppKit/NSText.h>
 #endif
 
+#if defined(QT_PLATFORM_UIKIT)
+#include <UIKit/UIKit.h>
+#endif
+
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
@@ -160,6 +164,71 @@ QDebug operator<<(QDebug debug, const QMacAutoReleasePool *pool)
     return debug;
 }
 #endif // !QT_NO_DEBUG_STREAM
+
+bool qt_apple_isApplicationExtension()
+{
+    static bool isExtension = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSExtension"];
+    return isExtension;
+}
+
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WATCHOS)
+AppleApplication *qt_apple_sharedApplication()
+{
+    // Application extensions are not allowed to access the shared application
+    if (qt_apple_isApplicationExtension()) {
+        qWarning() << "accessing the shared" << [AppleApplication class]
+            << "is not allowed in application extensions";
+
+        // In practice the application is actually available, but the the App
+        // review process will likely catch uses of it, so we return nil just
+        // in case, unless we don't care about being App Store compliant.
+#if QT_CONFIG(appstore_compliant)
+        return nil;
+#endif
+    }
+
+    // We use performSelector so that building with -fapplication-extension will
+    // not mistakenly think we're using the shared application in extensions.
+    return [[AppleApplication class] performSelector:@selector(sharedApplication)];
+}
+#endif
+
+#if defined(Q_OS_MACOS) && !defined(QT_BOOTSTRAPPED)
+bool qt_apple_isSandboxed()
+{
+    static bool isSandboxed = []() {
+        QCFType<SecStaticCodeRef> staticCode = nullptr;
+        NSURL *bundleUrl = [[NSBundle mainBundle] bundleURL];
+        if (SecStaticCodeCreateWithPath((__bridge CFURLRef)bundleUrl,
+            kSecCSDefaultFlags, &staticCode) != errSecSuccess)
+            return false;
+
+        QCFType<SecRequirementRef> sandboxRequirement;
+        if (SecRequirementCreateWithString(CFSTR("entitlement[\"com.apple.security.app-sandbox\"] exists"),
+            kSecCSDefaultFlags, &sandboxRequirement) != errSecSuccess)
+            return false;
+
+        if (SecStaticCodeCheckValidityWithErrors(staticCode,
+            kSecCSBasicValidateOnly, sandboxRequirement, nullptr) != errSecSuccess)
+            return false;
+
+        return true;
+    }();
+    return isSandboxed;
+}
+
+QT_END_NAMESPACE
+@implementation NSObject (QtSandboxHelpers)
+- (id)qt_valueForPrivateKey:(NSString *)key
+{
+    if (qt_apple_isSandboxed())
+        return nil;
+
+    return [self valueForKey:key];
+}
+@end
+QT_BEGIN_NAMESPACE
+#endif
 
 #ifdef Q_OS_MACOS
 /*
@@ -346,15 +415,15 @@ Qt::Key qt_mac_cocoaKey2QtKey(QChar keyCode)
 
 void qt_apple_check_os_version()
 {
-#if defined(__IPHONE_OS_VERSION_MIN_REQUIRED)
-    const char *os = "iOS";
-    const int version = __IPHONE_OS_VERSION_MIN_REQUIRED;
+#if defined(__WATCH_OS_VERSION_MIN_REQUIRED)
+    const char *os = "watchOS";
+    const int version = __WATCH_OS_VERSION_MIN_REQUIRED;
 #elif defined(__TV_OS_VERSION_MIN_REQUIRED)
     const char *os = "tvOS";
     const int version = __TV_OS_VERSION_MIN_REQUIRED;
-#elif defined(__WATCH_OS_VERSION_MIN_REQUIRED)
-    const char *os = "watchOS";
-    const int version = __WATCH_OS_VERSION_MIN_REQUIRED;
+#elif defined(__IPHONE_OS_VERSION_MIN_REQUIRED)
+    const char *os = "iOS";
+    const int version = __IPHONE_OS_VERSION_MIN_REQUIRED;
 #elif defined(__MAC_OS_X_VERSION_MIN_REQUIRED)
     const char *os = "macOS";
     const int version = __MAC_OS_X_VERSION_MIN_REQUIRED;

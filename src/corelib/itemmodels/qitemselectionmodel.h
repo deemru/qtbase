@@ -47,6 +47,8 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qabstractitemmodel.h>
 
+QT_REQUIRE_CONFIG(itemmodel);
+
 QT_BEGIN_NAMESPACE
 
 class Q_CORE_EXPORT QItemSelectionRange
@@ -164,7 +166,7 @@ public:
     Q_DECLARE_FLAGS(SelectionFlags, SelectionFlag)
     Q_FLAG(SelectionFlags)
 
-    explicit QItemSelectionModel(QAbstractItemModel *model = Q_NULLPTR);
+    explicit QItemSelectionModel(QAbstractItemModel *model = nullptr);
     explicit QItemSelectionModel(QAbstractItemModel *model, QObject *parent);
     virtual ~QItemSelectionModel();
 

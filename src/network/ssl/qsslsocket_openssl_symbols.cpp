@@ -322,9 +322,13 @@ DEFINEFUNC5(int, EVP_CipherInit, EVP_CIPHER_CTX *ctx, ctx, const EVP_CIPHER *typ
 DEFINEFUNC6(int, EVP_CipherInit_ex, EVP_CIPHER_CTX *ctx, ctx, const EVP_CIPHER *cipher, cipher, ENGINE *impl, impl, const unsigned char *key, key, const unsigned char *iv, iv, int enc, enc, return 0, return)
 DEFINEFUNC5(int, EVP_CipherUpdate, EVP_CIPHER_CTX *ctx, ctx, unsigned char *out, out, int *outl, outl, const unsigned char *in, in, int inl, inl, return 0, return)
 DEFINEFUNC3(int, EVP_CipherFinal, EVP_CIPHER_CTX *ctx, ctx, unsigned char *out, out, int *outl, outl, return 0, return)
+#ifndef OPENSSL_NO_DES
 DEFINEFUNC(const EVP_CIPHER *, EVP_des_cbc, DUMMYARG, DUMMYARG, return 0, return)
 DEFINEFUNC(const EVP_CIPHER *, EVP_des_ede3_cbc, DUMMYARG, DUMMYARG, return 0, return)
+#endif
+#ifndef OPENSSL_NO_RC2
 DEFINEFUNC(const EVP_CIPHER *, EVP_rc2_cbc, DUMMYARG, DUMMYARG, return 0, return)
+#endif
 DEFINEFUNC(const EVP_MD *, EVP_sha1, DUMMYARG, DUMMYARG, return 0, return)
 DEFINEFUNC3(int, EVP_PKEY_assign, EVP_PKEY *a, a, int b, b, char *c, c, return -1, return)
 DEFINEFUNC2(int, EVP_PKEY_set1_RSA, EVP_PKEY *a, a, RSA *b, b, return -1, return)
@@ -402,6 +406,14 @@ DEFINEFUNC2(int, SSL_CTX_use_PrivateKey, SSL_CTX *a, a, EVP_PKEY *b, b, return -
 DEFINEFUNC2(int, SSL_CTX_use_RSAPrivateKey, SSL_CTX *a, a, RSA *b, b, return -1, return)
 DEFINEFUNC3(int, SSL_CTX_use_PrivateKey_file, SSL_CTX *a, a, const char *b, b, int c, c, return -1, return)
 DEFINEFUNC(X509_STORE *, SSL_CTX_get_cert_store, const SSL_CTX *a, a, return 0, return)
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+DEFINEFUNC(SSL_CONF_CTX *, SSL_CONF_CTX_new, DUMMYARG, DUMMYARG, return 0, return);
+DEFINEFUNC(void, SSL_CONF_CTX_free, SSL_CONF_CTX *a, a, return ,return);
+DEFINEFUNC2(void, SSL_CONF_CTX_set_ssl_ctx, SSL_CONF_CTX *a, a, SSL_CTX *b, b, return, return);
+DEFINEFUNC2(unsigned int, SSL_CONF_CTX_set_flags, SSL_CONF_CTX *a, a, unsigned int b, b, return 0, return);
+DEFINEFUNC(int, SSL_CONF_CTX_finish, SSL_CONF_CTX *a, a, return 0, return);
+DEFINEFUNC3(int, SSL_CONF_cmd, SSL_CONF_CTX *a, a, const char *b, b, const char *c, c, return 0, return);
+#endif
 DEFINEFUNC(void, SSL_free, SSL *a, a, return, DUMMYARG)
 DEFINEFUNC(STACK_OF(SSL_CIPHER) *, SSL_get_ciphers, const SSL *a, a, return 0, return)
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
@@ -457,6 +469,7 @@ DEFINEFUNC(int, X509_EXTENSION_get_critical, X509_EXTENSION *a, a, return 0, ret
 DEFINEFUNC(ASN1_OCTET_STRING *, X509_EXTENSION_get_data, X509_EXTENSION *a, a, return 0, return)
 DEFINEFUNC(void, BASIC_CONSTRAINTS_free, BASIC_CONSTRAINTS *a, a, return, DUMMYARG)
 DEFINEFUNC(void, AUTHORITY_KEYID_free, AUTHORITY_KEYID *a, a, return, DUMMYARG)
+DEFINEFUNC(void, GENERAL_NAME_free, GENERAL_NAME *a, a, return, DUMMYARG)
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 DEFINEFUNC2(int, ASN1_STRING_print, BIO *a, a, const ASN1_STRING *b, b, return 0, return)
 #else
@@ -1017,7 +1030,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(EC_GROUP_get_degree)
 #endif
     RESOLVEFUNC(BN_num_bits)
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#if QT_CONFIG(opensslv11)
     RESOLVEFUNC(BN_is_word)
 #endif
     RESOLVEFUNC(BN_mod_word)
@@ -1033,9 +1046,13 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(EVP_CipherInit_ex)
     RESOLVEFUNC(EVP_CipherUpdate)
     RESOLVEFUNC(EVP_CipherFinal)
+#ifndef OPENSSL_NO_DES
     RESOLVEFUNC(EVP_des_cbc)
     RESOLVEFUNC(EVP_des_ede3_cbc)
+#endif
+#ifndef OPENSSL_NO_RC2
     RESOLVEFUNC(EVP_rc2_cbc)
+#endif
     RESOLVEFUNC(EVP_sha1)
     RESOLVEFUNC(EVP_PKEY_assign)
     RESOLVEFUNC(EVP_PKEY_set1_RSA)
@@ -1105,6 +1122,14 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(SSL_CTX_use_RSAPrivateKey)
     RESOLVEFUNC(SSL_CTX_use_PrivateKey_file)
     RESOLVEFUNC(SSL_CTX_get_cert_store);
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    RESOLVEFUNC(SSL_CONF_CTX_new);
+    RESOLVEFUNC(SSL_CONF_CTX_free);
+    RESOLVEFUNC(SSL_CONF_CTX_set_ssl_ctx);
+    RESOLVEFUNC(SSL_CONF_CTX_set_flags);
+    RESOLVEFUNC(SSL_CONF_CTX_finish);
+    RESOLVEFUNC(SSL_CONF_cmd);
+#endif
     RESOLVEFUNC(SSL_accept)
     RESOLVEFUNC(SSL_clear)
     RESOLVEFUNC(SSL_connect)
@@ -1169,6 +1194,7 @@ bool q_resolveOpenSslSymbols()
     RESOLVEFUNC(X509_EXTENSION_get_data)
     RESOLVEFUNC(BASIC_CONSTRAINTS_free)
     RESOLVEFUNC(AUTHORITY_KEYID_free)
+    RESOLVEFUNC(GENERAL_NAME_free)
     RESOLVEFUNC(ASN1_STRING_print)
     RESOLVEFUNC(X509_check_issued)
     RESOLVEFUNC(X509_get_issuer_name)

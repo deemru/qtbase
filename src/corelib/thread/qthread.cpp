@@ -219,14 +219,17 @@ QThreadPrivate::~QThreadPrivate()
     It is important to remember that a QThread instance \l{QObject#Thread
     Affinity}{lives in} the old thread that instantiated it, not in the
     new thread that calls run(). This means that all of QThread's queued
-    slots will execute in the old thread. Thus, a developer who wishes to
-    invoke slots in the new thread must use the worker-object approach; new
-    slots should not be implemented directly into a subclassed QThread.
+    slots and \l {QMetaObject::invokeMethod()}{invoked methods} will execute
+    in the old thread. Thus, a developer who wishes to invoke slots in the
+    new thread must use the worker-object approach; new slots should not be
+    implemented directly into a subclassed QThread.
 
-    When subclassing QThread, keep in mind that the constructor executes in
-    the old thread while run() executes in the new thread. If a member
-    variable is accessed from both functions, then the variable is accessed
-    from two different threads. Check that it is safe to do so.
+    Unlike queued slots or invoked methods, methods called directly on the
+    QThread object will execute in the thread that calls the method. When
+    subclassing QThread, keep in mind that the constructor executes in the
+    old thread while run() executes in the new thread. If a member variable
+    is accessed from both functions, then the variable is accessed from two
+    different threads. Check that it is safe to do so.
 
     \note Care must be taken when interacting with objects across different
     threads. See \l{Synchronizing Threads} for details.
@@ -844,15 +847,17 @@ bool QThread::event(QEvent *event)
 
 void QThread::requestInterruption()
 {
-    Q_D(QThread);
-    QMutexLocker locker(&d->mutex);
-    if (!d->running || d->finished || d->isInFinish)
-        return;
     if (this == QCoreApplicationPrivate::theMainThread) {
         qWarning("QThread::requestInterruption has no effect on the main thread");
         return;
     }
-    d->interruptionRequested = true;
+    Q_D(QThread);
+    // ### Qt 6: use std::atomic_flag, and document that
+    // requestInterruption/isInterruptionRequested do not synchronize with each other
+    QMutexLocker locker(&d->mutex);
+    if (!d->running || d->finished || d->isInFinish)
+        return;
+    d->interruptionRequested.store(true, std::memory_order_relaxed);
 }
 
 /*!
@@ -881,14 +886,16 @@ void QThread::requestInterruption()
 bool QThread::isInterruptionRequested() const
 {
     Q_D(const QThread);
-    QMutexLocker locker(&d->mutex);
-    if (!d->running || d->finished || d->isInFinish)
+    // fast path: check that the flag is not set:
+    if (!d->interruptionRequested.load(std::memory_order_relaxed))
         return false;
-    return d->interruptionRequested;
+    // slow path: if the flag is set, take into account run status:
+    QMutexLocker locker(&d->mutex);
+    return d->running && !d->finished && !d->isInFinish;
 }
 
-/*
-    \fn template <typename Function, typename Args...> static QThread *QThread::create(Function &&f, Args &&... args)
+/*!
+    \fn template <typename Function, typename... Args> QThread *QThread::create(Function &&f, Args &&... args)
     \since 5.10
 
     Creates a new QThread object that will execute the function \a f with the
@@ -911,8 +918,8 @@ bool QThread::isInterruptionRequested() const
     \sa start()
 */
 
-/*
-    \fn template <typename Function> static QThread *QThread::create(Function &&f)
+/*!
+    \fn template <typename Function> QThread *QThread::create(Function &&f)
     \since 5.10
 
     Creates a new QThread object that will execute the function \a f.

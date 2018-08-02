@@ -84,7 +84,8 @@ public:
     bool operator ==(const QExtendedInformation &fileInfo) const {
        return mFileInfo == fileInfo.mFileInfo
        && displayType == fileInfo.displayType
-       && permissions() == fileInfo.permissions();
+       && permissions() == fileInfo.permissions()
+       && lastModified() == fileInfo.lastModified();
     }
 
 #ifndef QT_NO_FSFILEENGINE
@@ -166,6 +167,13 @@ public:
     explicit QFileInfoGatherer(QObject *parent = 0);
     ~QFileInfoGatherer();
 
+#if QT_CONFIG(filesystemwatcher) && defined(Q_OS_WIN)
+    QStringList watchedFiles() const            { return watcher->files(); }
+    QStringList watchedDirectories() const      { return watcher->directories(); }
+    void watchPaths(const QStringList &paths)   { watcher->addPaths(paths); }
+    void unwatchPaths(const QStringList &paths) { watcher->removePaths(paths); }
+#endif // filesystemwatcher && Q_OS_WIN
+
     // only callable from this->thread():
     void clear();
     void removePath(const QString &path);
@@ -185,7 +193,7 @@ private Q_SLOTS:
     void driveRemoved();
 
 private:
-    void run() Q_DECL_OVERRIDE;
+    void run() override;
     // called by run():
     void getFileInfos(const QString &path, const QStringList &files);
     void fetch(const QFileInfo &info, QElapsedTimer &base, bool &firstTime, QVector<QPair<QString, QFileInfo> > &updatedFiles, const QString &path);

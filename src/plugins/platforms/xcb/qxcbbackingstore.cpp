@@ -48,9 +48,11 @@
 
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
 
 #include <stdio.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include <qdebug.h>
 #include <qpainter.h>
@@ -61,13 +63,24 @@
 #include <qendian.h>
 
 #include <algorithm>
+
+#if (XCB_SHM_MAJOR_VERSION == 1 && XCB_SHM_MINOR_VERSION >= 2) || XCB_SHM_MAJOR_VERSION > 1
+#define XCB_USE_SHM_FD
+#endif
+
 QT_BEGIN_NAMESPACE
 
-class QXcbShmImage : public QXcbObject
+class QXcbBackingStore;
+
+class QXcbBackingStoreImage : public QXcbObject
 {
 public:
-    QXcbShmImage(QXcbScreen *connection, const QSize &size, uint depth, QImage::Format format);
-    ~QXcbShmImage() { destroy(); }
+    QXcbBackingStoreImage(QXcbBackingStore *backingStore, const QSize &size);
+    ~QXcbBackingStoreImage() { destroy(true); }
+
+    void resize(const QSize &size);
+
+    void flushScrolledRegion(bool clientSideScroll);
 
     bool scroll(const QRegion &area, int dx, int dy);
 
@@ -82,43 +95,60 @@ public:
     void put(xcb_drawable_t dst, const QRegion &region, const QPoint &offset);
     void preparePaint(const QRegion &region);
 
+    static bool createSystemVShmSegment(QXcbConnection *c, size_t segmentSize = 1,
+                                        xcb_shm_segment_info_t *shm_info = nullptr);
+
 private:
-    void destroy();
+    void createShmSegment(size_t segmentSize);
+    void destroyShmSegment(size_t segmentSize);
+
+    void create(const QSize &size, const xcb_format_t *fmt, QImage::Format format);
+    void destroy(bool destroyShm);
 
     void ensureGC(xcb_drawable_t dst);
-    void flushPixmap(const QRegion &region);
+    void shmPutImage(xcb_drawable_t drawable, const QRegion &region, const QPoint &offset = QPoint());
+    void flushPixmap(const QRegion &region, bool fullRegion = false);
     void setClip(const QRegion &region);
 
     xcb_shm_segment_info_t m_shm_info;
+    QXcbBackingStore *m_backingStore = nullptr;
+    size_t m_segmentSize = 0;
 
-    xcb_image_t *m_xcb_image;
+    xcb_image_t *m_xcb_image = nullptr;
 
     QImage m_qimage;
-    QPlatformGraphicsBuffer *m_graphics_buffer;
+    QPlatformGraphicsBuffer *m_graphics_buffer = nullptr;
 
-    xcb_gcontext_t m_gc;
-    xcb_drawable_t m_gc_drawable;
+    xcb_gcontext_t m_gc = 0;
+    xcb_drawable_t m_gc_drawable = 0;
 
-    // When using shared memory this is the region currently shared with the server
-    QRegion m_dirtyShm;
-
+    // When using shared memory these variables are used only for server-side scrolling.
     // When not using shared memory, we maintain a server-side pixmap with the backing
     // store as well as repainted content not yet flushed to the pixmap. We only flush
     // the regions we need and only when these are marked dirty. This way we can just
     // do a server-side copy on expose instead of sending the pixels every time
-    xcb_pixmap_t m_xcb_pixmap;
+    xcb_pixmap_t m_xcb_pixmap = 0;
     QRegion m_pendingFlush;
+
+    // This is the scrolled region which is stored in server-side pixmap
+    QRegion m_scrolledRegion;
+
+    // When using shared memory this is the region currently shared with the server
+    QRegion m_dirtyShm;
+
+    // When not using shared memory this is a temporary buffer which is uploaded
+    // as a pixmap region to server
     QByteArray m_flushBuffer;
 
-    bool m_hasAlpha;
+    bool m_hasAlpha = false;
+    bool m_clientSideScroll = false;
 };
 
-class QXcbShmGraphicsBuffer : public QPlatformGraphicsBuffer
+class QXcbGraphicsBuffer : public QPlatformGraphicsBuffer
 {
 public:
-    QXcbShmGraphicsBuffer(QImage *image)
+    QXcbGraphicsBuffer(QImage *image)
         : QPlatformGraphicsBuffer(image->size(), QImage::toPixelFormat(image->format()))
-        , m_access_lock(QPlatformGraphicsBuffer::None)
         , m_image(image)
     { }
 
@@ -138,21 +168,48 @@ public:
     int bytesPerLine() const override { return m_image->bytesPerLine(); }
 
     Origin origin() const override { return QPlatformGraphicsBuffer::OriginTopLeft; }
+
 private:
-    AccessTypes m_access_lock;
-    QImage *m_image;
+    AccessTypes m_access_lock = QPlatformGraphicsBuffer::None;
+    QImage *m_image = nullptr;
 };
 
-QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QImage::Format format)
-    : QXcbObject(screen->connection())
-    , m_graphics_buffer(Q_NULLPTR)
-    , m_gc(0)
-    , m_gc_drawable(0)
-    , m_xcb_pixmap(0)
+static inline size_t imageDataSize(const xcb_image_t *image)
 {
-    const xcb_format_t *fmt = connection()->formatForDepth(depth);
+    return static_cast<size_t>(image->stride) * image->height;
+}
+
+QXcbBackingStoreImage::QXcbBackingStoreImage(QXcbBackingStore *backingStore, const QSize &size)
+    : QXcbObject(backingStore->connection())
+    , m_backingStore(backingStore)
+{
+    QXcbWindow *window = static_cast<QXcbWindow *>(backingStore->window()->handle());
+    const xcb_format_t *fmt = connection()->formatForDepth(window->depth());
     Q_ASSERT(fmt);
 
+    memset(&m_shm_info, 0, sizeof m_shm_info);
+
+    QImage::Format format = window->imageFormat();
+    m_hasAlpha = QImage::toPixelFormat(format).alphaUsage() == QPixelFormat::UsesAlpha;
+    if (!m_hasAlpha)
+        create(size, fmt, qt_maybeAlphaVersionWithSameDepth(format));
+    else
+        create(size, fmt, format);
+}
+
+void QXcbBackingStoreImage::resize(const QSize &size)
+{
+    xcb_format_t fmt;
+    fmt.depth = m_xcb_image->depth;
+    fmt.bits_per_pixel = m_xcb_image->bpp;
+    fmt.scanline_pad = m_xcb_image->scanline_pad;
+    memset(fmt.pad0, 0, sizeof(fmt.pad0));
+    destroy(false);
+    create(size, &fmt, m_qimage.format());
+}
+
+void QXcbBackingStoreImage::create(const QSize &size, const xcb_format_t *fmt, QImage::Format format)
+{
     m_xcb_image = xcb_image_create(size.width(), size.height(),
                                    XCB_IMAGE_FORMAT_Z_PIXMAP,
                                    fmt->scanline_pad,
@@ -161,76 +218,257 @@ QXcbShmImage::QXcbShmImage(QXcbScreen *screen, const QSize &size, uint depth, QI
                                    XCB_IMAGE_ORDER_MSB_FIRST,
                                    0, ~0, 0);
 
-    const int segmentSize = m_xcb_image->stride * m_xcb_image->height;
+    const size_t segmentSize = imageDataSize(m_xcb_image);
     if (!segmentSize)
         return;
 
-    int id = shmget(IPC_PRIVATE, segmentSize, IPC_CREAT | 0600);
-    if (id == -1) {
-        qWarning("QXcbShmImage: shmget() failed (%d: %s) for size %d (%dx%d)",
-                 errno, strerror(errno), segmentSize, size.width(), size.height());
-    } else {
-        m_shm_info.shmaddr = m_xcb_image->data = (quint8 *)shmat(id, 0, 0);
-    }
-    m_shm_info.shmid = id;
-    m_shm_info.shmseg = xcb_generate_id(xcb_connection());
-
-    const xcb_query_extension_reply_t *shm_reply = xcb_get_extension_data(xcb_connection(), &xcb_shm_id);
-    bool shm_present = shm_reply != NULL && shm_reply->present;
-    xcb_generic_error_t *error = NULL;
-    if (shm_present)
-        error = xcb_request_check(xcb_connection(), xcb_shm_attach_checked(xcb_connection(), m_shm_info.shmseg, m_shm_info.shmid, false));
-    if (!shm_present || error || id == -1) {
-        free(error);
-
-        if (id != -1) {
-            shmdt(m_shm_info.shmaddr);
-            shmctl(m_shm_info.shmid, IPC_RMID, 0);
+    if (connection()->hasShm()) {
+        if (m_shm_info.shmaddr && (m_segmentSize < segmentSize || m_segmentSize / 2 >= segmentSize))
+            destroyShmSegment(m_segmentSize);
+        if (!m_shm_info.shmaddr) {
+            qCDebug(lcQpaXcb) << "creating shared memory" << segmentSize << "for"
+                              << size << "depth" << fmt->depth << "bits" << fmt->bits_per_pixel;
+            createShmSegment(segmentSize);
         }
-        m_shm_info.shmaddr = 0;
-
-        m_xcb_image->data = (uint8_t *)malloc(segmentSize);
-    } else {
-        if (shmctl(m_shm_info.shmid, IPC_RMID, 0) == -1)
-            qWarning("QXcbBackingStore: Error while marking the shared memory segment to be destroyed");
     }
 
-    m_hasAlpha = QImage::toPixelFormat(format).alphaUsage() == QPixelFormat::UsesAlpha;
-    if (!m_hasAlpha)
-        format = qt_maybeAlphaVersionWithSameDepth(format);
+    m_xcb_image->data = m_shm_info.shmaddr ? m_shm_info.shmaddr : (uint8_t *)malloc(segmentSize);
 
     m_qimage = QImage( (uchar*) m_xcb_image->data, m_xcb_image->width, m_xcb_image->height, m_xcb_image->stride, format);
-    m_graphics_buffer = new QXcbShmGraphicsBuffer(&m_qimage);
+    m_graphics_buffer = new QXcbGraphicsBuffer(&m_qimage);
 
-    if (!hasShm()) {
-        m_xcb_pixmap = xcb_generate_id(xcb_connection());
-        xcb_create_pixmap(xcb_connection(),
-                          m_xcb_image->depth,
-                          m_xcb_pixmap,
-                          screen->screen()->root,
-                          m_xcb_image->width, m_xcb_image->height);
+    m_xcb_pixmap = xcb_generate_id(xcb_connection());
+    auto xcbScreen = static_cast<QXcbScreen *>(m_backingStore->window()->screen()->handle());
+    xcb_create_pixmap(xcb_connection(),
+                      m_xcb_image->depth,
+                      m_xcb_pixmap,
+                      xcbScreen->root(),
+                      m_xcb_image->width, m_xcb_image->height);
+}
+
+void QXcbBackingStoreImage::destroy(bool destroyShm)
+{
+    if (m_xcb_image->data) {
+        if (m_shm_info.shmaddr) {
+            if (destroyShm)
+                destroyShmSegment(m_segmentSize);
+        } else {
+            free(m_xcb_image->data);
+        }
     }
+
+    xcb_image_destroy(m_xcb_image);
+
+    if (m_gc) {
+        xcb_free_gc(xcb_connection(), m_gc);
+        m_gc = 0;
+    }
+    m_gc_drawable = 0;
+
+    delete m_graphics_buffer;
+    m_graphics_buffer = nullptr;
+
+    xcb_free_pixmap(xcb_connection(), m_xcb_pixmap);
+    m_xcb_pixmap = 0;
+}
+
+void QXcbBackingStoreImage::flushScrolledRegion(bool clientSideScroll)
+{
+    if (m_clientSideScroll == clientSideScroll)
+       return;
+
+    m_clientSideScroll = clientSideScroll;
+
+    if (m_scrolledRegion.isNull())
+        return;
+
+    if (hasShm() && m_dirtyShm.intersects(m_scrolledRegion)) {
+        connection()->sync();
+        m_dirtyShm = QRegion();
+    }
+
+    if (m_clientSideScroll) {
+        // Copy scrolled image region from server-side pixmap to client-side memory
+        for (const QRect &rect : m_scrolledRegion) {
+            const int w = rect.width();
+            const int h = rect.height();
+
+            auto reply = Q_XCB_REPLY_UNCHECKED(xcb_get_image,
+                                               xcb_connection(),
+                                               m_xcb_image->format,
+                                               m_xcb_pixmap,
+                                               rect.x(), rect.y(),
+                                               w, h,
+                                               ~0u);
+
+            if (reply && reply->depth == m_xcb_image->depth) {
+                const QImage img(xcb_get_image_data(reply.get()), w, h, m_qimage.format());
+
+                QPainter p(&m_qimage);
+                p.setCompositionMode(QPainter::CompositionMode_Source);
+                p.drawImage(rect.topLeft(), img);
+            }
+        }
+        m_scrolledRegion = QRegion();
+    } else {
+        // Copy scrolled image region from client-side memory to server-side pixmap
+        ensureGC(m_xcb_pixmap);
+        if (hasShm())
+            shmPutImage(m_xcb_pixmap, m_scrolledRegion);
+        else
+            flushPixmap(m_scrolledRegion, true);
+    }
+}
+
+void QXcbBackingStoreImage::createShmSegment(size_t segmentSize)
+{
+    Q_ASSERT(connection()->hasShm());
+    Q_ASSERT(m_segmentSize == 0);
+
+#ifdef XCB_USE_SHM_FD
+    if (connection()->hasShmFd()) {
+        if (Q_UNLIKELY(segmentSize > std::numeric_limits<uint32_t>::max())) {
+            qCWarning(lcQpaXcb, "xcb_shm_create_segment() can't be called for size %zu, maximum"
+                      "allowed size is %u", segmentSize, std::numeric_limits<uint32_t>::max());
+            return;
+        }
+
+        const auto seg = xcb_generate_id(xcb_connection());
+        auto reply = Q_XCB_REPLY(xcb_shm_create_segment,
+                                 xcb_connection(), seg, segmentSize, false);
+        if (!reply) {
+            qCWarning(lcQpaXcb, "xcb_shm_create_segment() failed for size %zu", segmentSize);
+            return;
+        }
+
+        int *fds = xcb_shm_create_segment_reply_fds(xcb_connection(), reply.get());
+        if (reply->nfd != 1) {
+            for (int i = 0; i < reply->nfd; i++)
+                close(fds[i]);
+
+            qCWarning(lcQpaXcb, "failed to get file descriptor for shm segment of size %zu", segmentSize);
+            return;
+        }
+
+        void *addr = mmap(nullptr, segmentSize, PROT_READ|PROT_WRITE, MAP_SHARED, fds[0], 0);
+        if (addr == MAP_FAILED) {
+            qCWarning(lcQpaXcb, "failed to mmap segment from X server (%d: %s) for size %zu",
+                     errno, strerror(errno), segmentSize);
+            close(fds[0]);
+            xcb_shm_detach(xcb_connection(), seg);
+            return;
+        }
+
+        close(fds[0]);
+        m_shm_info.shmseg = seg;
+        m_shm_info.shmaddr = static_cast<quint8 *>(addr);
+        m_segmentSize = segmentSize;
+    } else
+#endif
+    {
+        if (createSystemVShmSegment(connection(), segmentSize, &m_shm_info))
+            m_segmentSize = segmentSize;
+    }
+}
+
+bool QXcbBackingStoreImage::createSystemVShmSegment(QXcbConnection *c, size_t segmentSize,
+                                                    xcb_shm_segment_info_t *shmInfo)
+{
+    const int id = shmget(IPC_PRIVATE, segmentSize, IPC_CREAT | 0600);
+    if (id == -1) {
+        qCWarning(lcQpaXcb, "shmget() failed (%d: %s) for size %zu", errno, strerror(errno), segmentSize);
+        return false;
+    }
+
+    void *addr = shmat(id, 0, 0);
+    if (addr == (void *)-1) {
+        qCWarning(lcQpaXcb, "shmat() failed (%d: %s) for id %d", errno, strerror(errno), id);
+        return false;
+    }
+
+    if (shmctl(id, IPC_RMID, 0) == -1)
+        qCWarning(lcQpaXcb, "Error while marking the shared memory segment to be destroyed");
+
+    const auto seg = xcb_generate_id(c->xcb_connection());
+    auto cookie = xcb_shm_attach_checked(c->xcb_connection(), seg, id, false);
+    auto *error = xcb_request_check(c->xcb_connection(), cookie);
+    if (error) {
+        c->printXcbError("xcb_shm_attach() failed with error", error);
+        free(error);
+        if (shmdt(addr) == -1)
+            qCWarning(lcQpaXcb, "shmdt() failed (%d: %s) for %p", errno, strerror(errno), addr);
+        return false;
+    } else if (!shmInfo) { // this was a test run, free the allocated test segment
+        xcb_shm_detach(c->xcb_connection(), seg);
+        auto shmaddr = static_cast<quint8 *>(addr);
+        if (shmdt(shmaddr) == -1)
+            qCWarning(lcQpaXcb, "shmdt() failed (%d: %s) for %p", errno, strerror(errno), shmaddr);
+    }
+    if (shmInfo) {
+        shmInfo->shmseg = seg;
+        shmInfo->shmid = id; // unused
+        shmInfo->shmaddr = static_cast<quint8 *>(addr);
+    }
+    return true;
+}
+
+void QXcbBackingStoreImage::destroyShmSegment(size_t segmentSize)
+{
+#ifndef XCB_USE_SHM_FD
+    Q_UNUSED(segmentSize)
+#endif
+    auto cookie = xcb_shm_detach_checked(xcb_connection(), m_shm_info.shmseg);
+    xcb_generic_error_t *error = xcb_request_check(xcb_connection(), cookie);
+    if (error)
+        connection()->printXcbError("xcb_shm_detach() failed with error", error);
+    m_shm_info.shmseg = 0;
+
+#ifdef XCB_USE_SHM_FD
+    if (connection()->hasShmFd()) {
+        if (munmap(m_shm_info.shmaddr, segmentSize) == -1) {
+            qCWarning(lcQpaXcb, "munmap() failed (%d: %s) for %p with size %zu",
+                      errno, strerror(errno), m_shm_info.shmaddr, segmentSize);
+        }
+    } else
+#endif
+    {
+        if (shmdt(m_shm_info.shmaddr) == -1) {
+            qCWarning(lcQpaXcb, "shmdt() failed (%d: %s) for %p",
+                      errno, strerror(errno), m_shm_info.shmaddr);
+        }
+        m_shm_info.shmid = 0; // unused
+    }
+    m_shm_info.shmaddr = nullptr;
+
+    m_segmentSize = 0;
 }
 
 extern void qt_scrollRectInImage(QImage &img, const QRect &rect, const QPoint &offset);
 
-bool QXcbShmImage::scroll(const QRegion &area, int dx, int dy)
+bool QXcbBackingStoreImage::scroll(const QRegion &area, int dx, int dy)
 {
-    if (image()->isNull())
-        return false;
-
-    if (hasShm())
-        preparePaint(area);
-
+    const QRect bounds(QPoint(), size());
+    const QRegion scrollArea(area & bounds);
     const QPoint delta(dx, dy);
-    for (const QRect &rect : area)
-        qt_scrollRectInImage(*image(), rect, delta);
 
-    if (m_xcb_pixmap) {
-        flushPixmap(area);
+    if (m_clientSideScroll) {
+        if (m_qimage.isNull())
+            return false;
+
+        if (hasShm())
+            preparePaint(scrollArea);
+
+        for (const QRect &rect : scrollArea)
+            qt_scrollRectInImage(m_qimage, rect, delta);
+    } else {
+        if (hasShm())
+            shmPutImage(m_xcb_pixmap, m_pendingFlush.intersected(scrollArea));
+        else
+            flushPixmap(scrollArea);
+
         ensureGC(m_xcb_pixmap);
-        const QRect bounds(QPoint(0, 0), size());
-        for (const QRect &src : area) {
+
+        for (const QRect &src : scrollArea) {
             const QRect dst = src.translated(delta).intersected(bounds);
             xcb_copy_area(xcb_connection(),
                           m_xcb_pixmap,
@@ -242,38 +480,16 @@ bool QXcbShmImage::scroll(const QRegion &area, int dx, int dy)
         }
     }
 
+    m_scrolledRegion |= scrollArea.translated(delta).intersected(bounds);
+    if (hasShm()) {
+        m_pendingFlush -= scrollArea;
+        m_pendingFlush -= m_scrolledRegion;
+    }
+
     return true;
 }
 
-void QXcbShmImage::destroy()
-{
-    const int segmentSize = m_xcb_image ? (m_xcb_image->stride * m_xcb_image->height) : 0;
-    if (segmentSize && m_shm_info.shmaddr)
-        xcb_shm_detach(xcb_connection(), m_shm_info.shmseg);
-
-    if (segmentSize) {
-        if (m_shm_info.shmaddr) {
-            shmdt(m_shm_info.shmaddr);
-            shmctl(m_shm_info.shmid, IPC_RMID, 0);
-        } else {
-            free(m_xcb_image->data);
-        }
-    }
-
-    xcb_image_destroy(m_xcb_image);
-
-    if (m_gc)
-        xcb_free_gc(xcb_connection(), m_gc);
-    delete m_graphics_buffer;
-    m_graphics_buffer = Q_NULLPTR;
-
-    if (m_xcb_pixmap) {
-        xcb_free_pixmap(xcb_connection(), m_xcb_pixmap);
-        m_xcb_pixmap = 0;
-    }
-}
-
-void QXcbShmImage::ensureGC(xcb_drawable_t dst)
+void QXcbBackingStoreImage::ensureGC(xcb_drawable_t dst)
 {
     if (m_gc_drawable != dst) {
         if (m_gc)
@@ -353,10 +569,35 @@ static inline quint32 round_up_scanline(quint32 base, quint32 pad)
     return (base + pad - 1) & -pad;
 }
 
-void QXcbShmImage::flushPixmap(const QRegion &region)
+void QXcbBackingStoreImage::shmPutImage(xcb_drawable_t drawable, const QRegion &region, const QPoint &offset)
 {
-    const QVector<QRect> rects = m_pendingFlush.intersected(region).rects();
-    m_pendingFlush -= region;
+    for (const QRect &rect : region) {
+        const QPoint source = rect.translated(offset).topLeft();
+        xcb_shm_put_image(xcb_connection(),
+                          drawable,
+                          m_gc,
+                          m_xcb_image->width,
+                          m_xcb_image->height,
+                          source.x(), source.y(),
+                          rect.width(), rect.height(),
+                          rect.x(), rect.y(),
+                          m_xcb_image->depth,
+                          m_xcb_image->format,
+                          0, // send event?
+                          m_shm_info.shmseg,
+                          m_xcb_image->data - m_shm_info.shmaddr);
+    }
+    m_dirtyShm |= region.translated(offset);
+}
+
+void QXcbBackingStoreImage::flushPixmap(const QRegion &region, bool fullRegion)
+{
+    if (!fullRegion) {
+        auto actualRegion = m_pendingFlush.intersected(region);
+        m_pendingFlush -= region;
+        flushPixmap(actualRegion, true);
+        return;
+    }
 
     xcb_image_t xcb_subimage;
     memset(&xcb_subimage, 0, sizeof(xcb_image_t));
@@ -372,7 +613,7 @@ void QXcbShmImage::flushPixmap(const QRegion &region)
 
     const bool needsByteSwap = xcb_subimage.byte_order != m_xcb_image->byte_order;
 
-    for (const QRect &rect : rects) {
+    for (const QRect &rect : region) {
         // We must make sure that each request is not larger than max_req_size.
         // Each request takes req_size + m_xcb_image->stride * height bytes.
         static const uint32_t req_size = sizeof(xcb_put_image_request_t);
@@ -418,23 +659,14 @@ void QXcbShmImage::flushPixmap(const QRegion &region)
     }
 }
 
-void QXcbShmImage::setClip(const QRegion &region)
+void QXcbBackingStoreImage::setClip(const QRegion &region)
 {
     if (region.isEmpty()) {
         static const uint32_t mask = XCB_GC_CLIP_MASK;
         static const uint32_t values[] = { XCB_NONE };
         xcb_change_gc(xcb_connection(), m_gc, mask, values);
     } else {
-        const QVector<QRect> qrects = region.rects();
-        QVector<xcb_rectangle_t> xcb_rects(qrects.size());
-
-        for (int i = 0; i < qrects.size(); i++) {
-            xcb_rects[i].x = qrects[i].x();
-            xcb_rects[i].y = qrects[i].y();
-            xcb_rects[i].width = qrects[i].width();
-            xcb_rects[i].height = qrects[i].height();
-        }
-
+        const auto xcb_rects = qRegionToXcbRectangleList(region);
         xcb_set_clip_rectangles(xcb_connection(),
                                 XCB_CLIP_ORDERING_YX_BANDED,
                                 m_gc,
@@ -443,31 +675,34 @@ void QXcbShmImage::setClip(const QRegion &region)
     }
 }
 
-void QXcbShmImage::put(xcb_drawable_t dst, const QRegion &region, const QPoint &offset)
+void QXcbBackingStoreImage::put(xcb_drawable_t dst, const QRegion &region, const QPoint &offset)
 {
+    Q_ASSERT(!m_clientSideScroll);
+
     ensureGC(dst);
     setClip(region);
 
-    const QRect bounds = region.boundingRect();
-    const QPoint target = bounds.topLeft();
-    const QRect source = bounds.translated(offset);
-
     if (hasShm()) {
-        xcb_shm_put_image(xcb_connection(),
+        // Copy scrolled area on server-side from pixmap to window
+        const QRegion scrolledRegion = m_scrolledRegion.translated(-offset);
+        for (const QRect &rect : scrolledRegion) {
+            const QPoint source = rect.translated(offset).topLeft();
+            xcb_copy_area(xcb_connection(),
+                          m_xcb_pixmap,
                           dst,
                           m_gc,
-                          m_xcb_image->width,
-                          m_xcb_image->height,
                           source.x(), source.y(),
-                          source.width(), source.height(),
-                          target.x(), target.y(),
-                          m_xcb_image->depth,
-                          m_xcb_image->format,
-                          0, // send event?
-                          m_shm_info.shmseg,
-                          m_xcb_image->data - m_shm_info.shmaddr);
-        m_dirtyShm |= region.translated(offset);
+                          rect.x(), rect.y(),
+                          rect.width(), rect.height());
+        }
+
+        // Copy non-scrolled image from client-side memory to server-side window
+        const QRegion notScrolledArea = region - scrolledRegion;
+        shmPutImage(dst, notScrolledArea, offset);
     } else {
+        const QRect bounds = region.boundingRect();
+        const QPoint target = bounds.topLeft();
+        const QRect source = bounds.translated(offset);
         flushPixmap(region);
         xcb_copy_area(xcb_connection(),
                       m_xcb_pixmap,
@@ -481,7 +716,7 @@ void QXcbShmImage::put(xcb_drawable_t dst, const QRegion &region, const QPoint &
     setClip(QRegion());
 }
 
-void QXcbShmImage::preparePaint(const QRegion &region)
+void QXcbBackingStoreImage::preparePaint(const QRegion &region)
 {
     if (hasShm()) {
         // to prevent X from reading from the image region while we're writing to it
@@ -489,14 +724,19 @@ void QXcbShmImage::preparePaint(const QRegion &region)
             connection()->sync();
             m_dirtyShm = QRegion();
         }
-    } else {
-        m_pendingFlush |= region;
     }
+    m_scrolledRegion -= region;
+    m_pendingFlush |= region;
+}
+
+bool QXcbBackingStore::createSystemVShmSegment(QXcbConnection *c, size_t segmentSize, void *shmInfo)
+{
+    auto info = reinterpret_cast<xcb_shm_segment_info_t *>(shmInfo);
+    return QXcbBackingStoreImage::createSystemVShmSegment(c, segmentSize, info);
 }
 
 QXcbBackingStore::QXcbBackingStore(QWindow *window)
     : QPlatformBackingStore(window)
-    , m_image(0)
 {
     QXcbScreen *screen = static_cast<QXcbScreen *>(window->screen()->handle());
     setConnection(screen->connection());
@@ -534,7 +774,7 @@ void QXcbBackingStore::beginPaint(const QRegion &region)
 void QXcbBackingStore::endPaint()
 {
     if (Q_UNLIKELY(m_paintRegions.isEmpty())) {
-        qWarning("%s: paint regions empty!", Q_FUNC_INFO);
+        qCWarning(lcQpaXcb, "%s: paint regions empty!", Q_FUNC_INFO);
         return;
     }
 
@@ -565,13 +805,15 @@ QImage QXcbBackingStore::toImage() const
 
 QPlatformGraphicsBuffer *QXcbBackingStore::graphicsBuffer() const
 {
-    return m_image ? m_image->graphicsBuffer() : Q_NULLPTR;
+    return m_image ? m_image->graphicsBuffer() : nullptr;
 }
 
 void QXcbBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
 {
     if (!m_image || m_image->size().isEmpty())
         return;
+
+    m_image->flushScrolledRegion(false);
 
     QSize imageSize = m_image->size();
 
@@ -586,7 +828,7 @@ void QXcbBackingStore::flush(QWindow *window, const QRegion &region, const QPoin
 
     QXcbWindow *platformWindow = static_cast<QXcbWindow *>(window->handle());
     if (!platformWindow) {
-        qWarning("QXcbBackingStore::flush: QWindow has no platform window (QTBUG-32681)");
+        qCWarning(lcQpaXcb, "%s QWindow has no platform window, see QTBUG-32681", Q_FUNC_INFO);
         return;
     }
 
@@ -603,6 +845,11 @@ void QXcbBackingStore::composeAndFlush(QWindow *window, const QRegion &region, c
                                        QPlatformTextureList *textures,
                                        bool translucentBackground)
 {
+    if (!m_image || m_image->size().isEmpty())
+        return;
+
+    m_image->flushScrolledRegion(true);
+
     QPlatformBackingStore::composeAndFlush(window, region, offset, textures, translucentBackground);
 
     QXcbWindow *platformWindow = static_cast<QXcbWindow *>(window->handle());
@@ -619,7 +866,6 @@ void QXcbBackingStore::resize(const QSize &size, const QRegion &)
     if (m_image && size == m_image->size())
         return;
 
-    QXcbScreen *screen = static_cast<QXcbScreen *>(window()->screen()->handle());
     QPlatformWindow *pw = window()->handle();
     if (!pw) {
         window()->create();
@@ -627,8 +873,11 @@ void QXcbBackingStore::resize(const QSize &size, const QRegion &)
     }
     QXcbWindow* win = static_cast<QXcbWindow *>(pw);
 
-    delete m_image;
-    m_image = new QXcbShmImage(screen, size, win->depth(), win->imageFormat());
+    if (m_image)
+        m_image->resize(size);
+    else
+        m_image = new QXcbBackingStoreImage(this, size);
+
     // Slow path for bgr888 VNC: Create an additional image, paint into that and
     // swap R and B while copying to m_image after each paint.
     if (win->imageNeedsRgbSwap()) {

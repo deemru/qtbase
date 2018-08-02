@@ -68,6 +68,7 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+using namespace QMakeInternal; // for IoUtils
 
 #define fL1S(s) QString::fromLatin1(s)
 
@@ -96,9 +97,9 @@ QString QMakeGlobals::cleanSpec(QMakeCmdLineParserState &state, const QString &s
 {
     QString ret = QDir::cleanPath(spec);
     if (ret.contains(QLatin1Char('/'))) {
-        QString absRet = QDir(state.pwd).absoluteFilePath(ret);
+        QString absRet = IoUtils::resolvePath(state.pwd, ret);
         if (QFile::exists(absRet))
-            ret = QDir::cleanPath(absRet);
+            ret = absRet;
     }
     return ret;
 }
@@ -126,10 +127,10 @@ QMakeGlobals::ArgumentReturn QMakeGlobals::addCommandLineArguments(
             user_template_prefix = arg;
             break;
         case ArgCache:
-            cachefile = args[*pos] = QDir::cleanPath(QDir(state.pwd).absoluteFilePath(arg));
+            cachefile = args[*pos] = IoUtils::resolvePath(state.pwd, arg);
             break;
         case ArgQtConf:
-            qtconf = args[*pos] = QDir::cleanPath(QDir(state.pwd).absoluteFilePath(arg));
+            qtconf = args[*pos] = IoUtils::resolvePath(state.pwd, arg);
             break;
         default:
             if (arg.startsWith(QLatin1Char('-'))) {
@@ -259,11 +260,11 @@ QStringList QMakeGlobals::splitPathList(const QString &val) const
 {
     QStringList ret;
     if (!val.isEmpty()) {
-        QDir bdir;
-        const QStringList vals = val.split(dirlist_sep);
+        QString cwd(QDir::currentPath());
+        const QStringList vals = val.split(dirlist_sep, QString::SkipEmptyParts);
         ret.reserve(vals.length());
         for (const QString &it : vals)
-            ret << QDir::cleanPath(bdir.absoluteFilePath(it));
+            ret << IoUtils::resolvePath(cwd, it);
     }
     return ret;
 }
@@ -318,7 +319,7 @@ bool QMakeGlobals::initProperties()
         return false;
     data = proc.readAll();
 #else
-    if (FILE *proc = QT_POPEN(QString(QMakeInternal::IoUtils::shellQuote(qmake_abslocation)
+    if (FILE *proc = QT_POPEN(QString(IoUtils::shellQuote(qmake_abslocation)
                                       + QLatin1String(" -query")).toLocal8Bit(), QT_POPEN_READ)) {
         char buff[1024];
         while (!feof(proc))
@@ -326,6 +327,13 @@ bool QMakeGlobals::initProperties()
         QT_PCLOSE(proc);
     }
 #endif
+    parseProperties(data, properties);
+    return true;
+}
+#endif
+
+void QMakeGlobals::parseProperties(const QByteArray &data, QHash<ProKey, ProString> &properties)
+{
     const auto lines = data.split('\n');
     for (QByteArray line : lines) {
         int off = line.indexOf(':');
@@ -336,47 +344,50 @@ bool QMakeGlobals::initProperties()
         QString name = QString::fromLatin1(line.left(off));
         ProString value = ProString(QDir::fromNativeSeparators(
                     QString::fromLocal8Bit(line.mid(off + 1))));
+        if (value.isNull())
+            value = ProString(""); // Make sure it is not null, to discern from missing keys
         properties.insert(ProKey(name), value);
         if (name.startsWith(QLatin1String("QT_"))) {
-            bool plain = !name.contains(QLatin1Char('/'));
-            if (!plain) {
-                if (!name.endsWith(QLatin1String("/get")))
+            enum { PropPut, PropRaw, PropGet } variant;
+            if (name.contains(QLatin1Char('/'))) {
+                if (name.endsWith(QLatin1String("/raw")))
+                    variant = PropRaw;
+                else if (name.endsWith(QLatin1String("/get")))
+                    variant = PropGet;
+                else  // Nothing falls back on /src or /dev.
                     continue;
                 name.chop(4);
+            } else {
+                variant = PropPut;
             }
             if (name.startsWith(QLatin1String("QT_INSTALL_"))) {
-                if (plain) {
-                    properties.insert(ProKey(name + QLatin1String("/raw")), value);
-                    properties.insert(ProKey(name + QLatin1String("/get")), value);
-                }
-                properties.insert(ProKey(name + QLatin1String("/src")), value);
-                if (name == QLatin1String("QT_INSTALL_PREFIX")
-                    || name == QLatin1String("QT_INSTALL_DATA")
-                    || name == QLatin1String("QT_INSTALL_BINS")) {
-                    name.replace(3, 7, QLatin1String("HOST"));
-                    if (plain) {
-                        properties.insert(ProKey(name), value);
-                        properties.insert(ProKey(name + QLatin1String("/get")), value);
+                if (variant < PropRaw) {
+                    if (name == QLatin1String("QT_INSTALL_PREFIX")
+                        || name == QLatin1String("QT_INSTALL_DATA")
+                        || name == QLatin1String("QT_INSTALL_LIBS")
+                        || name == QLatin1String("QT_INSTALL_BINS")) {
+                        // Qt4 fallback
+                        QString hname = name;
+                        hname.replace(3, 7, QLatin1String("HOST"));
+                        properties.insert(ProKey(hname), value);
+                        properties.insert(ProKey(hname + QLatin1String("/get")), value);
+                        properties.insert(ProKey(hname + QLatin1String("/src")), value);
                     }
-                    properties.insert(ProKey(name + QLatin1String("/src")), value);
+                    properties.insert(ProKey(name + QLatin1String("/raw")), value);
                 }
-            } else if (name.startsWith(QLatin1String("QT_HOST_"))) {
-                if (plain)
+                if (variant <= PropRaw)
+                    properties.insert(ProKey(name + QLatin1String("/dev")), value);
+            } else if (!name.startsWith(QLatin1String("QT_HOST_"))) {
+                continue;
+            }
+            if (variant != PropRaw) {
+                if (variant < PropGet)
                     properties.insert(ProKey(name + QLatin1String("/get")), value);
                 properties.insert(ProKey(name + QLatin1String("/src")), value);
             }
         }
     }
-    return true;
 }
-#else
-void QMakeGlobals::setProperties(const QHash<QString, QString> &props)
-{
-    QHash<QString, QString>::ConstIterator it = props.constBegin(), eit = props.constEnd();
-    for (; it != eit; ++it)
-        properties.insert(ProKey(it.key()), ProString(it.value()));
-}
-#endif
 #endif // QT_BUILD_QMAKE
 
 QT_END_NAMESPACE

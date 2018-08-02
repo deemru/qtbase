@@ -265,7 +265,7 @@ QTransform::QTransform()
     , m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxNone)
-    , d(Q_NULLPTR)
+    , d(nullptr)
 {
 }
 
@@ -284,7 +284,7 @@ QTransform::QTransform(qreal h11, qreal h12, qreal h13,
     , m_13(h13), m_23(h23), m_33(h33)
     , m_type(TxNone)
     , m_dirty(TxProject)
-    , d(Q_NULLPTR)
+    , d(nullptr)
 {
 }
 
@@ -301,7 +301,7 @@ QTransform::QTransform(qreal h11, qreal h12, qreal h21,
     , m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxShear)
-    , d(Q_NULLPTR)
+    , d(nullptr)
 {
 }
 
@@ -317,7 +317,7 @@ QTransform::QTransform(const QMatrix &mtx)
       m_13(0), m_23(0), m_33(1)
     , m_type(TxNone)
     , m_dirty(TxShear)
-    , d(Q_NULLPTR)
+    , d(nullptr)
 {
 }
 
@@ -352,8 +352,6 @@ QTransform QTransform::transposed() const
     QTransform t(affine._m11, affine._m21, affine._dx,
                  affine._m12, affine._m22, affine._dy,
                  m_13, m_23, m_33, true);
-    t.m_type = m_type;
-    t.m_dirty = m_dirty;
     return t;
 }
 

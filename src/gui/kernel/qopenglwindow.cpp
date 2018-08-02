@@ -163,7 +163,7 @@ class QOpenGLWindowPaintDevice : public QOpenGLPaintDevice
 {
 public:
     QOpenGLWindowPaintDevice(QOpenGLWindow *window) : m_window(window) { }
-    void ensureActiveTarget() Q_DECL_OVERRIDE;
+    void ensureActiveTarget() override;
 
     QOpenGLWindow *m_window;
 };
@@ -188,9 +188,9 @@ public:
     void bindFBO();
     void initialize();
 
-    void beginPaint(const QRegion &region) Q_DECL_OVERRIDE;
-    void endPaint() Q_DECL_OVERRIDE;
-    void flush(const QRegion &region) Q_DECL_OVERRIDE;
+    void beginPaint(const QRegion &region) override;
+    void endPaint() override;
+    void flush(const QRegion &region) override;
 
     QOpenGLWindow::UpdateBehavior updateBehavior;
     bool hasFboBlit;
@@ -221,6 +221,9 @@ void QOpenGLWindowPrivate::initialize()
 
     if (context)
         return;
+
+    if (!q->handle())
+        qWarning("Attempted to initialize QOpenGLWindow without a platform window");
 
     context.reset(new QOpenGLContext);
     context->setShareContext(shareContext);
@@ -344,7 +347,7 @@ void QOpenGLWindowPaintDevice::ensureActiveTarget()
   \sa QOpenGLWindow::UpdateBehavior
  */
 QOpenGLWindow::QOpenGLWindow(QOpenGLWindow::UpdateBehavior updateBehavior, QWindow *parent)
-    : QPaintDeviceWindow(*(new QOpenGLWindowPrivate(Q_NULLPTR, updateBehavior)), parent)
+    : QPaintDeviceWindow(*(new QOpenGLWindowPrivate(nullptr, updateBehavior)), parent)
 {
     setSurfaceType(QSurface::OpenGLSurface);
 }

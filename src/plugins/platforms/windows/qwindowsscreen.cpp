@@ -318,6 +318,15 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
     }
 }
 
+QRect QWindowsScreen::virtualGeometry(const QPlatformScreen *screen) // cf QScreen::virtualGeometry()
+{
+    QRect result;
+    const auto siblings = screen->virtualSiblings();
+    for (const QPlatformScreen *sibling : siblings)
+        result |= sibling->geometry();
+    return result;
+}
+
 enum OrientationPreference // matching Win32 API ORIENTATION_PREFERENCE
 #if defined(Q_COMPILER_CLASS_ENUM) || defined(Q_CC_MSVC)
     : DWORD
@@ -387,9 +396,6 @@ Qt::ScreenOrientation QWindowsScreen::orientationPreference()
 */
 QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTypeHint() const
 {
-#if !defined(FT_LCD_FILTER_H) || !defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
-    return QPlatformScreen::Subpixel_None;
-#else
     QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
     if (type == QPlatformScreen::Subpixel_None) {
         QSettings settings(QLatin1String("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Avalon.Graphics\\DISPLAY1"), QSettings::NativeFormat);
@@ -410,7 +416,6 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
         }
     }
     return type;
-#endif
 }
 
 /*!
@@ -563,7 +568,7 @@ const QWindowsScreen *QWindowsScreenManager::screenAtDp(const QPoint &p) const
         if (scr->geometry().contains(p))
             return scr;
     }
-    return Q_NULLPTR;
+    return nullptr;
 }
 
 const QWindowsScreen *QWindowsScreenManager::screenForHwnd(HWND hwnd) const

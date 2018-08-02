@@ -44,7 +44,9 @@
 #if QT_CONFIG(itemviews)
 #include "qabstractitemview.h"
 #endif
+#if QT_CONFIG(draganddrop)
 #include "qdrag.h"
+#endif
 #include "qwidgetaction.h"
 #include "qclipboard.h"
 #ifndef QT_NO_ACCESSIBILITY
@@ -56,6 +58,7 @@
 #endif
 #include <qpainter.h>
 #include <qpropertyanimation.h>
+#include <qstylehints.h>
 #include <qvalidator.h>
 
 QT_BEGIN_NAMESPACE
@@ -232,6 +235,13 @@ void QLineEditPrivate::init(const QString& txt)
     q->setAcceptDrops(true);
 
     q->setAttribute(Qt::WA_MacShowFocusRect);
+
+    initMouseYThreshold();
+}
+
+void QLineEditPrivate::initMouseYThreshold()
+{
+    mouseYThreshold = QGuiApplication::styleHints()->mouseQuickSelectionThreshold();
 }
 
 QRect QLineEditPrivate::adjustedContentsRect() const
@@ -302,7 +312,7 @@ bool QLineEditPrivate::sendMouseEventToInputContext( QMouseEvent *e )
     return false;
 }
 
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void QLineEditPrivate::drag()
 {
     Q_Q(QLineEdit);
@@ -315,8 +325,7 @@ void QLineEditPrivate::drag()
     if (action == Qt::MoveAction && !control->isReadOnly() && drag->target() != q)
         control->removeSelection();
 }
-
-#endif // QT_NO_DRAGANDDROP
+#endif // QT_CONFIG(draganddrop)
 
 
 #if QT_CONFIG(toolbutton)
@@ -330,13 +339,13 @@ QLineEditIconButton::QLineEditIconButton(QWidget *parent)
 QLineEditPrivate *QLineEditIconButton::lineEditPrivate() const
 {
     QLineEdit *le = qobject_cast<QLineEdit *>(parentWidget());
-    return le ? static_cast<QLineEditPrivate *>(qt_widget_private(le)) : Q_NULLPTR;
+    return le ? static_cast<QLineEditPrivate *>(qt_widget_private(le)) : nullptr;
 }
 
 void QLineEditIconButton::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    QWindow *window = Q_NULLPTR;
+    QWindow *window = nullptr;
     if (const QWidget *nativeParent = nativeParentWidget())
         window = nativeParent->windowHandle();
     // Note isDown should really use the active state but in most styles

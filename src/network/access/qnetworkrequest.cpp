@@ -298,6 +298,20 @@ QT_BEGIN_NAMESPACE
         This attribute obsoletes FollowRedirectsAttribute.
         (This value was introduced in 5.9.)
 
+    \value Http2DirectAttribute
+        Requests only, type: QMetaType::Bool (default: false)
+        If set, this attribute will force QNetworkAccessManager to use
+        HTTP/2 protocol without initial HTTP/2 protocol negotiation.
+        Use of this attribute implies prior knowledge that a particular
+        server supports HTTP/2. The attribute works with SSL or 'cleartext'
+        HTTP/2. If a server turns out to not support HTTP/2, when HTTP/2 direct
+        was specified, QNetworkAccessManager gives up, without attempting to
+        fall back to HTTP/1.1. If both HTTP2AllowedAttribute and
+        Http2DirectAttribute are set, Http2DirectAttribute takes priority.
+        (This value was introduced in 5.11.)
+
+    \omitvalue ResourceTypeAttribute
+
     \value User
         Special type. Additional information can be passed in
         QVariants with types ranging from User to UserMax. The default
@@ -875,6 +889,8 @@ static int parseHeaderName(const QByteArray &headerName)
             return QNetworkRequest::ContentLengthHeader;
         else if (qstricmp(headerName.constData(), "cookie") == 0)
             return QNetworkRequest::CookieHeader;
+        else if (qstricmp(headerName.constData(), "content-disposition") == 0)
+            return QNetworkRequest::ContentDispositionHeader;
         break;
 
     case 'l':
@@ -930,6 +946,7 @@ static QVariant parseHeaderValue(QNetworkRequest::KnownHeaders header, const QBy
     case QNetworkRequest::UserAgentHeader:
     case QNetworkRequest::ServerHeader:
     case QNetworkRequest::ContentTypeHeader:
+    case QNetworkRequest::ContentDispositionHeader:
         // copy exactly, convert to QString
         return QString::fromLatin1(value);
 

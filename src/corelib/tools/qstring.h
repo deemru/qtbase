@@ -91,7 +91,7 @@ template <typename T> class QVector;
 class QLatin1String
 {
 public:
-    Q_DECL_CONSTEXPR inline QLatin1String() Q_DECL_NOTHROW : m_size(0), m_data(Q_NULLPTR) {}
+    Q_DECL_CONSTEXPR inline QLatin1String() Q_DECL_NOTHROW : m_size(0), m_data(nullptr) {}
     Q_DECL_CONSTEXPR inline explicit QLatin1String(const char *s) Q_DECL_NOTHROW : m_size(s ? int(strlen(s)) : 0), m_data(s) {}
     Q_DECL_CONSTEXPR explicit QLatin1String(const char *f, const char *l)
         : QLatin1String(f, int(l - f)) {}
@@ -200,6 +200,12 @@ Q_DECLARE_TYPEINFO(QLatin1String, Q_MOVABLE_TYPE);
 
 // Qt 4.x compatibility
 typedef QLatin1String QLatin1Literal;
+
+//
+// QLatin1String inline implementations
+//
+inline bool QtPrivate::isLatin1(QLatin1String) Q_DECL_NOTHROW
+{ return true; }
 
 //
 // QStringView members that require QLatin1String:
@@ -347,7 +353,7 @@ public:
     inline bool contains(QRegExp &rx) const { return indexOf(rx) != -1; }
 #endif
 
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     int indexOf(const QRegularExpression &re, int from = 0) const;
     int indexOf(const QRegularExpression &re, int from, QRegularExpressionMatch *rmatch) const; // ### Qt 6: merge overloads
     int lastIndexOf(const QRegularExpression &re, int from = -1) const;
@@ -371,7 +377,7 @@ public:
 #ifndef QT_NO_REGEXP
     QString section(const QRegExp &reg, int start, int end = -1, SectionFlags flags = SectionDefault) const;
 #endif
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     QString section(const QRegularExpression &re, int start, int end = -1, SectionFlags flags = SectionDefault) const;
 #endif
     Q_REQUIRED_RESULT QString left(int n) const;
@@ -477,6 +483,7 @@ public:
 
     QString &remove(int i, int len);
     QString &remove(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive);
+    QString &remove(QLatin1String s, Qt::CaseSensitivity cs = Qt::CaseSensitive);
     QString &remove(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive);
     QString &replace(int i, int len, QChar after);
     QString &replace(int i, int len, const QChar *s, int slen);
@@ -495,7 +502,7 @@ public:
     inline QString &remove(const QRegExp &rx)
     { return replace(rx, QString()); }
 #endif
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     QString &replace(const QRegularExpression &re, const QString  &after);
     inline QString &remove(const QRegularExpression &re)
     { return replace(re, QString()); }
@@ -515,7 +522,7 @@ public:
     Q_REQUIRED_RESULT QStringList split(const QRegExp &sep, SplitBehavior behavior = KeepEmptyParts) const;
     Q_REQUIRED_RESULT QVector<QStringRef> splitRef(const QRegExp &sep, SplitBehavior behavior = KeepEmptyParts) const;
 #endif
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
     Q_REQUIRED_RESULT QStringList split(const QRegularExpression &sep, SplitBehavior behavior = KeepEmptyParts) const;
     Q_REQUIRED_RESULT QVector<QStringRef> splitRef(const QRegularExpression &sep, SplitBehavior behavior = KeepEmptyParts) const;
 #endif
@@ -624,16 +631,16 @@ public:
     static int localeAwareCompare(const QString& s1, const QStringRef& s2);
 
     // ### Qt6: make inline except for the long long versions
-    short  toShort(bool *ok=Q_NULLPTR, int base=10) const;
-    ushort toUShort(bool *ok=Q_NULLPTR, int base=10) const;
-    int toInt(bool *ok=Q_NULLPTR, int base=10) const;
-    uint toUInt(bool *ok=Q_NULLPTR, int base=10) const;
-    long toLong(bool *ok=Q_NULLPTR, int base=10) const;
-    ulong toULong(bool *ok=Q_NULLPTR, int base=10) const;
-    qlonglong toLongLong(bool *ok=Q_NULLPTR, int base=10) const;
-    qulonglong toULongLong(bool *ok=Q_NULLPTR, int base=10) const;
-    float toFloat(bool *ok=Q_NULLPTR) const;
-    double toDouble(bool *ok=Q_NULLPTR) const;
+    short  toShort(bool *ok=nullptr, int base=10) const;
+    ushort toUShort(bool *ok=nullptr, int base=10) const;
+    int toInt(bool *ok=nullptr, int base=10) const;
+    uint toUInt(bool *ok=nullptr, int base=10) const;
+    long toLong(bool *ok=nullptr, int base=10) const;
+    ulong toULong(bool *ok=nullptr, int base=10) const;
+    qlonglong toLongLong(bool *ok=nullptr, int base=10) const;
+    qulonglong toULongLong(bool *ok=nullptr, int base=10) const;
+    float toFloat(bool *ok=nullptr) const;
+    double toDouble(bool *ok=nullptr) const;
 
     QString &setNum(short, int base=10);
     QString &setNum(ushort, int base=10);
@@ -675,8 +682,12 @@ public:
         : d(fromAscii_helper(ch, N - 1))
     {}
     template <int N>
+    QString(char (&)[N]) = delete;
+    template <int N>
     inline QString &operator=(const char (&ch)[N])
     { return (*this = fromUtf8(ch, N - 1)); }
+    template <int N>
+    QString &operator=(char (&)[N]) = delete;
 #endif
 #if !defined(QT_NO_CAST_FROM_ASCII) && !defined(QT_RESTRICTED_CAST_FROM_ASCII)
     inline QT_ASCII_CAST_WARN QString(const char *ch)
@@ -1363,7 +1374,7 @@ inline std::wstring QString::toStdWString() const
     std::wstring str;
     str.resize(length());
 
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#ifdef Q_CC_MSVC
     // VS2005 crashes if the string is empty
     if (!length())
         return str;
@@ -1417,7 +1428,7 @@ public:
     typedef QString::const_reference const_reference;
 
     // ### Qt 6: make this constructor constexpr, after the destructor is made trivial
-    inline QStringRef() : m_string(Q_NULLPTR), m_position(0), m_size(0) {}
+    inline QStringRef() : m_string(nullptr), m_position(0), m_size(0) {}
     inline QStringRef(const QString *string, int position, int size);
     inline QStringRef(const QString *string);
 
@@ -1533,10 +1544,10 @@ public:
     Q_REQUIRED_RESULT QByteArray toLocal8Bit() const;
     Q_REQUIRED_RESULT QVector<uint> toUcs4() const;
 
-    inline void clear() { m_string = Q_NULLPTR; m_position = m_size = 0; }
+    inline void clear() { m_string = nullptr; m_position = m_size = 0; }
     QString toString() const;
     inline bool isEmpty() const { return m_size == 0; }
-    inline bool isNull() const { return m_string == Q_NULLPTR || m_string->isNull(); }
+    inline bool isNull() const { return m_string == nullptr || m_string->isNull(); }
 
     QStringRef appendTo(QString *string) const;
 
@@ -1576,16 +1587,16 @@ public:
     static int localeAwareCompare(const QStringRef &s1, const QStringRef &s2);
 
     Q_REQUIRED_RESULT QStringRef trimmed() const;
-    short  toShort(bool *ok = Q_NULLPTR, int base = 10) const;
-    ushort toUShort(bool *ok = Q_NULLPTR, int base = 10) const;
-    int toInt(bool *ok = Q_NULLPTR, int base = 10) const;
-    uint toUInt(bool *ok = Q_NULLPTR, int base = 10) const;
-    long toLong(bool *ok = Q_NULLPTR, int base = 10) const;
-    ulong toULong(bool *ok = Q_NULLPTR, int base = 10) const;
-    qlonglong toLongLong(bool *ok = Q_NULLPTR, int base = 10) const;
-    qulonglong toULongLong(bool *ok = Q_NULLPTR, int base = 10) const;
-    float toFloat(bool *ok = Q_NULLPTR) const;
-    double toDouble(bool *ok = Q_NULLPTR) const;
+    short  toShort(bool *ok = nullptr, int base = 10) const;
+    ushort toUShort(bool *ok = nullptr, int base = 10) const;
+    int toInt(bool *ok = nullptr, int base = 10) const;
+    uint toUInt(bool *ok = nullptr, int base = 10) const;
+    long toLong(bool *ok = nullptr, int base = 10) const;
+    ulong toULong(bool *ok = nullptr, int base = 10) const;
+    qlonglong toLongLong(bool *ok = nullptr, int base = 10) const;
+    qulonglong toULongLong(bool *ok = nullptr, int base = 10) const;
+    float toFloat(bool *ok = nullptr) const;
+    double toDouble(bool *ok = nullptr) const;
 };
 Q_DECLARE_TYPEINFO(QStringRef, Q_PRIMITIVE_TYPE);
 
@@ -1844,6 +1855,12 @@ QT_DEPRECATED inline QString escape(const QString &plain) {
     return plain.toHtmlEscaped();
 }
 #endif
+}
+
+namespace QtPrivate {
+// used by qPrintable() and qUtf8Printable() macros
+inline const QString &asString(const QString &s)    { return s; }
+inline QString &&asString(QString &&s)              { return std::move(s); }
 }
 
 QT_END_NAMESPACE

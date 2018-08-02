@@ -65,7 +65,7 @@ static const char magicRuleTypes_string[] =
     "\0";
 
 static const int magicRuleTypes_indices[] = {
-    0, 8, 15, 22, 29, 35, 41, 50, 59, 65, 0
+    0, 8, 15, 22, 29, 35, 41, 50, 59, 64, 0
 };
 
 QMimeMagicRule::Type QMimeMagicRule::type(const QByteArray &theTypeName)
@@ -315,18 +315,14 @@ QMimeMagicRule::QMimeMagicRule(const QString &type,
         break;
     case Big32:
     case Little32:
-        if (m_number <= quint32(-1)) {
-            m_number = m_type == Little32 ? qFromLittleEndian<quint32>(m_number) : qFromBigEndian<quint32>(m_number);
-            if (m_numberMask != 0)
-                m_numberMask = m_type == Little32 ? qFromLittleEndian<quint32>(m_numberMask) : qFromBigEndian<quint32>(m_numberMask);
-        }
+        m_number = m_type == Little32 ? qFromLittleEndian<quint32>(m_number) : qFromBigEndian<quint32>(m_number);
+        if (m_numberMask != 0)
+            m_numberMask = m_type == Little32 ? qFromLittleEndian<quint32>(m_numberMask) : qFromBigEndian<quint32>(m_numberMask);
         Q_FALLTHROUGH();
     case Host32:
-        if (m_number <= quint32(-1)) {
-            if (m_numberMask == 0)
-                m_numberMask = quint32(-1);
-            m_matchFunction = &QMimeMagicRule::matchNumber<quint32>;
-        }
+        if (m_numberMask == 0)
+            m_numberMask = quint32(-1);
+        m_matchFunction = &QMimeMagicRule::matchNumber<quint32>;
         break;
     default:
         break;

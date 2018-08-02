@@ -379,9 +379,7 @@ static PIXELFORMATDESCRIPTOR
     initPixelFormatDescriptor(&pfd);
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.iLayerType  = PFD_MAIN_PLANE;
-    pfd.dwFlags = PFD_SUPPORT_OPENGL;
-    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
-        pfd.dwFlags = PFD_SUPPORT_COMPOSITION;
+    pfd.dwFlags = PFD_SUPPORT_OPENGL | PFD_SUPPORT_COMPOSITION;
     const bool isPixmap = (additional.formatFlags & QWindowsGLRenderToPixmap) != 0;
     pfd.dwFlags |= isPixmap ? PFD_DRAW_TO_BITMAP : PFD_DRAW_TO_WINDOW;
     if (!(additional.formatFlags & QWindowsGLDirectRendering))
@@ -393,6 +391,15 @@ static PIXELFORMATDESCRIPTOR
         pfd.dwFlags |= PFD_DOUBLEBUFFER;
     pfd.cDepthBits =
         format.depthBufferSize() >= 0 ? format.depthBufferSize() : 32;
+    const int redBufferSize = format.redBufferSize();
+    if (redBufferSize != -1)
+        pfd.cRedBits = BYTE(redBufferSize);
+    const int greenBufferSize = format.greenBufferSize();
+    if (greenBufferSize != -1)
+        pfd.cGreenBits = BYTE(greenBufferSize);
+    const int blueBufferSize = format.blueBufferSize();
+    if (blueBufferSize != -1)
+        pfd.cBlueBits = BYTE(blueBufferSize);
     pfd.cAlphaBits = format.alphaBufferSize() > 0 ? format.alphaBufferSize() : 8;
     pfd.cStencilBits = format.stencilBufferSize() > 0 ? format.stencilBufferSize() : 8;
     if (additional.formatFlags & QWindowsGLAccumBuffer)

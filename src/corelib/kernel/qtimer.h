@@ -63,7 +63,7 @@ class Q_CORE_EXPORT QTimer : public QObject
     Q_PROPERTY(Qt::TimerType timerType READ timerType WRITE setTimerType)
     Q_PROPERTY(bool active READ isActive)
 public:
-    explicit QTimer(QObject *parent = Q_NULLPTR);
+    explicit QTimer(QObject *parent = nullptr);
     ~QTimer();
 
     inline bool isActive() const { return id >= 0; }
@@ -83,7 +83,7 @@ public:
     static void singleShot(int msec, const QObject *receiver, const char *member);
     static void singleShot(int msec, Qt::TimerType timerType, const QObject *receiver, const char *member);
 
-#ifdef Q_QDOC
+#ifdef Q_CLANG_QDOC
     template<typename PointerToMemberFunction>
     static void singleShot(int msec, const QObject *receiver, PointerToMemberFunction method);
     template<typename PointerToMemberFunction>
@@ -197,7 +197,7 @@ public:
 #endif
 
 protected:
-    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *) override;
 
 private:
     Q_DISABLE_COPY(QTimer)

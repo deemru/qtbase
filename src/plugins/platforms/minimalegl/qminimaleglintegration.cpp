@@ -71,7 +71,7 @@ public:
     QWinRTEventDispatcher() {}
 
 protected:
-    bool hasPendingEvents() Q_DECL_OVERRIDE
+    bool hasPendingEvents() override
     {
         return QEventDispatcherWinRT::hasPendingEvents() || QWindowSystemInterface::windowSystemEventsQueued();
     }
@@ -156,7 +156,7 @@ QAbstractEventDispatcher *QMinimalEglIntegration::createEventDispatcher() const
 #elif defined(Q_OS_WIN)
     return new QWindowsGuiEventDispatcher;
 #else
-    return Q_NULLPTR;
+    return nullptr;
 #endif
 }
 

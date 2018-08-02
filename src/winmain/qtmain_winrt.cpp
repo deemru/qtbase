@@ -229,12 +229,12 @@ private:
         return S_OK;
     }
 
-    HRESULT __stdcall OnActivated(IActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnActivated(IActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnLaunched(ILaunchActivatedEventArgs *launchArgs) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnLaunched(ILaunchActivatedEventArgs *launchArgs) override
     {
         ComPtr<IPrelaunchActivatedEventArgs> preArgs;
         HRESULT hr = launchArgs->QueryInterface(preArgs.GetAddressOf());
@@ -295,11 +295,15 @@ private:
 
         bool develMode = false;
         bool debugWait = false;
-        for (const char *arg : args) {
-            if (strcmp(arg, "-qdevel") == 0)
+        for (int i = args.count() - 1; i >= 0; --i) {
+            const char *arg = args.at(i);
+            if (strcmp(arg, "-qdevel") == 0) {
                 develMode = true;
-            if (strcmp(arg, "-qdebug") == 0)
+                args.remove(i);
+            } else if (strcmp(arg, "-qdebug") == 0) {
                 debugWait = true;
+                args.remove(i);
+            }
         }
         if (develMode) {
             // Write a PID file to help runner
@@ -324,41 +328,41 @@ private:
         return S_OK;
     }
 
-    HRESULT __stdcall OnFileActivated(IFileActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileActivated(IFileActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnSearchActivated(ISearchActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnSearchActivated(ISearchActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnShareTargetActivated(IShareTargetActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnShareTargetActivated(IShareTargetActivatedEventArgs *args) override
     {
         return activatedLaunch(args);
     }
 
-    HRESULT __stdcall OnFileOpenPickerActivated(IFileOpenPickerActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileOpenPickerActivated(IFileOpenPickerActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnFileSavePickerActivated(IFileSavePickerActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnFileSavePickerActivated(IFileSavePickerActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnCachedFileUpdaterActivated(ICachedFileUpdaterActivatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnCachedFileUpdaterActivated(ICachedFileUpdaterActivatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;
     }
 
-    HRESULT __stdcall OnWindowCreated(Xaml::IWindowCreatedEventArgs *args) Q_DECL_OVERRIDE
+    HRESULT __stdcall OnWindowCreated(Xaml::IWindowCreatedEventArgs *args) override
     {
         Q_UNUSED(args);
         return S_OK;

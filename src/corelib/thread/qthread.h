@@ -76,7 +76,7 @@ public:
     static int idealThreadCount() Q_DECL_NOTHROW;
     static void yieldCurrentThread();
 
-    explicit QThread(QObject *parent = Q_NULLPTR);
+    explicit QThread(QObject *parent = nullptr);
     ~QThread();
 
     enum Priority {
@@ -110,10 +110,10 @@ public:
     QAbstractEventDispatcher *eventDispatcher() const;
     void setEventDispatcher(QAbstractEventDispatcher *eventDispatcher);
 
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    bool event(QEvent *event) override;
     int loopLevel() const;
 
-#ifdef Q_QDOC
+#ifdef Q_CLANG_QDOC
     template <typename Function, typename... Args>
     static QThread *create(Function &&f, Args &&... args);
     template <typename Function>
@@ -128,7 +128,7 @@ public:
     static QThread *create(Function &&f);
 #    endif // QTHREAD_HAS_VARIADIC_CREATE
 #  endif // QT_CONFIG(cxx11_future)
-#endif // Q_QDOC
+#endif // Q_CLANG_QDOC
 
 public Q_SLOTS:
     void start(Priority = InheritPriority);
@@ -154,7 +154,7 @@ protected:
     static void setTerminationEnabled(bool enabled = true);
 
 protected:
-    QThread(QThreadPrivate &dd, QObject *parent = Q_NULLPTR);
+    QThread(QThreadPrivate &dd, QObject *parent = nullptr);
 
 private:
     Q_DECLARE_PRIVATE(QThread)
@@ -169,7 +169,7 @@ private:
 
 #if QT_CONFIG(cxx11_future)
 
-#if defined(QTHREAD_HAS_VARIADIC_CREATE)
+#if defined(QTHREAD_HAS_VARIADIC_CREATE) || defined(Q_CLANG_QDOC)
 // C++17: std::thread's constructor complying call
 template <typename Function, typename... Args>
 QThread *QThread::create(Function &&f, Args &&... args)

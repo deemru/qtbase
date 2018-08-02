@@ -55,9 +55,9 @@
 
 #include <QtCore/QDebug>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(draganddrop);
 
-#ifndef QT_NO_DRAGANDDROP
+QT_BEGIN_NAMESPACE
 
 class QWindow;
 class QPlatformWindow;
@@ -135,6 +135,10 @@ private:
     QRect source_sameanswer;
     bool waiting_for_status;
 
+    // helpers for setting executed drop action outside application
+    bool dropped;
+    bool canceled;
+
     // top-level window we sent position to last.
     xcb_window_t current_target;
     // window to send events to (always valid if current_target)
@@ -168,8 +172,6 @@ private:
     xcb_window_t findRealWindow(const QPoint & pos, xcb_window_t w, int md, bool ignoreNonXdndAwareWindows);
 };
 Q_DECLARE_TYPEINFO(QXcbDrag::Transaction, Q_MOVABLE_TYPE);
-
-#endif // QT_NO_DRAGANDDROP
 
 QT_END_NAMESPACE
 

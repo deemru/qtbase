@@ -587,11 +587,8 @@ void QWin32PrintEngine::drawPixmap(const QRectF &targetRect,
             QPixmap p = QPixmap::fromImage(img);
 
             HBITMAP hbitmap = qt_pixmapToWinHBITMAP(p, HBitmapNoAlpha);
-            HDC display_dc = GetDC(0);
-            HDC hbitmap_hdc = CreateCompatibleDC(display_dc);
+            HDC hbitmap_hdc = CreateCompatibleDC(d->hdc);
             HGDIOBJ null_bitmap = SelectObject(hbitmap_hdc, hbitmap);
-
-            ReleaseDC(0, display_dc);
 
             if (!StretchBlt(d->hdc, qRound(tposx - xform_offset_x), qRound(tposy - xform_offset_y), width, height,
                             hbitmap_hdc, 0, 0, p.width(), p.height(), SRCCOPY))
@@ -620,12 +617,9 @@ void QWin32PrintEngine::drawTiledPixmap(const QRectF &r, const QPixmap &pm, cons
     } else {
         int dc_state = SaveDC(d->hdc);
 
-        HDC display_dc = GetDC(0);
         HBITMAP hbitmap = qt_pixmapToWinHBITMAP(pm, HBitmapNoAlpha);
-        HDC hbitmap_hdc = CreateCompatibleDC(display_dc);
+        HDC hbitmap_hdc = CreateCompatibleDC(d->hdc);
         HGDIOBJ null_bitmap = SelectObject(hbitmap_hdc, hbitmap);
-
-        ReleaseDC(0, display_dc);
 
         QRectF trect = d->painterMatrix.mapRect(r);
         int tx = int(trect.left() * d->stretch_x + d->origin_x);
@@ -1024,7 +1018,7 @@ bool QWin32PrintEnginePrivate::resetDC()
     return hdc != 0;
 }
 
-static int indexOfId(const QList<QPrint::InputSlot> &inputSlots, QPrint::InputSlotId id)
+static int indexOfId(const QVector<QPrint::InputSlot> &inputSlots, QPrint::InputSlotId id)
 {
     for (int i = 0; i < inputSlots.size(); ++i) {
         if (inputSlots.at(i).id == id)
@@ -1033,7 +1027,7 @@ static int indexOfId(const QList<QPrint::InputSlot> &inputSlots, QPrint::InputSl
     return -1;
 }
 
-static int indexOfWindowsId(const QList<QPrint::InputSlot> &inputSlots, int windowsId)
+static int indexOfWindowsId(const QVector<QPrint::InputSlot> &inputSlots, int windowsId)
 {
     for (int i = 0; i < inputSlots.size(); ++i) {
         if (inputSlots.at(i).windowsId == windowsId)
@@ -1210,7 +1204,7 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
     case PPK_PaperSource: {
         if (!d->devMode)
             break;
-        const QList<QPrint::InputSlot> inputSlots = d->m_printDevice.supportedInputSlots();
+        const auto inputSlots = d->m_printDevice.supportedInputSlots();
         const int paperSource = value.toInt();
         const int index = paperSource >= DMBIN_USER ?
             indexOfWindowsId(inputSlots, paperSource) : indexOfId(inputSlots, QPrint::InputSlotId(paperSource));
@@ -1234,7 +1228,10 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
         if (printDevice.isValid()) {
             d->m_printDevice = printDevice;
             d->initialize();
-            setProperty(PPK_QPageSize, pageSize);
+            if (d->m_printDevice.supportedPageSize(pageSize.value<QPageSize>()).isValid())
+                setProperty(PPK_QPageSize, pageSize);
+            else
+                setProperty(PPK_CustomPaperSize, pageSize.value<QPageSize>().size(QPageSize::Point));
             setProperty(PPK_FullPage, QVariant(isFullPage));
             setProperty(PPK_Orientation, orientation);
             setProperty(PPK_QPageMargins, margins);
@@ -1465,7 +1462,7 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
             if (d->devMode->dmDefaultSource >= DMBIN_USER) {
                 value = int(d->devMode->dmDefaultSource);
             } else {
-                const QList<QPrint::InputSlot> inputSlots = d->m_printDevice.supportedInputSlots();
+                const auto inputSlots = d->m_printDevice.supportedInputSlots();
                 const int index = indexOfWindowsId(inputSlots, d->devMode->dmDefaultSource);
                 value = index >= 0 ? inputSlots.at(index).id : QPrint::Auto;
             }
@@ -1499,7 +1496,7 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
         QList<QVariant> out;
         const auto inputSlots = d->m_printDevice.supportedInputSlots();
         out.reserve(inputSlots.size());
-        for (const QPrint::InputSlot inputSlot : inputSlots)
+        for (const QPrint::InputSlot &inputSlot : inputSlots)
             out << QVariant(inputSlot.id == QPrint::CustomInputSlot ? inputSlot.windowsId : int(inputSlot.id));
         value = out;
         break;

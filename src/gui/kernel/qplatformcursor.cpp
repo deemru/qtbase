@@ -128,7 +128,7 @@ void QPlatformCursor::setPos(const QPoint &pos)
         qWarning("This plugin does not support QCursor::setPos()"
                  "; emulating movement within the application.");
     }
-    QWindowSystemInterface::handleMouseEvent(0, pos, pos, Qt::NoButton);
+    QWindowSystemInterface::handleMouseEvent(0, pos, pos, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
 }
 
 // End of display and pointer event handling code
@@ -549,7 +549,7 @@ void QPlatformCursorImage::createSystemCursor(int id)
 void QPlatformCursorImage::set(Qt::CursorShape id)
 {
     QPlatformCursorImage *cursor = 0;
-    if (id >= 0 && id <= Qt::LastCursor) {
+    if (unsigned(id) <= unsigned(Qt::LastCursor)) {
         if (!systemCursorTable[id])
             createSystemCursor(id);
         cursor = systemCursorTable[id];

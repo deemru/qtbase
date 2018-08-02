@@ -57,6 +57,7 @@
 #define QSSLCONFIGURATION_H
 
 #include <QtNetwork/qtnetworkglobal.h>
+#include <QtCore/qmap.h>
 #include <QtCore/qshareddata.h>
 #include <QtNetwork/qsslsocket.h>
 #include <QtNetwork/qssl.h>
@@ -148,6 +149,10 @@ public:
 
     QSslDiffieHellmanParameters diffieHellmanParameters() const;
     void setDiffieHellmanParameters(const QSslDiffieHellmanParameters &dhparams);
+
+    QMap<QByteArray, QVariant> backendConfiguration() const;
+    void setBackendConfigurationOption(const QByteArray &name, const QVariant &value);
+    void setBackendConfiguration(const QMap<QByteArray, QVariant> &backendConfiguration = QMap<QByteArray, QVariant>());
 
     static QSslConfiguration defaultConfiguration();
     static void setDefaultConfiguration(const QSslConfiguration &configuration);

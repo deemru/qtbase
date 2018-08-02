@@ -39,7 +39,9 @@
 
 #include <qstringlist.h>
 #include <qset.h>
-#include <qregularexpression.h>
+#if QT_CONFIG(regularexpression)
+#  include <qregularexpression.h>
+#endif
 
 #include <algorithm>
 
@@ -96,14 +98,25 @@ QT_BEGIN_NAMESPACE
 
     \tableofcontents
 
+    \section1 Initializing
+
+    The default constructor creates an empty list. You can use the
+    initializer-list constructor to create a list with elements:
+
+    \snippet qstringlist/main.cpp 0a
+
     \section1 Adding Strings
 
     Strings can be added to a list using the \l
+    {QList::insert()}{insert()} \l
     {QList::append()}{append()}, \l
     {QList::operator+=()}{operator+=()} and \l
-    {QStringList::operator<<()}{operator<<()} functions. For example:
+    {operator<<()} functions.
 
-    \snippet qstringlist/main.cpp 0
+    \l{operator<<()} can be used to
+    conveniently add multiple elements to a list:
+
+    \snippet qstringlist/main.cpp 0b
 
     \section1 Iterating Over the Strings
 
@@ -361,8 +374,7 @@ QStringList QtPrivate::QStringList_filter(const QStringList *that, const QRegExp
 }
 #endif
 
-#ifndef QT_BOOTSTRAPPED
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
 /*!
     \fn QStringList QStringList::filter(const QRegularExpression &re) const
     \overload
@@ -380,8 +392,7 @@ QStringList QtPrivate::QStringList_filter(const QStringList *that, const QRegula
     }
     return res;
 }
-#endif // QT_NO_REGULAREXPRESSION
-#endif // QT_BOOTSTRAPPED
+#endif // QT_CONFIG(regularexpression)
 
 /*!
     \fn QStringList &QStringList::replaceInStrings(const QString &before, const QString &after, Qt::CaseSensitivity cs)
@@ -436,8 +447,7 @@ void QtPrivate::QStringList_replaceInStrings(QStringList *that, const QRegExp &r
 }
 #endif
 
-#ifndef QT_BOOTSTRAPPED
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
 /*!
     \fn QStringList &QStringList::replaceInStrings(const QRegularExpression &re, const QString &after)
     \overload
@@ -466,8 +476,7 @@ void QtPrivate::QStringList_replaceInStrings(QStringList *that, const QRegularEx
     for (int i = 0; i < that->size(); ++i)
         (*that)[i].replace(re, after);
 }
-#endif // QT_NO_REGULAREXPRESSION
-#endif // QT_BOOTSTRAPPED
+#endif // QT_CONFIG(regularexpression)
 
 static int accumulatedSize(const QStringList &list, int seplen)
 {
@@ -674,8 +683,7 @@ int QtPrivate::QStringList_lastIndexOf(const QStringList *that, QRegExp &rx, int
 }
 #endif
 
-#ifndef QT_BOOTSTRAPPED
-#ifndef QT_NO_REGULAREXPRESSION
+#if QT_CONFIG(regularexpression)
 /*!
     \fn int QStringList::indexOf(const QRegularExpression &re, int from) const
     \overload
@@ -732,8 +740,7 @@ int QtPrivate::QStringList_lastIndexOf(const QStringList *that, const QRegularEx
     }
     return -1;
 }
-#endif // QT_NO_REGULAREXPRESSION
-#endif // QT_BOOTSTRAPPED
+#endif // QT_CONFIG(regularexpression)
 
 /*!
     \fn int QStringList::removeDuplicates()

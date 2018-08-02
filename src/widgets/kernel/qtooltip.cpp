@@ -127,7 +127,9 @@ public:
     ~QTipLabel();
     static QTipLabel *instance;
 
-    bool eventFilter(QObject *, QEvent *) Q_DECL_OVERRIDE;
+    void updateSize();
+
+    bool eventFilter(QObject *, QEvent *) override;
 
     QBasicTimer hideTimer, expireTimer;
 
@@ -143,10 +145,10 @@ public:
 
     static int getTipScreen(const QPoint &pos, QWidget *w);
 protected:
-    void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
-    void paintEvent(QPaintEvent *e) Q_DECL_OVERRIDE;
-    void mouseMoveEvent(QMouseEvent *e) Q_DECL_OVERRIDE;
-    void resizeEvent(QResizeEvent *e) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *e) override;
+    void paintEvent(QPaintEvent *e) override;
+    void mouseMoveEvent(QMouseEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;
 
 #ifndef QT_NO_STYLE_STYLESHEET
 public slots:
@@ -214,13 +216,18 @@ void QTipLabel::reuseTip(const QString &text, int msecDisplayTime)
 
     setWordWrap(Qt::mightBeRichText(text));
     setText(text);
+    updateSize();
+    restartExpireTimer(msecDisplayTime);
+}
+
+void  QTipLabel::updateSize()
+{
     QFontMetrics fm(font());
     QSize extra(1, 0);
     // Make it look good with the default ToolTip font on Mac, which has a small descent.
     if (fm.descent() == 2 && fm.ascent() >= 11)
         ++extra.rheight();
     resize(sizeHint() + extra);
-    restartExpireTimer(msecDisplayTime);
 }
 
 void QTipLabel::paintEvent(QPaintEvent *ev)
@@ -310,15 +317,13 @@ void QTipLabel::timerEvent(QTimerEvent *e)
 bool QTipLabel::eventFilter(QObject *o, QEvent *e)
 {
     switch (e->type()) {
-#if 0 // Used to be included in Qt4 for Q_WS_MAC
+#ifdef Q_OS_MACOS
     case QEvent::KeyPress:
     case QEvent::KeyRelease: {
-        int key = static_cast<QKeyEvent *>(e)->key();
-        Qt::KeyboardModifiers mody = static_cast<QKeyEvent *>(e)->modifiers();
-        if (!(mody & Qt::KeyboardModifierMask)
-            && key != Qt::Key_Shift && key != Qt::Key_Control
-            && key != Qt::Key_Alt && key != Qt::Key_Meta)
-            hideTip();
+        const int key = static_cast<QKeyEvent *>(e)->key();
+        // Anything except key modifiers or caps-lock, etc.
+        if (key < Qt::Key_Shift || key > Qt::Key_ScrollLock)
+            hideTipImmediately();
         break;
     }
 #endif
@@ -387,6 +392,9 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
         if (w) {
             connect(w, SIGNAL(destroyed()),
                 QTipLabel::instance, SLOT(styleSheetParentDestroyed()));
+            // QTBUG-64550: A font inherited by the style sheet might change the size,
+            // particular on Windows, where the tip is not parented on a window.
+            QTipLabel::instance->updateSize();
         }
     }
 #endif //QT_NO_STYLE_STYLESHEET
@@ -501,7 +509,10 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
 #ifdef Q_OS_WIN32
         // On windows, we can't use the widget as parent otherwise the window will be
         // raised when the tooltip will be shown
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
         new QTipLabel(text, QApplication::desktop()->screen(QTipLabel::getTipScreen(pos, w)), msecDisplayTime);
+QT_WARNING_POP
 #else
         new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
 #endif

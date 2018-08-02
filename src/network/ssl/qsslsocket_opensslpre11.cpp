@@ -198,9 +198,6 @@ static void q_OpenSSL_add_all_algorithms_safe()
 }
 
 
-/*!
-    \internal
-*/
 void QSslSocketPrivate::deinitialize()
 {
     q_CRYPTO_set_id_callback(0);
@@ -290,8 +287,7 @@ void QSslSocketPrivate::ensureCiphersAndCertsLoaded()
     //its own cert bundle rather than the system one.
     //Same logic that disables the unix on demand cert loading.
     //Unlike unix, we do preload the certificates from the cert store.
-    if ((QSysInfo::windowsVersion() & QSysInfo::WV_NT_based) >= QSysInfo::WV_6_0)
-        s_loadRootCertsOnDemand = true;
+    s_loadRootCertsOnDemand = true;
 #endif
 }
 

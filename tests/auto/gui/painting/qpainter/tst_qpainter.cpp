@@ -153,6 +153,7 @@ private slots:
     void setEqualClipRegionAndPath();
 
     void clipRectSaveRestore();
+    void clipStateSaveRestore();
 
     void clippedFillPath_data();
     void clippedFillPath();
@@ -2827,7 +2828,7 @@ void tst_QPainter::monoImages()
     }
 }
 
-#if !defined(Q_OS_IRIX) && !defined(Q_OS_AIX) && !defined(Q_CC_MSVC) && !defined(Q_OS_SOLARIS) && !defined(__UCLIBC__)
+#if !defined(Q_OS_AIX) && !defined(Q_CC_MSVC) && !defined(Q_OS_SOLARIS) && !defined(__UCLIBC__)
 #include <fenv.h>
 
 static const QString fpeExceptionString(int exception)
@@ -2962,10 +2963,6 @@ void fpe_steepSlopes()
 
 void fpe_radialGradients()
 {
-#if defined(Q_PROCESSOR_ARM)
-    QEXPECT_FAIL("", "Test fails for ARM (QTBUG-59961)", Continue);
-#endif
-
     FpExceptionChecker checker(FE_UNDERFLOW | FE_OVERFLOW | FE_INVALID | FE_DIVBYZERO);
 
     QImage img(21, 21, QImage::Format_ARGB32_Premultiplied);
@@ -3423,6 +3420,35 @@ void tst_QPainter::clipRectSaveRestore()
     p.end();
 
     QCOMPARE(img.pixel(0, 0), QColor(Qt::black).rgba());
+}
+
+void tst_QPainter::clipStateSaveRestore()
+{
+    QImage img(16, 16, QImage::Format_RGB32);
+    img.fill(Qt::blue);
+    {
+        QPainter p(&img);
+        p.setClipRect(QRect(5, 5, 10, 10));
+        p.save();
+        p.setClipping(false);
+        p.restore();
+        p.fillRect(0, 0, 16, 16, Qt::red);
+        p.end();
+        QCOMPARE(img.pixel(0, 0), QColor(Qt::blue).rgb());
+    }
+
+    img.fill(Qt::blue);
+    {
+        QPainter p(&img);
+        p.setClipRect(QRect(5, 5, 10, 10));
+        p.setClipping(false);
+        p.save();
+        p.setClipping(true);
+        p.restore();
+        p.fillRect(0, 0, 16, 16, Qt::red);
+        p.end();
+        QCOMPARE(img.pixel(0, 0), QColor(Qt::red).rgb());
+    }
 }
 
 void tst_QPainter::clippedImage()
@@ -4498,7 +4524,7 @@ void tst_QPainter::drawText_subPixelPositionsInRaster_qtbug5053()
 {
     QFontMetricsF fm(qApp->font());
 
-    QImage baseLine(fm.width(QChar::fromLatin1('e')), fm.height(), QImage::Format_RGB32);
+    QImage baseLine(fm.horizontalAdvance(QChar::fromLatin1('e')), fm.height(), QImage::Format_RGB32);
     baseLine.fill(Qt::white);
     {
         QPainter p(&baseLine);

@@ -55,7 +55,9 @@
 #  include "qaccessible.h"
 #endif
 #include "qhighdpiscaling_p.h"
+#if QT_CONFIG(draganddrop)
 #include "qshapedpixmapdndwindow_p.h"
+#endif // QT_CONFIG(draganddrop)
 
 #include <private/qevent_p.h>
 
@@ -382,7 +384,11 @@ void QWindowPrivate::setVisible(bool visible)
             QGuiApplicationPrivate::hideModalWindow(q);
     // QShapedPixmapWindow is used on some platforms for showing a drag pixmap, so don't block
     // input to this window as it is performing a drag - QTBUG-63846
-    } else if (visible && QGuiApplication::modalWindow() && !qobject_cast<QShapedPixmapWindow *>(q)) {
+    } else if (visible && QGuiApplication::modalWindow()
+#if QT_CONFIG(draganddrop)
+               && !qobject_cast<QShapedPixmapWindow *>(q)
+#endif // QT_CONFIG(draganddrop)
+              ) {
         QGuiApplicationPrivate::updateBlockedStatus(q);
     }
 
@@ -2790,6 +2796,8 @@ bool QWindowPrivate::applyCursor()
             if (!platformWindow)
                 return true;
             QCursor *c = QGuiApplication::overrideCursor();
+            if (c != nullptr && platformCursor->capabilities().testFlag(QPlatformCursor::OverrideCursor))
+                return true;
             if (!c && hasCursor)
                 c = &cursor;
             platformCursor->changeCursor(c, q);
@@ -2839,7 +2847,7 @@ QDebug operator<<(QDebug debug, const QWindow *window)
 }
 #endif // !QT_NO_DEBUG_STREAM
 
-#if QT_CONFIG(vulkan)
+#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
 
 /*!
     Associates this window with the specified Vulkan \a instance.

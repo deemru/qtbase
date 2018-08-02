@@ -203,28 +203,17 @@ QStringList QStandardPaths::standardLocations(StandardLocation type)
     if (type == AppDataLocation || type == AppLocalDataLocation) {
         CFBundleRef mainBundle = CFBundleGetMainBundle();
         if (mainBundle) {
-            CFURLRef bundleUrl = CFBundleCopyBundleURL(mainBundle);
-            CFStringRef cfBundlePath = CFURLCopyFileSystemPath(bundleUrl, kCFURLPOSIXPathStyle);
-            QString bundlePath = QString::fromCFString(cfBundlePath);
-            CFRelease(cfBundlePath);
-            CFRelease(bundleUrl);
-
-            CFURLRef resourcesUrl = CFBundleCopyResourcesDirectoryURL(mainBundle);
-            CFStringRef cfResourcesPath = CFURLCopyFileSystemPath(resourcesUrl,
-                kCFURLPOSIXPathStyle);
-            QString resourcesPath = QString::fromCFString(cfResourcesPath);
-            CFRelease(cfResourcesPath);
-            CFRelease(resourcesUrl);
-
-            // Handle bundled vs unbundled executables. CFBundleGetMainBundle() returns
-            // a valid bundle in both cases. CFBundleCopyResourcesDirectoryURL() returns
-            // an absolute path for unbundled executables.
-            if (resourcesPath.startsWith(QLatin1Char('/')))
-                dirs.append(resourcesPath);
-            else
-                dirs.append(bundlePath + resourcesPath);
+            if (QCFType<CFURLRef> resourcesURL = CFBundleCopyResourcesDirectoryURL(mainBundle)) {
+                if (QCFType<CFURLRef> absoluteResouresURL = CFURLCopyAbsoluteURL(resourcesURL)) {
+                    if (QCFType<CFStringRef> path = CFURLCopyFileSystemPath(absoluteResouresURL,
+                                                                            kCFURLPOSIXPathStyle)) {
+                        dirs.append(QString::fromCFString(path));
+                    }
+                }
+            }
         }
     }
+
     const QString localDir = writableLocation(type);
     if (!localDir.isEmpty())
         dirs.prepend(localDir);
@@ -248,9 +237,9 @@ QString QStandardPaths::displayName(StandardLocation type)
     if (QStandardPaths::ApplicationsLocation == type)
         return QCoreApplication::translate("QStandardPaths", "Applications");
 
+    const QCFString fsPath(standardLocations(type).constFirst());
     if (QCFType<CFURLRef> url = CFURLCreateWithFileSystemPath(kCFAllocatorDefault,
-            standardLocations(type).constFirst().toCFString(),
-            kCFURLPOSIXPathStyle, true)) {
+            fsPath, kCFURLPOSIXPathStyle, true)) {
         QCFString name;
         CFURLCopyResourcePropertyForKey(url, kCFURLLocalizedNameKey, &name, NULL);
         if (name && CFStringGetLength(name))

@@ -27,6 +27,7 @@
 **
 ****************************************************************************/
 
+#include <emulationdetector.h>
 
 #include <QtTest/QtTest>
 #include <QtCore/QProcess>
@@ -285,7 +286,7 @@ void tst_QProcess::startWithOldOpen()
     class OverriddenOpen : public QProcess
     {
     public:
-        virtual bool open(OpenMode mode) Q_DECL_OVERRIDE
+        virtual bool open(OpenMode mode) override
         { return QIODevice::open(mode); }
     };
 
@@ -708,7 +709,7 @@ void tst_QProcess::restartProcessDeadlock()
     QCOMPARE(process.write("", 1), qlonglong(1));
     QVERIFY(process.waitForFinished(5000));
 
-    QObject::disconnect(&process, static_cast<QProcessFinishedSignal1>(&QProcess::finished), Q_NULLPTR, Q_NULLPTR);
+    QObject::disconnect(&process, static_cast<QProcessFinishedSignal1>(&QProcess::finished), nullptr, nullptr);
 
     QCOMPARE(process.write("", 1), qlonglong(1));
     QVERIFY(process.waitForFinished(5000));
@@ -847,7 +848,7 @@ void tst_QProcess::emitReadyReadOnlyWhenNewDataArrives()
     QVERIFY(QTestEventLoop::instance().timeout());
     QVERIFY(!proc.waitForReadyRead(250));
 
-    QObject::disconnect(&proc, &QIODevice::readyRead, Q_NULLPTR, Q_NULLPTR);
+    QObject::disconnect(&proc, &QIODevice::readyRead, nullptr, nullptr);
     proc.write("B");
     QVERIFY(proc.waitForReadyRead(5000));
 
@@ -1165,6 +1166,8 @@ void tst_QProcess::processInAThread()
 
 void tst_QProcess::processesInMultipleThreads()
 {
+    if (EmulationDetector::isRunningArmOnX86())
+        QSKIP("Flakily hangs in QEMU. QTBUG-67760");
     for (int i = 0; i < 10; ++i) {
         // run from 1 to 10 threads, but run at least some tests
         // with more threads than the ideal

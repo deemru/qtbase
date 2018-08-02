@@ -163,12 +163,9 @@ void tst_QProgressBar::format()
     bar.move(300, 300);
     bar.show();
     QVERIFY(QTest::qWaitForWindowExposed(&bar));
-    QVERIFY(QTest::qWaitForWindowExposed(&bar));
 
-    QTest::qWait(20);
     bar.repainted = false;
     bar.setFormat("%v of %m (%p%)");
-    QTest::qWait(20);
     QTRY_VERIFY(bar.repainted);
     bar.repainted = false;
     bar.setFormat("%v of %m (%p%)");
@@ -293,7 +290,7 @@ void tst_QProgressBar::sizeHint()
     QFontMetrics fm = bar.fontMetrics();
     QStyleOptionProgressBar opt;
     bar.initStyleOption(&opt);
-    QSize size = QSize(9 * 7 + fm.width(QLatin1Char('0')) * 4, fm.height() + 8);
+    QSize size = QSize(9 * 7 + fm.horizontalAdvance(QLatin1Char('0')) * 4, fm.height() + 8);
     size= bar.style()->sizeFromContents(QStyle::CT_ProgressBar, &opt, size, &bar);
     QSize barSize = bar.sizeHint();
     QVERIFY(barSize.width() >= size.width());

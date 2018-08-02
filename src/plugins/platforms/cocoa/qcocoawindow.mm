@@ -198,6 +198,7 @@ void QCocoaWindow::initialize()
             BOOL enable = qt_mac_resolveOption(YES, window(), "_q_mac_wantsBestResolutionOpenGLSurface",
                                                           "QT_MAC_WANTS_BEST_RESOLUTION_OPENGL_SURFACE");
             [m_view setWantsBestResolutionOpenGLSurface:enable];
+            // See also QCocoaGLContext::makeCurrent for software renderer workarounds.
         }
         BOOL enable = qt_mac_resolveOption(NO, window(), "_q_mac_wantsLayer",
                                                      "QT_MAC_WANTS_LAYER");
@@ -286,7 +287,7 @@ QRect QCocoaWindow::geometry() const
         NSPoint windowPoint = [m_view convertPoint:NSMakePoint(0, 0) toView:nil];
         NSRect screenRect = [[m_view window] convertRectToScreen:NSMakeRect(windowPoint.x, windowPoint.y, 1, 1)];
         NSPoint screenPoint = screenRect.origin;
-        QPoint position = qt_mac_flipPoint(screenPoint).toPoint();
+        QPoint position = QCocoaScreen::mapFromNative(screenPoint).toPoint();
         QSize size = QRectF::fromCGRect(NSRectToCGRect([m_view bounds])).toRect().size();
         return QRect(position, size);
     }
@@ -309,7 +310,7 @@ void QCocoaWindow::setCocoaGeometry(const QRect &rect)
     }
 
     if (isContentView()) {
-        NSRect bounds = qt_mac_flipRect(rect);
+        NSRect bounds = QCocoaScreen::mapToNative(rect);
         [m_view.window setFrame:[m_view.window frameRectForContentRect:bounds] display:YES animate:NO];
     } else {
         [m_view setFrame:NSMakeRect(rect.x(), rect.y(), rect.width(), rect.height())];
@@ -402,9 +403,11 @@ void QCocoaWindow::setVisible(bool visible)
                     if (!(parentCocoaWindow && window()->transientParent()->isActive()) && window()->type() == Qt::Popup) {
                         removeMonitor();
                         monitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSLeftMouseDownMask|NSRightMouseDownMask|NSOtherMouseDownMask|NSMouseMovedMask handler:^(NSEvent *e) {
-                            QPointF localPoint = qt_mac_flipPoint([NSEvent mouseLocation]);
+                            QPointF localPoint = QCocoaScreen::mapFromNative([NSEvent mouseLocation]);
+                            const auto button = e.type == NSEventTypeMouseMoved ? Qt::NoButton : cocoaButton2QtButton([e buttonNumber]);
+                            const auto eventType = e.type == NSEventTypeMouseMoved ? QEvent::MouseMove : QEvent::MouseButtonPress;
                             QWindowSystemInterface::handleMouseEvent(window(), window()->mapFromGlobal(localPoint.toPoint()), localPoint,
-                                                                     cocoaButton2QtButton([e buttonNumber]));
+                                                                     Qt::MouseButtons(uint(NSEvent.pressedMouseButtons & 0xFFFF)), button, eventType);
                         }];
                     }
                 }
@@ -502,9 +505,10 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
 {
     const Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
     const bool frameless = (flags & Qt::FramelessWindowHint) || windowIsPopupType(type);
+    const bool resizeable = !(flags & Qt::CustomizeWindowHint); // Remove zoom button by disabling resize
 
-    // Select base window type.
-    NSUInteger styleMask = frameless ? NSBorderlessWindowMask : NSResizableWindowMask;
+    // Select base window type. Note that the value of NSBorderlessWindowMask is 0.
+    NSUInteger styleMask = (frameless || !resizeable) ? NSBorderlessWindowMask : NSResizableWindowMask;
 
     if (frameless) {
         // No further customizations for frameless since there are no window decorations.
@@ -569,7 +573,7 @@ void QCocoaWindow::setWindowFlags(Qt::WindowFlags flags)
         Qt::WindowType type = window()->type();
         if ((type & Qt::Popup) != Qt::Popup && (type & Qt::Dialog) != Qt::Dialog) {
             NSWindowCollectionBehavior behavior = m_view.window.collectionBehavior;
-            if (flags & Qt::WindowFullscreenButtonHint) {
+            if ((flags & Qt::WindowFullscreenButtonHint) || m_view.window.qt_fullScreen) {
                 behavior |= NSWindowCollectionBehaviorFullScreenPrimary;
                 behavior &= ~NSWindowCollectionBehaviorFullScreenAuxiliary;
             } else {
@@ -1115,7 +1119,7 @@ void QCocoaWindow::handleGeometryChange()
         CGRect contentRect = [m_view.window contentRectForFrameRect:m_view.window.frame];
 
         // The result above is in native screen coordinates, so remap to the Qt coordinate system
-        newGeometry = QCocoaScreen::primaryScreen()->mapFromNative(QRectF::fromCGRect(contentRect)).toRect();
+        newGeometry = QCocoaScreen::mapFromNative(contentRect).toRect();
     } else {
         // QNSView has isFlipped set, so no need to remap the geometry
         newGeometry = QRectF::fromCGRect(m_view.frame).toRect();
@@ -1129,13 +1133,11 @@ void QCocoaWindow::handleGeometryChange()
     // Guard against processing window system events during QWindow::setGeometry
     // calls, which Qt and Qt applications do not expect.
     if (!m_inSetGeometry)
-        QWindowSystemInterface::flushWindowSystemEvents();
+        QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
 }
 
 void QCocoaWindow::handleExposeEvent(const QRegion &region)
 {
-    const QRect previouslyExposedRect = m_exposedRect;
-
     // Ideally we'd implement isExposed() in terms of these properties,
     // plus the occlusionState of the NSWindow, and let the expose event
     // pull the exposed state out when needed. However, when the window
@@ -1155,24 +1157,7 @@ void QCocoaWindow::handleExposeEvent(const QRegion &region)
         m_exposedRect = QRect();
     }
 
-    QWindowPrivate *windowPrivate = qt_window_private(window());
-    if (windowPrivate->updateRequestPending) {
-        // We can only deliver update request events when the window is exposed,
-        // and we also have to make sure we deliver any change to the exposed
-        // rect as a real expose event (including going from non-exposed to
-        // exposed). FIXME: Should this logic live in QGuiApplication?
-        if (isExposed() && m_exposedRect == previouslyExposedRect) {
-            qCDebug(lcQpaCocoaWindow) << "QCocoaWindow::handleExposeEvent" << window() << region << "as update request";
-            windowPrivate->deliverUpdateRequest();
-            return;
-        } else {
-            // Since updateRequestPending is still set, we will issue a deferred setNeedsDisplay
-            // from drawRect and get back into this code on the next display cycle, delivering
-            // the pending update request.
-        }
-    }
-
-    qCDebug(lcQpaCocoaWindow) << "QCocoaWindow::handleExposeEvent" << window() << region << "isExposed" << isExposed();
+    qCDebug(lcQpaCocoaDrawing) << "QCocoaWindow::handleExposeEvent" << window() << region << "isExposed" << isExposed();
     QWindowSystemInterface::handleExposeEvent<QWindowSystemInterface::SynchronousDelivery>(window(), region);
 }
 
@@ -1279,6 +1264,11 @@ void QCocoaWindow::recreateWindowIfNeeded()
     if ((isContentView() && !shouldBeContentView) || (recreateReason & PanelChanged)) {
         if (m_nsWindow) {
             qCDebug(lcQpaCocoaWindow) << "Getting rid of existing window" << m_nsWindow;
+            if (m_nsWindow.observationInfo) {
+                qCCritical(lcQpaCocoaWindow) << m_nsWindow << "has active key-value observers (KVO)!"
+                    << "These will stop working now that the window is recreated, and will result in exceptions"
+                    << "when the observers are removed. Break in QCocoaWindow::recreateWindowIfNeeded to debug.";
+            }
             [m_nsWindow closeAndRelease];
             if (isContentView()) {
                 // We explicitly disassociate m_view from the window's contentView,
@@ -1345,8 +1335,8 @@ void QCocoaWindow::recreateWindowIfNeeded()
 
 void QCocoaWindow::requestUpdate()
 {
-    qCDebug(lcQpaCocoaWindow) << "QCocoaWindow::requestUpdate" << window();
-    [m_view setNeedsDisplay:YES];
+    qCDebug(lcQpaCocoaDrawing) << "QCocoaWindow::requestUpdate" << window();
+    QPlatformWindow::requestUpdate();
 }
 
 void QCocoaWindow::requestActivateWindow()
@@ -1377,7 +1367,7 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
 
     rect.translate(-targetScreen->geometry().topLeft());
     QCocoaScreen *cocoaScreen = static_cast<QCocoaScreen *>(targetScreen->handle());
-    NSRect frame = NSRectFromCGRect(cocoaScreen->mapToNative(rect).toCGRect());
+    NSRect frame = QCocoaScreen::mapToNative(rect, cocoaScreen);
 
     // Note: The macOS window manager has a bug, where if a screen is rotated, it will not allow
     // a window to be created within the area of the screen that has a Y coordinate (I quadrant)
@@ -1471,19 +1461,6 @@ void QCocoaWindow::removeMonitor()
         return;
     [NSEvent removeMonitor:monitor];
     monitor = nil;
-}
-
-// Returns the current global screen geometry for the nswindow associated with this window.
-QRect QCocoaWindow::nativeWindowGeometry() const
-{
-    if (!isContentView())
-        return geometry();
-
-    NSRect rect = m_view.window.frame;
-    QPlatformScreen *onScreen = QPlatformScreen::platformScreenForWindow(window());
-    int flippedY = onScreen->geometry().height() - rect.origin.y - rect.size.height;  // account for nswindow inverted y.
-    QRect qRect = QRect(rect.origin.x, flippedY, rect.size.width, rect.size.height);
-    return qRect;
 }
 
 /*!

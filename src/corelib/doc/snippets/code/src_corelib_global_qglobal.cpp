@@ -294,7 +294,7 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
         break;
     case QtFatalMsg:
         fprintf(stderr, "Fatal: %s (%s:%u, %s)\n", localMsg.constData(), context.file, context.line, context.function);
-        abort();
+        break;
     }
 }
 
@@ -387,11 +387,11 @@ CONFIG += no_keywords
 //! [34]
 QString FriendlyConversation::greeting(int type)
 {
-static const char *greeting_strings[] = {
-    QT_TR_NOOP("Hello"),
-    QT_TR_NOOP("Goodbye")
-};
-return tr(greeting_strings[type]);
+    static const char *greeting_strings[] = {
+        QT_TR_NOOP("Hello"),
+        QT_TR_NOOP("Goodbye")
+    };
+    return tr(greeting_strings[type]);
 }
 //! [34]
 
@@ -410,7 +410,7 @@ QString FriendlyConversation::greeting(int type)
 QString global_greeting(int type)
 {
     return qApp->translate("FriendlyConversation",
-           greeting_strings[type]);
+                           greeting_strings[type]);
 }
 //! [35]
 
@@ -434,8 +434,8 @@ QString FriendlyConversation::greeting(int type)
 QString global_greeting(int type)
 {
     return qApp->translate("FriendlyConversation",
-           greeting_strings[type].source,
-           greeting_strings[type].comment);
+                           greeting_strings[type].source,
+                           greeting_strings[type].comment);
 }
 //! [36]
 

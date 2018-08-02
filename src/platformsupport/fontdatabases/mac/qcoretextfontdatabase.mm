@@ -416,7 +416,19 @@ extern CGAffineTransform qt_transform_from_fontdef(const QFontDef &fontDef);
 template <>
 QFontEngine *QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>::fontEngine(const QFontDef &fontDef, void *usrPtr)
 {
-    CTFontDescriptorRef descriptor = static_cast<CTFontDescriptorRef>(usrPtr);
+    QCFType<CTFontDescriptorRef> descriptor = QCFType<CTFontDescriptorRef>::constructFromGet(
+        static_cast<CTFontDescriptorRef>(usrPtr));
+
+    // CoreText will sometimes invalidate information in font descriptors that refer
+    // to system fonts in certain function calls or application states. While the descriptor
+    // looks the same from the outside, some internal plumbing is different, causing the results
+    // of creating CTFonts from those descriptors unreliable. The work-around for this
+    // is to copy the attributes of those descriptors each time we make a new CTFont
+    // from them instead of referring to the original, as that may trigger the CoreText bug.
+    if (m_systemFontDescriptors.contains(descriptor)) {
+        QCFType<CFDictionaryRef> attributes = CTFontDescriptorCopyAttributes(descriptor);
+        descriptor = CTFontDescriptorCreateWithAttributes(attributes);
+    }
 
     // Since we do not pass in the destination DPI to CoreText when making
     // the font, we need to pass in a point size which is scaled to include
@@ -427,14 +439,10 @@ QFontEngine *QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>::fontEngine
     qreal scaledPointSize = fontDef.pixelSize;
 
     CGAffineTransform matrix = qt_transform_from_fontdef(fontDef);
-    CTFontRef font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, &matrix);
-    if (font) {
-        QFontEngine *engine = new QCoreTextFontEngine(font, fontDef);
-        CFRelease(font);
-        return engine;
-    }
+    if (QCFType<CTFontRef> font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, &matrix))
+        return new QCoreTextFontEngine(font, fontDef);
 
-    return NULL;
+    return nullptr;
 }
 
 #ifndef QT_NO_FREETYPE
@@ -443,16 +451,15 @@ QFontEngine *QCoreTextFontDatabaseEngineFactory<QFontEngineFT>::fontEngine(const
 {
     CTFontDescriptorRef descriptor = static_cast<CTFontDescriptorRef>(usrPtr);
 
-    if (NSURL *url = descriptorAttribute<NSURL>(descriptor, kCTFontURLAttribute)) {
+    if (NSValue *fontDataValue = descriptorAttribute<NSValue>(descriptor, (CFStringRef)kQtFontDataAttribute)) {
+        QByteArray *fontData = static_cast<QByteArray *>(fontDataValue.pointerValue);
+        return QFontEngineFT::create(*fontData, fontDef.pixelSize,
+            static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
+    } else if (NSURL *url = descriptorAttribute<NSURL>(descriptor, kCTFontURLAttribute)) {
         Q_ASSERT(url.fileURL);
         QFontEngine::FaceId faceId;
         faceId.filename = QString::fromNSString(url.path).toUtf8();
         return QFontEngineFT::create(fontDef, faceId);
-
-    } else if (NSValue *fontDataValue = descriptorAttribute<NSValue>(descriptor, (CFStringRef)kQtFontDataAttribute)) {
-        QByteArray *fontData = static_cast<QByteArray *>(fontDataValue.pointerValue);
-        return QFontEngineFT::create(*fontData, fontDef.pixelSize,
-            static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
     }
     Q_UNREACHABLE();
 }
@@ -499,6 +506,25 @@ static QString familyNameFromPostScriptName(NSString *psName)
 }
 #endif
 
+static void addExtraFallbacks(QStringList *fallbackList)
+{
+#if defined(Q_OS_MACOS)
+    // Since we are only returning a list of default fonts for the current language, we do not
+    // cover all unicode completely. This was especially an issue for some of the common script
+    // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
+    // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
+    // of Unicode 2.1.
+    if (!fallbackList->contains(QStringLiteral("Arial Unicode MS")))
+        fallbackList->append(QStringLiteral("Arial Unicode MS"));
+    // Since some symbols (specifically Braille) are not in Arial Unicode MS, we
+    // add Apple Symbols to cover those too.
+    if (!fallbackList->contains(QStringLiteral("Apple Symbols")))
+        fallbackList->append(QStringLiteral("Apple Symbols"));
+#else
+    Q_UNUSED(fallbackList)
+#endif
+}
+
 QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
 {
     Q_UNUSED(style);
@@ -526,15 +552,9 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
                         fallbackList.append(QString::fromCFString(fallbackFamilyName));
                     }
 
-#if defined(Q_OS_OSX)
-                    // Since we are only returning a list of default fonts for the current language, we do not
-                    // cover all unicode completely. This was especially an issue for some of the common script
-                    // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
-                    // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
-                    // of Unicode 2.1.
-                    if (!fallbackList.contains(QStringLiteral("Arial Unicode MS")))
-                        fallbackList.append(QStringLiteral("Arial Unicode MS"));
-#endif
+                    addExtraFallbacks(&fallbackList);
+                    extern QStringList qt_sort_families_by_writing_system(QChar::Script, const QStringList &);
+                    fallbackList = qt_sort_families_by_writing_system(script, fallbackList);
 
                     return fallbackList;
                 }
@@ -573,14 +593,7 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
 
             fallbackList.append(QLatin1String("Apple Color Emoji"));
 
-            // Since we are only returning a list of default fonts for the current language, we do not
-            // cover all unicode completely. This was especially an issue for some of the common script
-            // symbols such as mathematical symbols, currency or geometric shapes. To minimize the risk
-            // of missing glyphs, we add Arial Unicode MS as a final fail safe, since this covers most
-            // of Unicode 2.1.
-            if (!fallbackList.contains(QStringLiteral("Arial Unicode MS")))
-                fallbackList.append(QStringLiteral("Arial Unicode MS"));
-
+            addExtraFallbacks(&fallbackList);
             fallbackLists[styleLookupKey.arg(fallbackStyleHint)] = fallbackList;
         }
 #else
@@ -675,8 +688,10 @@ static CTFontUIFontType fontTypeFromTheme(QPlatformTheme::Font f)
         return kCTFontUIFontWindowTitle;
 
     case QPlatformTheme::MdiSubWindowTitleFont:
-    case QPlatformTheme::DockWidgetTitleFont:
         return kCTFontUIFontSystem;
+
+    case QPlatformTheme::DockWidgetTitleFont:
+        return kCTFontUIFontSmallSystem;
 
     case QPlatformTheme::PushButtonFont:
         return kCTFontUIFontPushButton;

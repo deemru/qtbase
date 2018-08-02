@@ -224,7 +224,7 @@ public:
 
     int hSpacing;
     int vSpacing;
-    QLayoutItem* replaceAt(int index, QLayoutItem*) Q_DECL_OVERRIDE;
+    QLayoutItem* replaceAt(int index, QLayoutItem*) override;
 };
 
 QFormLayoutPrivate::QFormLayoutPrivate()
@@ -1558,8 +1558,6 @@ QFormLayout::TakeRowResult QFormLayout::takeRow(int row)
 
     QFormLayoutItem *label = d->m_matrix(row, 0);
     QFormLayoutItem *field = d->m_matrix(row, 1);
-
-    Q_ASSERT(field);
 
     d->m_things.removeOne(label);
     d->m_things.removeOne(field);

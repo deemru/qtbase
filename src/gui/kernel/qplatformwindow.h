@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -79,7 +79,7 @@ public:
     QWindow *window() const;
     QPlatformWindow *parent() const;
 
-    QPlatformScreen *screen() const;
+    QPlatformScreen *screen() const override;
 
     virtual QSurfaceFormat format() const override;
 
@@ -88,6 +88,7 @@ public:
     virtual QRect normalGeometry() const;
 
     virtual QMargins frameMargins() const;
+    virtual QMargins safeAreaMargins() const;
 
     virtual void setVisible(bool visible);
     virtual void setWindowFlags(Qt::WindowFlags flags);
@@ -128,6 +129,7 @@ public:
     virtual void windowEvent(QEvent *event);
 
     virtual bool startSystemResize(const QPoint &pos, Qt::Corner corner);
+    virtual bool startSystemMove(const QPoint &pos);
 
     virtual void setFrameStrutEventsEnabled(bool enabled);
     virtual bool frameStrutEventsEnabled() const;

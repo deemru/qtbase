@@ -209,7 +209,7 @@ static inline void qt_socket_getPortAndAddress(SOCKET socketDescriptor, const qt
 static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
                                     QAbstractSocket::NetworkLayerProtocol socketProtocol, int &level, int &n)
 {
-    n = 0;
+    n = -1;
     level = SOL_SOCKET; // default
 
     switch (opt) {
@@ -281,6 +281,9 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
             n = IP_HOPLIMIT;
         }
         break;
+
+    case QAbstractSocketEngine::PathMtuInformation:
+        break;          // not supported on Windows
     }
 }
 
@@ -471,9 +474,11 @@ int QNativeSocketEnginePrivate::option(QNativeSocketEngine::SocketOption opt) co
     QT_SOCKOPTLEN_T len = sizeof(v);
 
     convertToLevelAndOption(opt, socketProtocol, level, n);
-    if (getsockopt(socketDescriptor, level, n, (char *) &v, &len) == 0)
-        return v;
-    WS_ERROR_DEBUG(WSAGetLastError());
+    if (n != -1) {
+        if (getsockopt(socketDescriptor, level, n, (char *) &v, &len) == 0)
+            return v;
+        WS_ERROR_DEBUG(WSAGetLastError());
+    }
     return -1;
 }
 
@@ -491,9 +496,7 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     switch (opt) {
     case QNativeSocketEngine::SendBufferSocketOption:
         // see QTBUG-30478 SO_SNDBUF should not be used on Vista or later
-        if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA)
-            return false;
-        break;
+        return false;
     case QNativeSocketEngine::NonBlockingSocketOption:
         {
         unsigned long buf = v;
@@ -516,6 +519,8 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
 
     int n, level;
     convertToLevelAndOption(opt, socketProtocol, level, n);
+    if (n == -1)
+        return false;
     if (::setsockopt(socketDescriptor, level, n, (char*)&v, sizeof(v)) != 0) {
         WS_ERROR_DEBUG(WSAGetLastError());
         return false;
@@ -571,7 +576,6 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
     DWORD ipv6only = 0;
     QT_SOCKOPTLEN_T optlen = sizeof(ipv6only);
     if (localAddress == QHostAddress::AnyIPv6
-        && QSysInfo::windowsVersion() >= QSysInfo::WV_6_0
         && !getsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&ipv6only, &optlen )) {
             if (!ipv6only) {
                 socketProtocol = QAbstractSocket::AnyIPProtocol;
@@ -632,10 +636,8 @@ bool QNativeSocketEnginePrivate::nativeConnect(const QHostAddress &address, quin
 
     if ((socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) && address.toIPv4Address()) {
         //IPV6_V6ONLY option must be cleared to connect to a V4 mapped address
-        if (QSysInfo::windowsVersion() >= QSysInfo::WV_6_0) {
-            DWORD ipv6only = 0;
-            ipv6only = ::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&ipv6only, sizeof(ipv6only) );
-        }
+        DWORD ipv6only = 0;
+        ipv6only = ::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&ipv6only, sizeof(ipv6only) );
     }
 
     forever {
@@ -1213,10 +1215,8 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxL
     msg.dwBufferCount = 1;
     msg.name = reinterpret_cast<LPSOCKADDR>(&aa);
     msg.namelen = sizeof(aa);
-    if (options & (QAbstractSocketEngine::WantDatagramHopLimit | QAbstractSocketEngine::WantDatagramDestination)) {
-        msg.Control.buf = cbuf;
-        msg.Control.len = sizeof(cbuf);
-    }
+    msg.Control.buf = cbuf;
+    msg.Control.len = sizeof(cbuf);
 
     DWORD flags = 0;
     DWORD bytesRead = 0;
@@ -1321,6 +1321,9 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
 
     setPortAndAddress(header.destinationPort, header.destinationAddress, &aa, &msg.namelen);
 
+    uint oldIfIndex = 0;
+    bool mustSetIpv6MulticastIf = false;
+
     if (msg.namelen == sizeof(aa.a6)) {
         // sending IPv6
         if (header.hopLimit != -1) {
@@ -1332,7 +1335,7 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
             cmsgptr = reinterpret_cast<WSACMSGHDR *>(reinterpret_cast<char *>(cmsgptr)
                                                      + WSA_CMSG_SPACE(sizeof(int)));
         }
-        if (header.ifindex != 0 || !header.senderAddress.isNull()) {
+        if (!header.senderAddress.isNull()) {
             struct in6_pktinfo *data = reinterpret_cast<in6_pktinfo *>(WSA_CMSG_DATA(cmsgptr));
             memset(data, 0, sizeof(*data));
             msg.Control.len += WSA_CMSG_SPACE(sizeof(*data));
@@ -1345,6 +1348,21 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
             memcpy(&data->ipi6_addr, &tmp, sizeof(tmp));
             cmsgptr = reinterpret_cast<WSACMSGHDR *>(reinterpret_cast<char *>(cmsgptr)
                                                      + WSA_CMSG_SPACE(sizeof(*data)));
+        } else if (header.ifindex != 0) {
+            // Unlike other operating systems, setting the interface index in the in6_pktinfo
+            // structure above and leaving the ipi6_addr set to :: will cause the packets to be
+            // sent with source address ::. So we have to use IPV6_MULTICAST_IF, which MSDN is
+            // quite clear that "This option does not change the default interface for receiving
+            // IPv6 multicast traffic."
+            QT_SOCKOPTLEN_T len = sizeof(oldIfIndex);
+            if (::getsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_MULTICAST_IF,
+                             reinterpret_cast<char *>(&oldIfIndex), &len) == -1
+                    || ::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_MULTICAST_IF,
+                                    reinterpret_cast<const char *>(&header.ifindex), sizeof(header.ifindex)) == -1) {
+                setError(QAbstractSocket::NetworkError, SendDatagramErrorString);
+                return -1;
+            }
+            mustSetIpv6MulticastIf = true;
         }
     } else {
         // sending IPv4
@@ -1396,6 +1414,12 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
         ret = -1;
     } else {
         ret = qint64(bytesSent);
+    }
+
+    if (mustSetIpv6MulticastIf) {
+        // undo what we did above
+        ::setsockopt(socketDescriptor, IPPROTO_IPV6, IPV6_MULTICAST_IF,
+                     reinterpret_cast<char *>(&oldIfIndex), sizeof(oldIfIndex));
     }
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)

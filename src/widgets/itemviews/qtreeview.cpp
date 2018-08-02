@@ -311,7 +311,7 @@ void QTreeView::setHeader(QHeaderView *header)
         delete d->header;
     d->header = header;
     d->header->setParent(this);
-    d->header->d_func()->setAllowUserMoveOfSection0(false);
+    d->header->setFirstSectionMovable(false);
 
     if (!d->header->model()) {
         d->header->setModel(d->model);
@@ -736,7 +736,10 @@ void QTreeView::dataChanged(const QModelIndex &topLeft, const QModelIndex &botto
 void QTreeView::hideColumn(int column)
 {
     Q_D(QTreeView);
+    if (d->header->isSectionHidden(column))
+        return;
     d->header->hideSection(column);
+    doItemsLayout();
 }
 
 /*!
@@ -747,7 +750,10 @@ void QTreeView::hideColumn(int column)
 void QTreeView::showColumn(int column)
 {
     Q_D(QTreeView);
+    if (!d->header->isSectionHidden(column))
+        return;
     d->header->showSection(column);
+    doItemsLayout();
 }
 
 /*!
@@ -981,7 +987,7 @@ void QTreeView::setTreePosition(int index)
 {
     Q_D(QTreeView);
     d->treePosition = index;
-    update();
+    d->viewport->update();
 }
 
 /*!
@@ -1008,11 +1014,16 @@ void QTreeView::keyboardSearch(const QString &search)
     if (!d->model->rowCount(d->root) || !d->model->columnCount(d->root))
         return;
 
+    // Do a relayout nows, so that we can utilize viewItems
+    d->executePostedLayout();
+    if (d->viewItems.isEmpty())
+        return;
+
     QModelIndex start;
     if (currentIndex().isValid())
         start = currentIndex();
     else
-        start = d->model->index(0, 0, d->root);
+        start = d->viewItems.at(0).index;
 
     bool skipRow = false;
     bool keyboardTimeWasValid = d->keyboardInputTime.isValid();
@@ -1040,13 +1051,16 @@ void QTreeView::keyboardSearch(const QString &search)
 
     // skip if we are searching for the same key or a new search started
     if (skipRow) {
-        if (indexBelow(start).isValid())
+        if (indexBelow(start).isValid()) {
             start = indexBelow(start);
-        else
-            start = d->model->index(0, start.column(), d->root);
+        } else {
+            const int origCol = start.column();
+            start = d->viewItems.at(0).index;
+            if (origCol != start.column())
+                start = start.sibling(start.row(), origCol);
+        }
     }
 
-    d->executePostedLayout();
     int startIndex = d->viewIndex(start);
     if (startIndex <= -1)
         return;
@@ -1273,7 +1287,7 @@ void QTreeView::timerEvent(QTimerEvent *event)
 /*!
   \reimp
 */
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
 void QTreeView::dragMoveEvent(QDragMoveEvent *event)
 {
     Q_D(QTreeView);
@@ -1328,7 +1342,7 @@ void QTreeView::paintEvent(QPaintEvent *event)
 #endif //QT_NO_ANIMATION
     {
         drawTree(&painter, event->region());
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
         d->paintDropIndicator(&painter);
 #endif
     }
@@ -3503,7 +3517,7 @@ int QTreeViewPrivate::itemAtCoordinate(int coordinate) const
         const int contentsCoordinate = coordinate + vbar->value();
         for (int viewItemIndex = 0; viewItemIndex < viewItems.count(); ++viewItemIndex) {
             viewItemCoordinate += itemHeight(viewItemIndex);
-            if (viewItemCoordinate >= contentsCoordinate)
+            if (viewItemCoordinate > contentsCoordinate)
                 return (viewItemIndex >= itemCount ? -1 : viewItemIndex);
         }
     } else { // ScrollPerItem
@@ -3990,6 +4004,27 @@ int QTreeView::visualIndex(const QModelIndex &index) const
     Q_D(const QTreeView);
     d->executePostedLayout();
     return d->viewIndex(index);
+}
+
+/*!
+   \internal
+*/
+
+void QTreeView::verticalScrollbarValueChanged(int value)
+{
+    Q_D(QTreeView);
+    if (!d->viewItems.isEmpty() && value == verticalScrollBar()->maximum()) {
+        QModelIndex ret = d->viewItems.last().index;
+        // Root index will be handled by base class implementation
+        while (ret.isValid()) {
+            if (isExpanded(ret) && d->model->canFetchMore(ret)) {
+                d->model->fetchMore(ret);
+                break;
+            }
+            ret = ret.parent();
+        }
+    }
+    QAbstractItemView::verticalScrollbarValueChanged(value);
 }
 
 QT_END_NAMESPACE

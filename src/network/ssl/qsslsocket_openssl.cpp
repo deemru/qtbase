@@ -681,7 +681,7 @@ static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
     int err = msspi_state( h );
     if( err & MSSPI_ERROR )
         return SSL_ERROR_SSL;
-    if( err & MSSPI_RECEIVED_SHUTDOWN )
+    if( err & MSSPI_SENT_SHUTDOWN && err & MSSPI_RECEIVED_SHUTDOWN )
         return SSL_ERROR_ZERO_RETURN;
     if( err & MSSPI_WRITING )
     {

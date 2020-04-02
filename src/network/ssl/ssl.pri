@@ -79,6 +79,8 @@ contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
     } else {
         LIBS_PRIVATE += $$OPENSSL_LIBS_RELEASE
     }
+    HEADERS += ssl/msspi/src/msspi.h
+    SOURCES += ssl/msspi/src/msspi.cpp
 
     QMAKE_CXXFLAGS += $$OPENSSL_CFLAGS
     LIBS_PRIVATE += $$OPENSSL_LIBS

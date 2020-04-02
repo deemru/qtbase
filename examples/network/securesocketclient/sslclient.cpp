@@ -58,6 +58,7 @@
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QMessageBox>
 #include <QtNetwork/QSslCipher>
+#include <QtNetwork/QSslConfiguration>
 
 SslClient::SslClient(QWidget *parent)
     : QWidget(parent), socket(0), padLock(0), executingDialog(false)
@@ -115,6 +116,9 @@ void SslClient::secureConnect()
                 this, SLOT(socketReadyRead()));
     }
 
+    QSslConfiguration conf;
+    conf.setSslOption( QSsl::SslOptionEnableMSSPI, true );
+    socket->setSslConfiguration( conf );
     socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     updateEnabledState();
 }

@@ -68,11 +68,15 @@ public:
     bool usePCH;
     VCProjectWriter *projectWriter;
 
+    using Win32MakefileGenerator::callExtraCompilerDependCommand;
+
 protected:
     virtual VCProjectWriter *createProjectWriter();
     bool doDepends() const override { return false; } // Never necessary
     using Win32MakefileGenerator::replaceExtraCompilerVariables;
     QString replaceExtraCompilerVariables(const QString &, const QStringList &, const QStringList &, ReplaceFor) override;
+    QString extraCompilerName(const ProString &extraCompiler, const QStringList &inputs,
+                              const QStringList &outputs);
     bool supportsMetaBuild() override { return true; }
     bool supportsMergedBuilds() override { return true; }
     bool mergeBuildProject(MakefileGenerator *other) override;
@@ -131,6 +135,7 @@ private:
     ProString firstInputFileName(const ProString &extraCompilerName) const;
     QString firstExpandedOutputFileName(const ProString &extraCompilerName);
     void createCustomBuildToolFakeFile(const QString &cbtFilePath, const QString &realOutFilePath);
+    bool otherFiltersContain(const QString &fileName) const;
     friend class VCFilter;
 };
 

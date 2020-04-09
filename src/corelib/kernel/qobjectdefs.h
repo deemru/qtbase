@@ -523,7 +523,7 @@ struct Q_CORE_EXPORT QMetaObject
                  Qt::ConnectionType type = Qt::AutoConnection, decltype(function()) *ret = nullptr)
     {
         return invokeMethodImpl(context,
-                                new QtPrivate::QFunctorSlotObjectWithNoArgs<Func, decltype(function())>(function),
+                                new QtPrivate::QFunctorSlotObjectWithNoArgs<Func, decltype(function())>(std::move(function)),
                                 type,
                                 ret);
     }
@@ -532,10 +532,10 @@ struct Q_CORE_EXPORT QMetaObject
     static typename std::enable_if<!QtPrivate::FunctionPointer<Func>::IsPointerToMemberFunction
                                    && QtPrivate::FunctionPointer<Func>::ArgumentCount == -1
                                    && !std::is_convertible<Func, const char*>::value, bool>::type
-    invokeMethod(QObject *context, Func function, typename std::result_of<Func()>::type *ret)
+    invokeMethod(QObject *context, Func function, decltype(function()) *ret)
     {
         return invokeMethodImpl(context,
-                                new QtPrivate::QFunctorSlotObjectWithNoArgs<Func, decltype(function())>(function),
+                                new QtPrivate::QFunctorSlotObjectWithNoArgs<Func, decltype(function())>(std::move(function)),
                                 Qt::AutoConnection,
                                 ret);
     }

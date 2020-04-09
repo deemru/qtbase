@@ -52,6 +52,7 @@
 #include <QScreen>
 #include <QDir>
 #if QT_CONFIG(regularexpression)
+#  include <QFileInfo>
 #  include <QRegularExpression>
 #endif
 #include <QLoggingCategory>
@@ -144,7 +145,12 @@ int QEglFSDeviceIntegration::framebufferIndex() const
     int fbIndex = 0;
 #if QT_CONFIG(regularexpression)
     QRegularExpression fbIndexRx(QLatin1String("fb(\\d+)"));
-    QRegularExpressionMatch match = fbIndexRx.match(QString::fromLocal8Bit(fbDeviceName()));
+    QFileInfo fbinfo(QString::fromLocal8Bit(fbDeviceName()));
+    QRegularExpressionMatch match;
+    if (fbinfo.isSymLink())
+        match = fbIndexRx.match(fbinfo.symLinkTarget());
+    else
+        match = fbIndexRx.match(fbinfo.fileName());
     if (match.hasMatch())
         fbIndex = match.captured(1).toInt();
 #endif
@@ -200,10 +206,8 @@ void QEglFSDeviceIntegration::screenInit()
 void QEglFSDeviceIntegration::screenDestroy()
 {
     QGuiApplication *app = qGuiApp;
-    QEglFSIntegration *platformIntegration = static_cast<QEglFSIntegration *>(
-        QGuiApplicationPrivate::platformIntegration());
     while (!app->screens().isEmpty())
-        platformIntegration->removeScreen(app->screens().constLast()->handle());
+        QWindowSystemInterface::handleScreenRemoved(app->screens().constLast()->handle());
 }
 
 QSizeF QEglFSDeviceIntegration::physicalScreenSize() const

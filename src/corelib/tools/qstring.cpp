@@ -501,7 +501,11 @@ bool qt_is_ascii(const char *&ptr, const char *end) Q_DECL_NOTHROW
     while (ptr + 4 <= end) {
         quint32 data = qFromUnaligned<quint32>(ptr);
         if (data &= 0x80808080U) {
+#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+            uint idx = qCountLeadingZeroBits(data);
+#else
             uint idx = qCountTrailingZeroBits(data);
+#endif
             ptr += idx / 8;
             return false;
         }
@@ -914,7 +918,7 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
     };
 
     // we're going to read a[0..15] and b[0..15] (32 bytes)
-    for ( ; a + offset + 16 <= end; offset += 16) {
+    for ( ; end - a >= offset + 16; offset += 16) {
 #ifdef __AVX2__
         __m256i a_data = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(a + offset));
         __m256i b_data = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(b + offset));
@@ -938,7 +942,7 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
     }
 
     // we're going to read a[0..7] and b[0..7] (16 bytes)
-    if (a + offset + 8 <= end) {
+    if (end - a >= offset + 8) {
         __m128i a_data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(a + offset));
         __m128i b_data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(b + offset));
         if (isDifferent(a_data, b_data))
@@ -948,7 +952,7 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
     }
 
     // we're going to read a[0..3] and b[0..3] (8 bytes)
-    if (a + offset + 4 <= end) {
+    if (end - a >= offset + 4) {
         __m128i a_data = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(a + offset));
         __m128i b_data = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(b + offset));
         if (isDifferent(a_data, b_data))
@@ -969,7 +973,7 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
     if (l >= 8) {
         const QChar *end = a + l;
         const uint16x8_t mask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
-        while (a + 7 < end) {
+        while (end - a > 7) {
             uint16x8_t da = vld1q_u16(reinterpret_cast<const uint16_t *>(a));
             uint16x8_t db = vld1q_u16(reinterpret_cast<const uint16_t *>(b));
 
@@ -1047,6 +1051,7 @@ static int ucstrncmp(const QChar *a, const uchar *c, size_t l)
     __m128i nullmask = _mm_setzero_si128();
     qptrdiff offset = 0;
 
+#  if !defined(__OPTIMIZE_SIZE__)
     // Using the PMOVMSKB instruction, we get two bits for each character
     // we compare.
     int retval;
@@ -1059,6 +1064,7 @@ static int ucstrncmp(const QChar *a, const uchar *c, size_t l)
         retval = uc[offset + idx / 2] - c[offset + idx / 2];
         return true;
     };
+#  endif
 
     // we're going to read uc[offset..offset+15] (32 bytes)
     // and c[offset..offset+15] (16 bytes)
@@ -1193,10 +1199,10 @@ static int qt_compare_strings(QLatin1String lhs, QStringView rhs, Qt::CaseSensit
 
 static int qt_compare_strings(QLatin1String lhs, QLatin1String rhs, Qt::CaseSensitivity cs) Q_DECL_NOTHROW
 {
-    if (cs == Qt::CaseInsensitive)
-        return qstrnicmp(lhs.data(), lhs.size(), rhs.data(), rhs.size());
     if (lhs.isEmpty())
         return lencmp(0, rhs.size());
+    if (cs == Qt::CaseInsensitive)
+        return qstrnicmp(lhs.data(), lhs.size(), rhs.data(), rhs.size());
     const auto l = std::min(lhs.size(), rhs.size());
     int r = qstrncmp(lhs.data(), rhs.data(), l);
     return r ? r : lencmp(lhs.size(), rhs.size());

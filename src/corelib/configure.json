@@ -343,7 +343,8 @@
                     "# Block futimens() on Apple platforms unless it's available on ALL",
                     "# deployment targets. This simplifies the logic at the call site",
                     "# dramatically, as it isn't strictly needed compared to futimes().",
-                    "darwin: QMAKE_CXXFLAGS += -Werror=unguarded-availability"
+                    "darwin: QMAKE_CXXFLAGS += -Werror=unguarded-availability -Werror=unguarded-availability-new",
+                    "CONFIG += warn_on"
                 ]
             }
         },
@@ -371,6 +372,16 @@
                 "main": [
                     "char buf[32];",
                     "(void) getentropy(buf, sizeof(buf));"
+                ]
+            }
+        },
+        "glibc": {
+            "label": "GNU libc",
+            "type": "compile",
+            "test": {
+                "include": "stdlib.h",
+                "main": [
+                    "return __GLIBC__;"
                 ]
             }
         },
@@ -593,6 +604,12 @@
             "condition": "libs.glib",
             "output": [ "privateFeature", "feature" ]
         },
+        "glibc": {
+            "label": "GNU libc",
+            "autoDetect": "config.linux",
+            "condition": "tests.glibc",
+            "output": [ "privateFeature" ]
+        },
         "iconv": {
             "label": "iconv",
             "purpose": "Provides internationalization on Unix.",
@@ -798,7 +815,7 @@
         },
         "datestring": {
             "label": "QDate/QTime/QDateTime",
-            "purpose": "Provides convertion between dates and strings.",
+            "purpose": "Provides conversion between dates and strings.",
             "section": "Data structures",
             "condition": "features.textdate",
             "output": [ "publicFeature", "feature" ]

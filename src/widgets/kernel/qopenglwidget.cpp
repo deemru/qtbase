@@ -788,10 +788,12 @@ void QOpenGLWidgetPrivate::initialize()
     if (initialized)
         return;
 
-    // Get our toplevel's context with which we will share in order to make the
-    // texture usable by the underlying window's backingstore.
+    // If no global shared context get our toplevel's context with which we
+    // will share in order to make the texture usable by the underlying window's backingstore.
     QWidget *tlw = q->window();
-    QOpenGLContext *shareContext = get(tlw)->shareContext();
+    QOpenGLContext *shareContext = qt_gl_global_share_context();
+    if (!shareContext)
+        shareContext = get(tlw)->shareContext();
     // If shareContext is null, showing content on-screen will not work.
     // However, offscreen rendering and grabFramebuffer() will stay fully functional.
 
@@ -1448,7 +1450,8 @@ bool QOpenGLWidget::event(QEvent *e)
         {
             // Special case: did grabFramebuffer() for a hidden widget that then became visible.
             // Recreate all resources since the context now needs to share with the TLW's.
-            d->reset();
+            if (!qGuiApp->testAttribute(Qt::AA_ShareOpenGLContexts))
+                d->reset();
         }
         if (!d->initialized && !size().isEmpty() && window()->windowHandle()) {
             d->initialize();

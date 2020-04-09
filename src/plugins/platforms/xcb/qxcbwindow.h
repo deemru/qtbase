@@ -68,7 +68,8 @@ public:
         NetWmStateMaximizedVert = 0x10,
         NetWmStateModal = 0x20,
         NetWmStateStaysOnTop = 0x40,
-        NetWmStateDemandsAttention = 0x80
+        NetWmStateDemandsAttention = 0x80,
+        NetWmStateHidden = 0x100
     };
 
     Q_DECLARE_FLAGS(NetWmStates, NetWmState)
@@ -184,6 +185,9 @@ public:
     static void setWindowTitle(const QXcbConnection *conn, xcb_window_t window, const QString &title);
     static QString windowTitle(const QXcbConnection *conn, xcb_window_t window);
 
+    int swapInterval() const { return m_swapInterval; }
+    void setSwapInterval(int swapInterval) { m_swapInterval = swapInterval; }
+
 public Q_SLOTS:
     void updateSyncRequestCounter();
 
@@ -276,6 +280,7 @@ protected:
     SyncState m_syncState = NoSyncNeeded;
 
     QXcbSyncWindowRequest *m_pendingSyncRequest = nullptr;
+    int m_swapInterval = -1;
 };
 
 class QXcbForeignWindow : public QXcbWindow

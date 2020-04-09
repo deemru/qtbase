@@ -1146,6 +1146,14 @@ bool VCCLCompilerTool::parseOption(const char* option)
             ShowIncludes = _True;
             break;
         }
+        if (strlen(option) > 8 && second == 't' && third == 'd') {
+            const QString version = option + 8;
+            static const QStringList knownVersions = { "14", "17", "latest" };
+            if (knownVersions.contains(version)) {
+                LanguageStandard = "stdcpp" + version;
+                break;
+            }
+        }
         found = false; break;
     case 'u':
         if (!second)
@@ -1559,21 +1567,12 @@ bool VCLinkerTool::parseOption(const char* option)
                 const char* str = option+6;
                 if (*str == 'S')
                     ShowProgress = linkProgressAll;
-#ifndef Q_OS_WIN
-                else if (strncasecmp(str, "pginstrument", 12))
+                else if (qstricmp(str, "pginstrument") == 0)
                     LinkTimeCodeGeneration = optLTCGInstrument;
-                else if (strncasecmp(str, "pgoptimize", 10))
+                else if (qstricmp(str, "pgoptimize") == 0)
                     LinkTimeCodeGeneration = optLTCGOptimize;
-                else if (strncasecmp(str, "pgupdate", 8 ))
+                else if (qstricmp(str, "pgupdate") == 0)
                     LinkTimeCodeGeneration = optLTCGUpdate;
-#else
-                else if (_stricmp(str, "pginstrument"))
-                    LinkTimeCodeGeneration = optLTCGInstrument;
-                else if (_stricmp(str, "pgoptimize"))
-                    LinkTimeCodeGeneration = optLTCGOptimize;
-                else if (_stricmp(str, "pgupdate"))
-                    LinkTimeCodeGeneration = optLTCGUpdate;
-#endif
             }
         } else {
             AdditionalOptions.append(option);
@@ -1982,6 +1981,7 @@ bool VCMIDLTool::parseOption(const char* option)
         break;
     case 0x5eb7af2: // /header filename
         offset = 5;
+        Q_FALLTHROUGH();
     case 0x0000358: // /h filename
         HeaderFileName = option + offset + 3;
         break;
@@ -2350,33 +2350,15 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         if (!tmp_dep.isEmpty())
             deps = tmp_dep;
         if (!tmp_dep_cmd.isEmpty()) {
-            // Execute dependency command, and add every line as a dep
-            char buff[256];
-            QString dep_cmd = Project->replaceExtraCompilerVariables(
-                        tmp_dep_cmd, inFile, out, MakefileGenerator::LocalShell);
-            if(Project->canExecute(dep_cmd)) {
-                dep_cmd.prepend(QLatin1String("cd ")
-                                + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
-                                + QLatin1String(" && "));
-                if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
-                    QString indeps;
-                    while(!feof(proc)) {
-                        int read_in = (int)fread(buff, 1, 255, proc);
-                        if(!read_in)
-                            break;
-                        indeps += QByteArray(buff, read_in);
-                    }
-                    QT_PCLOSE(proc);
-                    if(!indeps.isEmpty()) {
-                        QStringList extradeps = indeps.split(QLatin1Char('\n'));
-                        for (int i = 0; i < extradeps.count(); ++i) {
-                            QString dd = extradeps.at(i).simplified();
-                            if (!dd.isEmpty())
-                                deps += Project->fileFixify(dd, MakefileGenerator::FileFixifyFromOutdir);
-                        }
-                    }
-                }
-            }
+            const QString dep_cd_cmd = QLatin1String("cd ")
+                    + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
+                    + QLatin1String(" && ");
+            Project->callExtraCompilerDependCommand(extraCompilerName, dep_cd_cmd, tmp_dep_cmd,
+                                                    inFile, out,
+                                                    true, // dep_lines
+                                                    &deps,
+                                                    configs.contains("dep_existing_only"),
+                                                    true  /* checkCommandAvailability */);
         }
         for (int i = 0; i < deps.count(); ++i)
             deps[i] = Option::fixPathToTargetOS(

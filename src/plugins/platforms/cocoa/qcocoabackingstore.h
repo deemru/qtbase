@@ -44,20 +44,89 @@
 
 #include <private/qcore_mac_p.h>
 
+#include <QScopedPointer>
+#include "qiosurfacegraphicsbuffer.h"
+
+#include <unordered_map>
+
 QT_BEGIN_NAMESPACE
 
 class QCocoaBackingStore : public QRasterBackingStore
 {
-public:
+protected:
     QCocoaBackingStore(QWindow *window);
-    ~QCocoaBackingStore();
+    QCFType<CGColorSpaceRef> colorSpace() const;
+};
 
+class QNSWindowBackingStore : public QCocoaBackingStore
+{
+public:
+    QNSWindowBackingStore(QWindow *window);
+    ~QNSWindowBackingStore();
+
+    void resize(const QSize &size, const QRegion &staticContents) override;
     void flush(QWindow *, const QRegion &, const QPoint &) override;
 
 private:
     bool windowHasUnifiedToolbar() const;
     QImage::Format format() const override;
     void redrawRoundedBottomCorners(CGRect) const;
+};
+
+class QCALayerBackingStore : public QObject, public QCocoaBackingStore
+{
+    Q_OBJECT
+public:
+    QCALayerBackingStore(QWindow *window);
+    ~QCALayerBackingStore();
+
+    void resize(const QSize &size, const QRegion &staticContents) override;
+
+    void beginPaint(const QRegion &region) override;
+    QPaintDevice *paintDevice() override;
+    void endPaint() override;
+
+    void flush(QWindow *, const QRegion &, const QPoint &) override;
+#ifndef QT_NO_OPENGL
+    void composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
+        QPlatformTextureList *textures, bool translucentBackground) override;
+#endif
+
+    QImage toImage() const override;
+    QPlatformGraphicsBuffer *graphicsBuffer() const override;
+
+private:
+    QSize m_requestedSize;
+    QRegion m_paintedRegion;
+
+    class GraphicsBuffer : public QIOSurfaceGraphicsBuffer
+    {
+    public:
+        GraphicsBuffer(const QSize &size, qreal devicePixelRatio,
+                const QPixelFormat &format, QCFType<CGColorSpaceRef> colorSpace);
+
+        QRegion dirtyRegion; // In unscaled coordinates
+        QImage *asImage();
+        qreal devicePixelRatio() const { return m_devicePixelRatio; }
+
+    private:
+        qreal m_devicePixelRatio;
+        QImage m_image;
+    };
+
+    void ensureBackBuffer();
+    bool recreateBackBufferIfNeeded();
+    bool prepareForFlush();
+
+    void backingPropertiesChanged();
+    QMacNotificationObserver m_backingPropertiesObserver;
+
+    std::list<std::unique_ptr<GraphicsBuffer>> m_buffers;
+
+    void flushSubWindow(QWindow *window);
+    std::unordered_map<QWindow*, std::unique_ptr<QCALayerBackingStore>> m_subWindowBackingstores;
+    void windowDestroyed(QObject *object);
+    bool m_clearSurfaceOnPaint = true;
 };
 
 QT_END_NAMESPACE

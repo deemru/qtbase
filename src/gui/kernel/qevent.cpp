@@ -2494,6 +2494,7 @@ QTabletEvent::QTabletEvent(Type type, const QPointF &pos, const QPointF &globalP
 */
 QTabletEvent::~QTabletEvent()
 {
+    delete static_cast<QTabletEventPrivate *>(mExtra);
 }
 
 /*!
@@ -2750,7 +2751,7 @@ Qt::MouseButtons QTabletEvent::buttons() const
     \header
         \li Event Type
         \li Description
-        \li Touch equence
+        \li Touch sequence
     \row
         \li Qt::ZoomNativeGesture
         \li Magnification delta in percent.
@@ -4119,7 +4120,7 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
         const QNativeGestureEvent *ne = static_cast<const QNativeGestureEvent *>(e);
         dbg << "QNativeGestureEvent(";
         QtDebugUtils::formatQEnum(dbg, ne->gestureType());
-        dbg << "localPos=";
+        dbg << ", localPos=";
         QtDebugUtils::formatQPoint(dbg, ne->localPos());
         dbg << ", value=" << ne->value() << ')';
     }
@@ -4994,7 +4995,9 @@ void QTouchEvent::TouchPoint::setLastNormalizedPos(const QPointF &lastNormalized
 }
 
 // ### remove the following 3 setRect functions and their usages soon
-/*! \internal \obsolete */
+/*! \internal
+    \obsolete
+*/
 void QTouchEvent::TouchPoint::setRect(const QRectF &rect)
 {
     if (d->ref.load() != 1)
@@ -5003,7 +5006,9 @@ void QTouchEvent::TouchPoint::setRect(const QRectF &rect)
     d->ellipseDiameters = rect.size();
 }
 
-/*! \internal \obsolete */
+/*! \internal
+    \obsolete
+*/
 void QTouchEvent::TouchPoint::setSceneRect(const QRectF &sceneRect)
 {
     if (d->ref.load() != 1)
@@ -5012,7 +5017,9 @@ void QTouchEvent::TouchPoint::setSceneRect(const QRectF &sceneRect)
     d->ellipseDiameters = sceneRect.size();
 }
 
-/*! \internal \obsolete */
+/*! \internal
+    \obsolete
+*/
 void QTouchEvent::TouchPoint::setScreenRect(const QRectF &screenRect)
 {
     if (d->ref.load() != 1)

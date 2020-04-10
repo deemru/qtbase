@@ -40,8 +40,6 @@
 #include "qfilesystemwatcher.h"
 #include "qfilesystemwatcher_inotify_p.h"
 
-#ifndef QT_NO_FILESYSTEMWATCHER
-
 #include "private/qcore_unix_p.h"
 #include "private/qsystemerror_p.h"
 
@@ -302,7 +300,8 @@ QStringList QInotifyFileSystemWatcherEngine::addPaths(const QStringList &paths,
                                        | IN_DELETE_SELF
                                        )));
         if (wd < 0) {
-            qWarning().nospace() << "inotify_add_watch(" << path << ") failed: " << QSystemError(errno, QSystemError::NativeError).toString();
+            if (errno != ENOENT)
+                qErrnoWarning("inotify_add_watch(%ls) failed:", path.constData());
             continue;
         }
 
@@ -426,5 +425,3 @@ QString QInotifyFileSystemWatcherEngine::getPathFromID(int id) const
 QT_END_NAMESPACE
 
 #include "moc_qfilesystemwatcher_inotify_p.cpp"
-
-#endif // QT_NO_FILESYSTEMWATCHER

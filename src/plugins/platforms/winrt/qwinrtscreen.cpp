@@ -1250,10 +1250,11 @@ HRESULT QWinRTScreen::onPointerUpdated(ICoreWindow *, IPointerEventArgs *args)
         boolean isPressed;
         pointerPoint->get_IsInContact(&isPressed);
 
-        // Devices like the Hololens set a static pressure of 0.5 independent
-        // of the pressed state. In those cases we need to synthesize the
-        // pressure value. To our knowledge this does not apply to pens
-        if (pointerDeviceType == PointerDeviceType_Touch && pressure == 0.5f)
+        // Devices like the Hololens set a static pressure of 0.0 or 0.5
+        // (depending on the image) independent of the pressed state.
+        // In those cases we need to synthesize the pressure value. To our
+        // knowledge this does not apply to pens
+        if (pointerDeviceType == PointerDeviceType_Touch && (pressure == 0.0f || pressure == 0.5f))
             pressure = isPressed ? 1. : 0.;
 
         const QRectF areaRect(area.X * d->scaleFactor, area.Y * d->scaleFactor,
@@ -1265,7 +1266,8 @@ HRESULT QWinRTScreen::onPointerUpdated(ICoreWindow *, IPointerEventArgs *args)
             it.value().id = id;
         }
 
-        if (isPressed && it.value().pressure == 0.)
+        const bool wasPressEvent = isPressed && it.value().pressure == 0.;
+        if (wasPressEvent)
             it.value().state = Qt::TouchPointPressed;
         else if (!isPressed && it.value().pressure > 0.)
             it.value().state = Qt::TouchPointReleased;
@@ -1279,6 +1281,8 @@ HRESULT QWinRTScreen::onPointerUpdated(ICoreWindow *, IPointerEventArgs *args)
         it.value().pressure = pressure;
 
         QWindowSystemInterface::handleTouchEvent(d->currentTargetWindow, d->touchDevice, d->touchPoints.values(), mods);
+        if (wasPressEvent)
+            it.value().state = Qt::TouchPointStationary;
 
         // Fall-through for pen to generate tablet event
         if (pointerDeviceType != PointerDeviceType_Pen)

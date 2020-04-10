@@ -46,7 +46,7 @@
 /*!
     \class QSharedPointer
     \inmodule QtCore
-    \brief The QSharedPointer class holds a strong reference to a shared pointer
+    \brief The QSharedPointer class holds a strong reference to a shared pointer.
     \since 4.5
 
     \reentrant
@@ -315,7 +315,7 @@
 /*!
     \class QWeakPointer
     \inmodule QtCore
-    \brief The QWeakPointer class holds a weak reference to a shared pointer
+    \brief The QWeakPointer class holds a weak reference to a shared pointer.
     \since 4.5
     \reentrant
 
@@ -373,7 +373,7 @@
 /*!
     \class QEnableSharedFromThis
     \inmodule QtCore
-    \brief A base class that allows obtaining a QSharedPointer for an object already managed by a shared pointer
+    \brief A base class that allows obtaining a QSharedPointer for an object already managed by a shared pointer.
     \since 5.4
 
     You can inherit this class when you need to create a QSharedPointer
@@ -1466,6 +1466,9 @@ QtSharedPointer::ExternalRefCountData *QtSharedPointer::ExternalRefCountData::ge
     x->strongref.store(-1);
     x->weakref.store(2);  // the QWeakPointer that called us plus the QObject itself
     if (!d->sharedRefcount.testAndSetRelease(0, x)) {
+        // ~ExternalRefCountData has a Q_ASSERT, so we use this trick to
+        // only execute this if Q_ASSERTs are enabled
+        Q_ASSERT((x->weakref.store(0), true));
         delete x;
         x = d->sharedRefcount.loadAcquire();
         x->weakref.ref();

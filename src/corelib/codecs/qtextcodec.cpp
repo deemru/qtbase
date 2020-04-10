@@ -38,10 +38,9 @@
 ****************************************************************************/
 
 #include "qplatformdefs.h"
+
 #include "qtextcodec.h"
 #include "qtextcodec_p.h"
-
-#ifndef QT_NO_TEXTCODEC
 
 #include "qbytearraymatcher.h"
 #include "qlist.h"
@@ -57,8 +56,10 @@
 #include "qlatincodec_p.h"
 
 #if !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(codecs)
 #  include "qtsciicodec_p.h"
 #  include "qisciicodec_p.h"
+#endif
 #if QT_CONFIG(icu)
 #include "qicucodec_p.h"
 #else
@@ -69,7 +70,7 @@
 #  include "qwindowscodec_p.h"
 #endif
 #  include "qsimplecodec_p.h"
-#if !defined(QT_NO_BIG_CODECS)
+#if QT_CONFIG(big_codecs)
 #  ifndef Q_OS_INTEGRITY
 #    include "qgb18030codec_p.h"
 #    include "qeucjpcodec_p.h"
@@ -78,7 +79,7 @@
 #    include "qeuckrcodec_p.h"
 #    include "qbig5codec_p.h"
 #  endif // !Q_OS_INTEGRITY
-#endif // !QT_NO_BIG_CODECS
+#endif // big_codecs
 
 #endif // icu
 #endif // QT_BOOTSTRAPPED
@@ -268,14 +269,14 @@ static void setup()
         return;
     initialized = true;
 
-#if !defined(QT_NO_CODECS) && !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(codecs) && !defined(QT_BOOTSTRAPPED)
     (void)new QTsciiCodec;
     for (int i = 0; i < 9; ++i)
         (void)new QIsciiCodec(i);
     for (int i = 0; i < QSimpleTextCodec::numSimpleCodecs; ++i)
         (void)new QSimpleTextCodec(i);
 
-#  if !defined(QT_NO_BIG_CODECS) && !defined(Q_OS_INTEGRITY)
+#  if QT_CONFIG(big_codecs) && !defined(Q_OS_INTEGRITY)
     (void)new QGb18030Codec;
     (void)new QGbkCodec;
     (void)new QGb2312Codec;
@@ -286,14 +287,14 @@ static void setup()
     (void)new QCP949Codec;
     (void)new QBig5Codec;
     (void)new QBig5hkscsCodec;
-#  endif // !QT_NO_BIG_CODECS && !Q_OS_INTEGRITY
+#  endif // big_codecs && !Q_OS_INTEGRITY
 #if QT_CONFIG(iconv)
     (void) new QIconvCodec;
 #endif
 #if defined(Q_OS_WIN32)
     (void) new QWindowsLocalCodec;
 #endif // Q_OS_WIN32
-#endif // !QT_NO_CODECS && !QT_BOOTSTRAPPED
+#endif // codecs && !QT_BOOTSTRAPPED
 
     (void)new QUtf16Codec;
     (void)new QUtf16BECodec;
@@ -1219,5 +1220,3 @@ bool QTextDecoder::hasFailure() const
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_TEXTCODEC

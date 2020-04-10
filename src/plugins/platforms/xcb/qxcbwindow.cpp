@@ -103,8 +103,10 @@
 #include <stdio.h>
 
 #if QT_CONFIG(xcb_xlib)
+#define register        /* C++17 deprecated register */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#undef register
 #endif
 
 #if QT_CONFIG(xinput2)
@@ -2251,15 +2253,15 @@ void QXcbWindow::handleEnterNotifyEvent(int event_x, int event_y, int root_x, in
                                         quint8 mode, quint8 detail, xcb_timestamp_t timestamp)
 {
     connection()->setTime(timestamp);
-#ifdef XCB_USE_XINPUT21
-    // Updates scroll valuators, as user might have done some scrolling outside our X client.
-    connection()->xi2UpdateScrollingDevices();
-#endif
 
     const QPoint global = QPoint(root_x, root_y);
 
     if (ignoreEnterEvent(mode, detail, connection()) || connection()->mousePressWindow())
         return;
+#ifdef XCB_USE_XINPUT21
+    // Updates scroll valuators, as user might have done some scrolling outside our X client.
+    connection()->xi2UpdateScrollingDevices();
+#endif
 
     const QPoint local(event_x, event_y);
     QWindowSystemInterface::handleEnterEvent(window(), local, global);
@@ -2630,18 +2632,34 @@ bool QXcbWindow::startSystemMove(const QPoint &pos)
 
 bool QXcbWindow::startSystemMoveResize(const QPoint &pos, int corner)
 {
+    return false; // ### FIXME QTBUG-69716
     const xcb_atom_t moveResize = connection()->atom(QXcbAtom::_NET_WM_MOVERESIZE);
     if (!connection()->wmSupport()->isSupportedByWM(moveResize))
         return false;
+
     const QPoint globalPos = QHighDpi::toNativePixels(window()->mapToGlobal(pos), window()->screen());
 #ifdef XCB_USE_XINPUT22
-    if (connection()->startSystemMoveResizeForTouchBegin(m_window, globalPos, corner))
-        return true;
+    // ### FIXME QTBUG-53389
+    bool startedByTouch = connection()->startSystemMoveResizeForTouchBegin(m_window, globalPos, corner);
+    if (startedByTouch) {
+        if (connection()->isUnity() || connection()->isGnome()) {
+            // These desktops fail to move/resize via _NET_WM_MOVERESIZE (WM bug?).
+            connection()->abortSystemMoveResizeForTouch();
+            return false;
+        }
+        // KWin, Openbox, AwesomeWM have been tested to work with _NET_WM_MOVERESIZE.
+    } else
 #endif
-    return doStartSystemMoveResize(globalPos, corner);
-}
+    { // Started by mouse press.
+        if (connection()->isUnity())
+            return false; // _NET_WM_MOVERESIZE on this WM is bouncy (WM bug?).
 
-bool QXcbWindow::doStartSystemMoveResize(const QPoint &globalPos, int corner)
+        doStartSystemMoveResize(globalPos, corner);
+    }
+
+    return true;
+}
+void QXcbWindow::doStartSystemMoveResize(const QPoint &globalPos, int corner)
 {
     const xcb_atom_t moveResize = connection()->atom(QXcbAtom::_NET_WM_MOVERESIZE);
     xcb_client_message_event_t xev;
@@ -2668,7 +2686,6 @@ bool QXcbWindow::doStartSystemMoveResize(const QPoint &globalPos, int corner)
     xcb_send_event(connection()->xcb_connection(), false, xcbScreen()->root(),
                    XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
                    (const char *)&xev);
-    return true;
 }
 
 // Sends an XEmbed message.

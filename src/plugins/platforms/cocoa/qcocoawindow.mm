@@ -505,7 +505,10 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
 {
     const Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
     const bool frameless = (flags & Qt::FramelessWindowHint) || windowIsPopupType(type);
-    const bool resizeable = !(flags & Qt::CustomizeWindowHint); // Remove zoom button by disabling resize
+
+    // Remove zoom button by disabling resize for CustomizeWindowHint windows, except for
+    // Qt::Tool windows (e.g. dock windows) which should always be resizeable.
+    const bool resizeable = !(flags & Qt::CustomizeWindowHint) || (type == Qt::Tool);
 
     // Select base window type. Note that the value of NSBorderlessWindowMask is 0.
     NSUInteger styleMask = (frameless || !resizeable) ? NSBorderlessWindowMask : NSResizableWindowMask;
@@ -519,6 +522,8 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
             styleMask |= NSClosableWindowMask;
         if (flags & Qt::WindowMinimizeButtonHint)
             styleMask |= NSMiniaturizableWindowMask;
+        if (flags & Qt::WindowMaximizeButtonHint)
+            styleMask |= NSResizableWindowMask;
     } else {
         styleMask |= NSClosableWindowMask | NSTitledWindowMask;
 
@@ -1350,6 +1355,15 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
 {
     QMacAutoReleasePool pool;
 
+    Qt::WindowType type = window()->type();
+    Qt::WindowFlags flags = window()->flags();
+
+    // Note: The macOS window manager has a bug, where if a screen is rotated, it will not allow
+    // a window to be created within the area of the screen that has a Y coordinate (I quadrant)
+    // higher than the height of the screen  in its non-rotated state, unless the window is
+    // created with the NSWindowStyleMaskBorderless style mask.
+    NSWindowStyleMask styleMask = windowStyleMask(flags);
+
     QRect rect = geometry();
 
     QScreen *targetScreen = nullptr;
@@ -1361,26 +1375,22 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
     }
 
     if (!targetScreen) {
-        qCWarning(lcQpaCocoaWindow) << "Window position outside any known screen, using primary screen";
+        qCWarning(lcQpaCocoaWindow) << "Window position" << rect << "outside any known screen, using primary screen";
         targetScreen = QGuiApplication::primaryScreen();
+        // AppKit will only reposition a window that's outside the target screen area if
+        // the window has a title bar. If left out, the window ends up with no screen.
+        // The style mask will be corrected to the original style mask in setWindowFlags.
+        styleMask |= NSWindowStyleMaskTitled;
     }
 
     rect.translate(-targetScreen->geometry().topLeft());
     QCocoaScreen *cocoaScreen = static_cast<QCocoaScreen *>(targetScreen->handle());
     NSRect frame = QCocoaScreen::mapToNative(rect, cocoaScreen);
 
-    // Note: The macOS window manager has a bug, where if a screen is rotated, it will not allow
-    // a window to be created within the area of the screen that has a Y coordinate (I quadrant)
-    // higher than the height of the screen  in its non-rotated state, unless the window is
-    // created with the NSWindowStyleMaskBorderless style mask.
-
-    Qt::WindowType type = window()->type();
-    Qt::WindowFlags flags = window()->flags();
-
     // Create NSWindow
     Class windowClass = shouldBePanel ? [QNSPanel class] : [QNSWindow class];
     QCocoaNSWindow *nsWindow = [[windowClass alloc] initWithContentRect:frame
-        styleMask:windowStyleMask(flags)
+        styleMask:styleMask
         // Deferring window creation breaks OpenGL (the GL context is
         // set up before the window is shown and needs a proper window)
         backing:NSBackingStoreBuffered defer:NO
@@ -1388,6 +1398,9 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
 
     Q_ASSERT_X(nsWindow.screen == cocoaScreen->nativeScreen(), "QCocoaWindow",
         "Resulting NSScreen should match the requested NSScreen");
+
+    if (targetScreen != window()->screen())
+        QWindowSystemInterface::handleWindowScreenChanged(window(), targetScreen);
 
     nsWindow.delegate = [[QNSWindowDelegate alloc] initWithQCocoaWindow:this];
 
@@ -1407,9 +1420,6 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
                 name:NSApplicationWillBecomeActiveNotification object:nil];
         });
     }
-
-    if (targetScreen != window()->screen())
-        QWindowSystemInterface::handleWindowScreenChanged(window(), targetScreen);
 
     nsWindow.restorable = NO;
     nsWindow.level = windowLevel(flags);
@@ -1703,6 +1713,14 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
 
     [window setStyleMask:[window styleMask] | NSTexturedBackgroundWindowMask];
     window.titlebarAppearsTransparent = YES;
+
+    // Setting titlebarAppearsTransparent to YES means that the border thickness has to account
+    // for the title bar height as well, otherwise sheets will not be presented at the correct
+    // position, which should be (title bar height + top content border size).
+    const NSRect frameRect = window.frame;
+    const NSRect contentRect = [window contentRectForFrameRect:frameRect];
+    const CGFloat titlebarHeight = frameRect.size.height - contentRect.size.height;
+    effectiveTopContentBorderThickness += titlebarHeight;
 
     [window setContentBorderThickness:effectiveTopContentBorderThickness forEdge:NSMaxYEdge];
     [window setAutorecalculatesContentBorderThickness:NO forEdge:NSMaxYEdge];

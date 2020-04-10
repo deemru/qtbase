@@ -186,7 +186,7 @@ void tst_QPluginLoader::errorString()
     QVERIFY(!unloaded);
     }
 
-#if !defined Q_OS_WIN && !defined Q_OS_MAC && !defined Q_OS_HPUX
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(Q_OS_HPUX)
     {
     QPluginLoader loader( sys_qualifiedLibraryName("almostplugin"));     //a plugin with unresolved symbols
     loader.setLoadHints(QLibrary::ResolveAllSymbolsHint);
@@ -345,8 +345,8 @@ void tst_QPluginLoader::loadMachO()
     QVERIFY(f.open(QIODevice::ReadOnly));
     QByteArray data = f.readAll();
 
-    long pos;
-    ulong len;
+    qsizetype pos;
+    qsizetype len;
     QString errorString;
     int r = QMachOParser::parse(data.constData(), data.size(), f.fileName(), &errorString, &pos, &len);
 

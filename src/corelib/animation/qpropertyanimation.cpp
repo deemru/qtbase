@@ -40,7 +40,7 @@
 /*!
     \class QPropertyAnimation
     \inmodule QtCore
-    \brief The QPropertyAnimation class animates Qt properties
+    \brief The QPropertyAnimation class animates Qt properties.
     \since 4.6
 
     \ingroup animation
@@ -92,8 +92,6 @@
 #include "qpropertyanimation_p.h"
 
 #include <QtCore/QMutex>
-
-#ifndef QT_NO_ANIMATION
 
 QT_BEGIN_NAMESPACE
 
@@ -315,5 +313,3 @@ void QPropertyAnimation::updateState(QAbstractAnimation::State newState,
 #include "moc_qpropertyanimation.cpp"
 
 QT_END_NAMESPACE
-
-#endif //QT_NO_ANIMATION

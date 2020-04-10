@@ -158,7 +158,7 @@ defineTest(qtConfCommandline_optionalString) {
     nextok = $${3}
     isEmpty(val) {
         $$nextok: val = $$qtConfPeekNextCommandlineArg()
-        contains(val, "^-.*|[A-Z_]+=.*")|isEmpty(val): \
+        contains(val, "^-.*|[A-Z0-9_]+=.*")|isEmpty(val): \
             val = "yes"
         else: \
             val = $$qtConfGetNextCommandlineArg()
@@ -233,9 +233,9 @@ defineTest(qtConfParseCommandLine) {
         $$didCustomCall: \
             next()
 
-        contains(c, "([A-Z_]+)=(.*)") {
-            opt = $$replace(c, "^([A-Z_]+)=(.*)", "\\1")
-            val = $$replace(c, "^([A-Z_]+)=(.*)", "\\2")
+        contains(c, "([A-Z0-9_]+)=(.*)") {
+            opt = $$replace(c, "^([A-Z0-9_]+)=(.*)", "\\1")
+            val = $$replace(c, "^([A-Z0-9_]+)=(.*)", "\\2")
             for (cc, allConfigs) {
                 var = $$eval($${cc}.commandline.assignments.$${opt})
                 !isEmpty(var): \
@@ -344,7 +344,7 @@ defineReplace(qtConfToolchainSupportsFlag) {
     conftest = "int main() { return 0; }"
     write_file("$$test_out_dir/conftest.cpp", conftest)|error()
 
-    qtRunLoggedCommand("$$test_cmd_base $$QMAKE_CXX $${1} -o conftest-out conftest.cpp"): \
+    qtRunLoggedCommand("$$test_cmd_base $$QMAKE_CXX $$QMAKE_CXXFLAGS $${1} -o conftest-out conftest.cpp"): \
         return(true)
     return(false)
 }
@@ -960,9 +960,9 @@ defineTest(qtConfTest_compile) {
         # add compiler flags, these are set for the target and should not be applied to host tests
         !isEmpty(EXTRA_DEFINES): \
             qmake_args += $$system_quote(DEFINES += $$val_escape(EXTRA_DEFINES))
-        !isEmpty(EXTRA_LIBDIR) \
+        !isEmpty(EXTRA_LIBDIR): \
             qmake_args += $$system_quote(QMAKE_LIBDIR += $$val_escape(EXTRA_LIBDIR))
-        !isEmpty(EXTRA_FRAMEWORKPATH) \
+        !isEmpty(EXTRA_FRAMEWORKPATH): \
             qmake_args += $$system_quote(QMAKE_FRAMEWORKPATH += $$val_escape(EXTRA_FRAMEWORKPATH))
         !isEmpty(EXTRA_INCLUDEPATH): \
             qmake_args += $$system_quote(INCLUDEPATH += $$val_escape(EXTRA_INCLUDEPATH))
@@ -980,7 +980,8 @@ defineTest(qtConfTest_compile) {
         QMAKE_MAKE = "$$QMAKE_MAKE clean && $$QMAKE_MAKE"
 
     mkpath($$test_out_dir)|error()
-    write_file($$test_base_out_dir/.qmake.cache)|error()
+    cont = "CONFIG += QTDIR_build"
+    write_file($$test_base_out_dir/.qmake.cache, cont)|error()
 
     # add possible command line args
     qmake_args += $$qtConfPrepareArgs($$eval($${1}.args)) $$eval($${1}.literal_args)

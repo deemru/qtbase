@@ -77,7 +77,7 @@ QDateTimeParser::~QDateTimeParser()
 int QDateTimeParser::getDigit(const QDateTime &t, int index) const
 {
     if (index < 0 || index >= sectionNodes.size()) {
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
         qWarning("QDateTimeParser::getDigit() Internal error (%s %d)",
                  qPrintable(t.toString()), index);
 #else
@@ -103,7 +103,7 @@ int QDateTimeParser::getDigit(const QDateTime &t, int index) const
     default: break;
     }
 
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
     qWarning("QDateTimeParser::getDigit() Internal error 2 (%s %d)",
              qPrintable(t.toString()), index);
 #else
@@ -127,7 +127,7 @@ int QDateTimeParser::getDigit(const QDateTime &t, int index) const
 bool QDateTimeParser::setDigit(QDateTime &v, int index, int newVal) const
 {
     if (index < 0 || index >= sectionNodes.size()) {
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
         qWarning("QDateTimeParser::setDigit() Internal error (%s %d %d)",
                  qPrintable(v.toString()), index, newVal);
 #else
@@ -612,7 +612,7 @@ int QDateTimeParser::sectionSize(int sectionIndex) const
 
 int QDateTimeParser::sectionMaxSize(Section s, int count) const
 {
-#ifndef QT_NO_TEXTDATE
+#if QT_CONFIG(textdate)
     int mcount = 12;
 #endif
 
@@ -636,14 +636,14 @@ int QDateTimeParser::sectionMaxSize(Section s, int count) const
     case DaySection: return 2;
     case DayOfWeekSectionShort:
     case DayOfWeekSectionLong:
-#ifdef QT_NO_TEXTDATE
+#if !QT_CONFIG(textdate)
         return 2;
 #else
         mcount = 7;
         Q_FALLTHROUGH();
 #endif
     case MonthSection:
-#ifdef QT_NO_TEXTDATE
+#if !QT_CONFIG(textdate)
         return 2;
 #else
         if (count <= 2)
@@ -725,7 +725,7 @@ QString QDateTimeParser::sectionText(int sectionIndex) const
 }
 
 
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 
 QDateTimeParser::ParsedSection
 QDateTimeParser::parseSection(const QDateTime &currentValue, int sectionIndex,
@@ -1341,12 +1341,33 @@ QDateTimeParser::scanString(const QDateTime &defaultValue,
 
     const QDate date(year, month, day);
     const QTime time(hour, minute, second, msec);
-    return StateNode(
+    const QDateTime when =
 #if QT_CONFIG(timezone)
-                     tspec == Qt::TimeZone ? QDateTime(date, time, timeZone) :
+            tspec == Qt::TimeZone ? QDateTime(date, time, timeZone) :
 #endif
-                     QDateTime(date, time, tspec, zoneOffset),
-                     state, padding, conflicts);
+            QDateTime(date, time, tspec, zoneOffset);
+
+    // If hour wasn't specified, check the default we're using exists on the
+    // given date (which might be a spring-forward, skipping an hour).
+    if (parserType == QVariant::DateTime && !(isSet & HourSectionMask) && !when.isValid()) {
+        qint64 msecs = when.toMSecsSinceEpoch();
+        // Fortunately, that gets a useful answer ...
+        const QDateTime replace =
+#if QT_CONFIG(timezone)
+            tspec == Qt::TimeZone
+            ? QDateTime::fromMSecsSinceEpoch(msecs, timeZone) :
+#endif
+            QDateTime::fromMSecsSinceEpoch(msecs, tspec, zoneOffset);
+        const QTime tick = replace.time();
+        if (replace.date() == date
+            && (!(isSet & MinuteSection) || tick.minute() == minute)
+            && (!(isSet & SecondSection) || tick.second() == second)
+            && (!(isSet & MSecSection)   || tick.msec() == msec)) {
+            return StateNode(replace, state, padding, conflicts);
+        }
+    }
+
+    return StateNode(when, state, padding, conflicts);
 }
 
 /*!
@@ -1727,7 +1748,7 @@ QDateTimeParser::AmPmFinder QDateTimeParser::findAmPm(QString &str, int sectionI
         return PossibleBoth;
     return (!broken[amindex] ? PossibleAM : PossiblePM);
 }
-#endif // QT_NO_DATESTRING
+#endif // datestring
 
 /*!
   \internal
@@ -1958,7 +1979,7 @@ QString QDateTimeParser::stateName(State s) const
     }
 }
 
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 bool QDateTimeParser::fromString(const QString &t, QDate *date, QTime *time) const
 {
     QDateTime val(QDate(1900, 1, 1), QDATETIMEEDIT_TIME_MIN);
@@ -1983,7 +2004,7 @@ bool QDateTimeParser::fromString(const QString &t, QDate *date, QTime *time) con
     }
     return true;
 }
-#endif // QT_NO_DATESTRING
+#endif // datestring
 
 QDateTime QDateTimeParser::getMinimum() const
 {

@@ -589,7 +589,7 @@ Q_STATIC_ASSERT((std::is_same<qsizetype, qptrdiff>::value));
     {long long int } (\c __int64 on Windows).
 
     Several convenience type definitions are declared: \l qreal for \c
-    double, \l uchar for \c unsigned char, \l uint for \c unsigned
+    double or \c float, \l uchar for \c unsigned char, \l uint for \c unsigned
     int, \l ulong for \c unsigned long and \l ushort for \c unsigned
     short.
 
@@ -1036,6 +1036,11 @@ Q_STATIC_ASSERT((std::is_same<qsizetype, qptrdiff>::value));
     classes QOverload, QConstOverload, and QNonConstOverload can be used directly:
 
     \snippet code/src_corelib_global_qglobal.cpp 53
+
+    \note Qt detects the necessary C++14 compiler support by way of the feature
+    test recommendations from
+    \l{https://isocpp.org/std/standing-documents/sd-6-sg10-feature-test-recommendations}
+    {C++ Committee's Standing Document 6}.
 
     \sa qConstOverload(), qNonConstOverload(), {Differences between String-Based
     and Functor-Based Connections}
@@ -2206,10 +2211,19 @@ static bool readEtcFile(QUnixOSVersion &v, const char *filename,
     return true;
 }
 
-static bool readEtcOsRelease(QUnixOSVersion &v)
+static bool readOsRelease(QUnixOSVersion &v)
 {
-    return readEtcFile(v, "/etc/os-release", QByteArrayLiteral("ID="),
-                       QByteArrayLiteral("VERSION_ID="), QByteArrayLiteral("PRETTY_NAME="));
+    QByteArray id = QByteArrayLiteral("ID=");
+    QByteArray versionId = QByteArrayLiteral("VERSION_ID=");
+    QByteArray prettyName = QByteArrayLiteral("PRETTY_NAME=");
+
+    // man os-release(5) says:
+    // The file /etc/os-release takes precedence over /usr/lib/os-release.
+    // Applications should check for the former, and exclusively use its data
+    // if it exists, and only fall back to /usr/lib/os-release if it is
+    // missing.
+    return readEtcFile(v, "/etc/os-release", id, versionId, prettyName) ||
+            readEtcFile(v, "/usr/lib/os-release", id, versionId, prettyName);
 }
 
 static bool readEtcLsbRelease(QUnixOSVersion &v)
@@ -2291,7 +2305,7 @@ static bool readEtcDebianVersion(QUnixOSVersion &v)
 
 static bool findUnixOsVersion(QUnixOSVersion &v)
 {
-    if (readEtcOsRelease(v))
+    if (readOsRelease(v))
         return true;
     if (readEtcLsbRelease(v))
         return true;

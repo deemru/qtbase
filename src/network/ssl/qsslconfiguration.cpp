@@ -62,7 +62,7 @@ QList<QByteArray> QSslConfiguration::msspiIssuerList;
 
 /*!
     \class QSslConfiguration
-    \brief The QSslConfiguration class holds the configuration and state of an SSL connection
+    \brief The QSslConfiguration class holds the configuration and state of an SSL connection.
     \since 4.4
 
     \reentrant
@@ -643,6 +643,10 @@ QList<QSslCertificate> QSslConfiguration::caCertificates() const
   The certificate database must be set prior to the SSL handshake.
   The CA certificate database is used by the socket during the
   handshake phase to validate the peer's certificate.
+
+  \note The default configuration uses the system CA certificate database. If
+  that is not available (as is commonly the case on iOS), the default database
+  is empty.
 
   \sa caCertificates()
 */

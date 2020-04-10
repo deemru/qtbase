@@ -117,6 +117,9 @@ static void updateFormatFromContext(QSurfaceFormat *format)
         format->setProfile(QSurfaceFormat::CompatibilityProfile);
 }
 
+ // NSOpenGLContext is not re-entrant (https://openradar.appspot.com/37064579)
+static QMutex s_contextMutex;
+
 QCocoaGLContext::QCocoaGLContext(const QSurfaceFormat &format, QPlatformOpenGLContext *share,
                                  const QVariant &nativeHandle)
     : m_context(nil),
@@ -248,6 +251,7 @@ void QCocoaGLContext::swapBuffers(QPlatformSurface *surface)
     QWindow *window = static_cast<QCocoaWindow *>(surface)->window();
     setActiveWindow(window);
 
+    QMutexLocker locker(&s_contextMutex);
     [m_context flushBuffer];
 }
 
@@ -400,6 +404,7 @@ QFunctionPointer QCocoaGLContext::getProcAddress(const char *procName)
 
 void QCocoaGLContext::update()
 {
+    QMutexLocker locker(&s_contextMutex);
     [m_context update];
 }
 
@@ -451,7 +456,13 @@ NSOpenGLPixelFormat *QCocoaGLContext::createNSOpenGLPixelFormat(const QSurfaceFo
     if (format.stereo())
         attrs << NSOpenGLPFAStereo;
 
-    attrs << NSOpenGLPFAAllowOfflineRenderers;
+    //Workaround for problems with Chromium and offline renderers on the lat 2013 MacPros.
+    //FIXME: Think if this could be solved via QSurfaceFormat in the future.
+    static bool offlineRenderersAllowed = qEnvironmentVariableIsEmpty("QT_MAC_PRO_WEBENGINE_WORKAROUND");
+    if (offlineRenderersAllowed) {
+        // Allow rendering on GPUs without a connected display
+        attrs << NSOpenGLPFAAllowOfflineRenderers;
+    }
 
     QByteArray useLayer = qgetenv("QT_MAC_WANTS_LAYER");
     if (!useLayer.isEmpty() && useLayer.toInt() > 0) {

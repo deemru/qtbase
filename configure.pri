@@ -5,7 +5,7 @@ QT_BUILD_TREE = $$shadowed($$PWD)
 # custom command line handling
 
 defineTest(qtConfCommandline_qmakeArgs) {
-    contains(1, QMAKE_[A-Z_]+ *[-+]?=.*) {
+    contains(1, QMAKE_[A-Z0-9_]+ *[-+]?=.*) {
         config.input.qmakeArgs += $$1
         export(config.input.qmakeArgs)
         return(true)
@@ -72,7 +72,7 @@ defineReplace(qtConfFunc_licenseCheck) {
         hasOpenSource = true
     else: \
         hasOpenSource = false
-    exists($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL)|exists($$QT_SOURCE_TREE/bin/licheck*): \
+    exists($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0): \
         hasCommercial = true
     else: \
         hasCommercial = false
@@ -128,14 +128,18 @@ defineReplace(qtConfFunc_licenseCheck) {
             qtConfFatalError("This is the Qt Open Source Edition." \
                              "Cannot proceed with -commercial.")
 
-        exists($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL) {
-            logn()
-            logn("This is the Qt Technology Preview Edition.")
+        !exists($$QT_SOURCE_TREE/.release-timestamp) {
+            #  Build from git
 
-            EditionString = "Technology Preview"
-            config.input.qt_edition = Preview
+            logn()
+            logn("This is the Qt Commercial Edition.")
+
+            EditionString = "Commercial"
+            config.input.qt_edition = Commercial
             export(config.input.qt_edition)
         } else {
+            # Build from a released source package
+
             equals(QMAKE_HOST.os, Linux) {
                 !equals(QMAKE_HOST.arch, x86_64): \
                     Licheck = licheck32
@@ -194,7 +198,7 @@ defineReplace(qtConfFunc_licenseCheck) {
             affix = either
         }
     } else {
-        theLicense = $$cat($$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL, lines)
+        theLicense = $$cat($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0, lines)
         theLicense = $$first(theLicense)
         showWhat = "Type '?' to view the $${theLicense}."
     }
@@ -221,7 +225,7 @@ defineReplace(qtConfFunc_licenseCheck) {
             } else: equals(val, n)|equals(val, no) {
                 return(false)
             } else: equals(commercial, yes):equals(val, ?) {
-                licenseFile = $$QT_SOURCE_TREE/LICENSE.PREVIEW.COMMERCIAL
+                licenseFile = $$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0
             } else: equals(commercial, no):equals(val, l) {
                 licenseFile = $$QT_SOURCE_TREE/LICENSE.LGPL3
             } else: equals(commercial, no):equals(val, g):$$gpl2Ok {
@@ -440,8 +444,8 @@ defineTest(reloadSpec) {
             eval($$l)
         include($$QMAKESPEC/qmake.conf)
         load(spec_post)
-        load(default_pre)
         CONFIG += $$_SAVED_CONFIG
+        load(default_pre)
 
         # ensure pristine environment for configuration. again.
         discard_from($$[QT_HOST_DATA/get]/mkspecs/qconfig.pri)
@@ -1065,6 +1069,10 @@ defineTest(qtConfOutput_gccSysroot) {
         "\"QMAKE_LFLAGS += --sysroot=$$config.input.sysroot\""
     export(EXTRA_QMAKE_ARGS)
 
+    # This one is for qtConfToolchainSupportsFlag().
+    QMAKE_CXXFLAGS += --sysroot=$$config.input.sysroot
+    export(QMAKE_CXXFLAGS)
+
     output = \
         "!host_build {" \
         "    QMAKE_CFLAGS    += --sysroot=\$\$[QT_SYSROOT]" \
@@ -1107,6 +1115,8 @@ defineReplace(qtConfOutputPostProcess_publicPro) {
             "QT_GCC_MINOR_VERSION = $$QMAKE_GCC_MINOR_VERSION" \
             "QT_GCC_PATCH_VERSION = $$QMAKE_GCC_PATCH_VERSION"
     }
+    !isEmpty(QMAKE_MAC_SDK_VERSION): \
+        output += "QT_MAC_SDK_VERSION = $$QMAKE_MAC_SDK_VERSION"
     !isEmpty(QMAKE_CLANG_MAJOR_VERSION) {
         output += \
             "QT_CLANG_MAJOR_VERSION = $$QMAKE_CLANG_MAJOR_VERSION" \

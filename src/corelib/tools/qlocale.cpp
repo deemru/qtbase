@@ -1247,8 +1247,8 @@ QString QLocale::scriptToString(QLocale::Script script)
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1265,8 +1265,8 @@ short QLocale::toShort(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1283,8 +1283,8 @@ ushort QLocale::toUShort(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1301,8 +1301,8 @@ int QLocale::toInt(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1319,8 +1319,8 @@ uint QLocale::toUInt(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1339,8 +1339,8 @@ qlonglong QLocale::toLongLong(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not 0, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1356,8 +1356,11 @@ qulonglong QLocale::toULongLong(const QString &s, bool *ok) const
     Returns the float represented by the localized string \a s, or 0.0
     if the conversion failed.
 
-    If \a ok is not 0, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    This function does not fall back to the 'C' locale if the string
+    cannot be interpreted in this locale.
 
     This function ignores leading and trailing whitespace.
 
@@ -1373,12 +1376,11 @@ float QLocale::toFloat(const QString &s, bool *ok) const
     Returns the double represented by the localized string \a s, or
     0.0 if the conversion failed.
 
-    If \a ok is not 0, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
-    Unlike QString::toDouble(), this function does not use
-    the 'C' locale if the string cannot be interpreted in this
-    locale.
+    This function does not fall back to the 'C' locale if the string
+    cannot be interpreted in this locale.
 
     \snippet code/src_corelib_tools_qlocale.cpp 3
 
@@ -1400,8 +1402,8 @@ double QLocale::toDouble(const QString &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1420,8 +1422,8 @@ short QLocale::toShort(const QStringRef &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1440,8 +1442,8 @@ ushort QLocale::toUShort(const QStringRef &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1460,8 +1462,8 @@ int QLocale::toInt(const QStringRef &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1480,8 +1482,8 @@ uint QLocale::toUInt(const QStringRef &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1502,8 +1504,8 @@ qlonglong QLocale::toLongLong(const QStringRef &s, bool *ok) const
 
     If the conversion fails the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1521,8 +1523,11 @@ qulonglong QLocale::toULongLong(const QStringRef &s, bool *ok) const
     Returns the float represented by the localized string \a s, or 0.0
     if the conversion failed.
 
-    If \a ok is not null, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    This function does not fall back to the 'C' locale if the string
+    cannot be interpreted in this locale.
 
     This function ignores leading and trailing whitespace.
 
@@ -1540,12 +1545,11 @@ float QLocale::toFloat(const QStringRef &s, bool *ok) const
     Returns the double represented by the localized string \a s, or
     0.0 if the conversion failed.
 
-    If \a ok is not null, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
-    Unlike QString::toDouble(), this function does not fall back to
-    the "C" locale if the string cannot be interpreted in this
-    locale.
+    This function does not fall back to the 'C' locale if the string
+    cannot be interpreted in this locale.
 
     \snippet code/src_corelib_tools_qlocale.cpp 3
 
@@ -1570,8 +1574,8 @@ double QLocale::toDouble(const QStringRef &s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1590,8 +1594,8 @@ short QLocale::toShort(QStringView s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1610,8 +1614,8 @@ ushort QLocale::toUShort(QStringView s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1630,8 +1634,8 @@ int QLocale::toInt(QStringView s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1650,8 +1654,8 @@ uint QLocale::toUInt(QStringView s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1672,8 +1676,8 @@ qlonglong QLocale::toLongLong(QStringView s, bool *ok) const
 
     If the conversion fails, the function returns 0.
 
-    If \a ok is not null, failure is reported by setting *ok to false, and
-    success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1691,8 +1695,8 @@ qulonglong QLocale::toULongLong(QStringView s, bool *ok) const
     Returns the float represented by the localized string \a s, or 0.0
     if the conversion failed.
 
-    If \a ok is not null, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     This function ignores leading and trailing whitespace.
 
@@ -1710,8 +1714,8 @@ float QLocale::toFloat(QStringView s, bool *ok) const
     Returns the double represented by the localized string \a s, or
     0.0 if the conversion failed.
 
-    If \a ok is not null, reports failure by setting
-    *ok to false and success by setting *ok to true.
+    If \a ok is not \c nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
 
     Unlike QString::toDouble(), this function does not fall back to
     the "C" locale if the string cannot be interpreted in this
@@ -1769,6 +1773,8 @@ QString QLocale::toString(qulonglong i) const
     Returns a localized string representation of the given \a date in the
     specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QDate::toString()
 */
 
 QString QLocale::toString(const QDate &date, const QString &format) const
@@ -1783,6 +1789,8 @@ QString QLocale::toString(const QDate &date, const QString &format) const
     Returns a localized string representation of the given \a date in the
     specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QDate::toString()
 */
 QString QLocale::toString(const QDate &date, QStringView format) const
 {
@@ -1835,6 +1843,8 @@ static bool timeFormatContainsAP(QStringView format)
     Returns a localized string representation of the given \a time according
     to the specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QTime::toString()
 */
 QString QLocale::toString(const QTime &time, const QString &format) const
 {
@@ -1848,6 +1858,8 @@ QString QLocale::toString(const QTime &time, const QString &format) const
     Returns a localized string representation of the given \a time according
     to the specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QTime::toString()
 */
 QString QLocale::toString(const QTime &time, QStringView format) const
 {
@@ -1861,6 +1873,8 @@ QString QLocale::toString(const QTime &time, QStringView format) const
     Returns a localized string representation of the given \a dateTime according
     to the specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QDateTime::toString(), QDate::toString(), QTime::toString()
 */
 
 QString QLocale::toString(const QDateTime &dateTime, const QString &format) const
@@ -1875,6 +1889,8 @@ QString QLocale::toString(const QDateTime &dateTime, const QString &format) cons
     Returns a localized string representation of the given \a dateTime according
     to the specified \a format.
     If \a format is an empty string, an empty string is returned.
+
+    \sa QDateTime::toString(), QDate::toString(), QTime::toString()
 */
 QString QLocale::toString(const QDateTime &dateTime, QStringView format) const
 {
@@ -2045,7 +2061,7 @@ QString QLocale::dateTimeFormat(FormatType format) const
 
     \sa timeFormat(), toDate(), toDateTime(), QTime::fromString()
 */
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QTime QLocale::toTime(const QString &string, FormatType format) const
 {
     return toTime(string, timeFormat(format));
@@ -2063,7 +2079,7 @@ QTime QLocale::toTime(const QString &string, FormatType format) const
 
     \sa dateFormat(), toTime(), toDateTime(), QDate::fromString()
 */
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QDate QLocale::toDate(const QString &string, FormatType format) const
 {
     return toDate(string, dateFormat(format));
@@ -2082,7 +2098,7 @@ QDate QLocale::toDate(const QString &string, FormatType format) const
     \sa dateTimeFormat(), toTime(), toDate(), QDateTime::fromString()
 */
 
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QDateTime QLocale::toDateTime(const QString &string, FormatType format) const
 {
     return toDateTime(string, dateTimeFormat(format));
@@ -2100,7 +2116,7 @@ QDateTime QLocale::toDateTime(const QString &string, FormatType format) const
 
     \sa timeFormat(), toDate(), toDateTime(), QTime::fromString()
 */
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QTime QLocale::toTime(const QString &string, const QString &format) const
 {
     QTime time;
@@ -2131,7 +2147,7 @@ QTime QLocale::toTime(const QString &string, const QString &format) const
 
     \sa dateFormat(), toTime(), toDateTime(), QDate::fromString()
 */
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QDate QLocale::toDate(const QString &string, const QString &format) const
 {
     QDate date;
@@ -2162,7 +2178,7 @@ QDate QLocale::toDate(const QString &string, const QString &format) const
 
     \sa dateTimeFormat(), toTime(), toDate(), QDateTime::fromString()
 */
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 QDateTime QLocale::toDateTime(const QString &string, const QString &format) const
 {
 #if QT_CONFIG(datetimeparser)

@@ -2048,6 +2048,21 @@ void tst_QUrl::isValid()
     }
 
     {
+        QUrl url = QUrl::fromEncoded("foo://%f0%9f%93%99.example.la/g");
+        QVERIFY(!url.isValid());
+        QVERIFY(url.toString().isEmpty());
+        QCOMPARE(url.path(), QString("/g"));
+        url.setHost("%f0%9f%93%99.example.la/");
+        QVERIFY(!url.isValid());
+        QVERIFY(url.toString().isEmpty());
+        url.setHost("\xf0\x9f\x93\x99.example.la/");
+        QVERIFY(!url.isValid());
+        QVERIFY(url.toString().isEmpty());
+        QVERIFY2(url.errorString().contains("Invalid hostname"),
+                 qPrintable(url.errorString()));
+    }
+
+    {
         QUrl url("http://example.com");
         QVERIFY(url.isValid());
         QVERIFY(!url.toString().isEmpty());
@@ -2778,7 +2793,9 @@ void tst_QUrl::hosts()
 {
     QFETCH(QString, url);
 
-    QTEST(QUrl(url).host(), "host");
+    QUrl u(url);
+    QTEST(u.host(), "host");
+    QVERIFY(u.isEmpty() || u.isValid());
 }
 
 void tst_QUrl::hostFlags_data()
@@ -4106,6 +4123,18 @@ void tst_QUrl::matches_data()
         << "http://user:pass@www.website.com/directory"
         << "http://otheruser:otherpass@www.website.com/directory"
         << uint(QUrl::RemovePath | QUrl::RemoveAuthority) << true;
+    QTest::newRow("matchingHost-removePort") << "http://example.com" << "http://example.com"
+                                             << uint(QUrl::RemovePort) << true;
+    QTest::newRow("nonMatchingHost-removePort") << "http://example.com" << "http://example.net"
+                                                << uint(QUrl::RemovePort) << false;
+    QTest::newRow("matchingHost-removePassword") << "http://example.com" << "http://example.com"
+                                                 << uint(QUrl::RemovePassword) << true;
+    QTest::newRow("nonMatchingHost-removePassword") << "http://example.com" << "http://example.net"
+                                                    << uint(QUrl::RemovePassword) << false;
+    QTest::newRow("matchingUserName-removePassword") << "http://user@example.com" << "http://user@example.com"
+                                                 << uint(QUrl::RemovePassword) << true;
+    QTest::newRow("nonMatchingUserName-removePassword") << "http://user@example.com" << "http://user2@example.com"
+                                                    << uint(QUrl::RemovePassword) << false;
 }
 
 void tst_QUrl::matches()

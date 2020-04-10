@@ -57,11 +57,25 @@ QWindow *windowForAccessible(const QAccessibleInterface *accessible)
 {
     QWindow *window = accessible->window();
     if (!window) {
-        QAccessibleInterface *acc = accessible->parent();
-        while (acc && acc->isValid() && !window) {
-            window = acc->window();
-            QAccessibleInterface *par = acc->parent();
+        const QAccessibleInterface *acc = accessible;
+        const QAccessibleInterface *par = accessible->parent();
+        while (par && par->isValid() && !window) {
+            window = par->window();
             acc = par;
+            par = par->parent();
+        }
+        if (!window) {
+            // Workaround for WebEngineView not knowing its parent.
+            const auto appWindows = QGuiApplication::topLevelWindows();
+            for (QWindow *w : appWindows) {
+                if (QAccessibleInterface *root = w->accessibleRoot()) {
+                    int count = root->childCount();
+                    for (int i = 0; i < count; ++i) {
+                        if (root->child(i) == acc)
+                            return w;
+                    }
+                }
+            }
         }
     }
     return window;
@@ -149,7 +163,7 @@ long roleToControlTypeId(QAccessible::Role role)
         {QAccessible::Caret, UIA_CustomControlTypeId},
         {QAccessible::AlertMessage, UIA_CustomControlTypeId},
         {QAccessible::Window, UIA_WindowControlTypeId},
-        {QAccessible::Client, UIA_CustomControlTypeId},
+        {QAccessible::Client, UIA_GroupControlTypeId},
         {QAccessible::PopupMenu, UIA_MenuControlTypeId},
         {QAccessible::MenuItem, UIA_MenuItemControlTypeId},
         {QAccessible::ToolTip, UIA_ToolTipControlTypeId},
@@ -180,7 +194,7 @@ long roleToControlTypeId(QAccessible::Role role)
         {QAccessible::PropertyPage, UIA_CustomControlTypeId},
         {QAccessible::Indicator, UIA_CustomControlTypeId},
         {QAccessible::Graphic, UIA_ImageControlTypeId},
-        {QAccessible::StaticText, UIA_EditControlTypeId},
+        {QAccessible::StaticText, UIA_TextControlTypeId},
         {QAccessible::EditableText, UIA_EditControlTypeId},
         {QAccessible::Button, UIA_ButtonControlTypeId},
         {QAccessible::CheckBox, UIA_CheckBoxControlTypeId},

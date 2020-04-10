@@ -105,7 +105,9 @@
 #include <qsettings.h>
 #include <qvariant.h>
 #include <qpixmapcache.h>
+#if QT_CONFIG(animation)
 #include <private/qstyleanimation_p.h>
+#endif
 
 #include <limits.h>
 
@@ -879,9 +881,16 @@ QSize QCommonStylePrivate::viewItemSize(const QStyleOptionViewItem *option, int 
             QRect bounds = option->rect;
             switch (option->decorationPosition) {
             case QStyleOptionViewItem::Left:
-            case QStyleOptionViewItem::Right:
-                bounds.setWidth(wrapText && bounds.isValid() ? bounds.width() - 2 * textMargin : QFIXED_MAX);
+            case QStyleOptionViewItem::Right: {
+                if (wrapText && bounds.isValid()) {
+                    int width = bounds.width() - 2 * textMargin;
+                    if (option->features & QStyleOptionViewItem::HasDecoration)
+                        width -= option->decorationSize.width() + 2 * textMargin;
+                    bounds.setWidth(width);
+                } else
+                    bounds.setWidth(QFIXED_MAX);
                 break;
+            }
             case QStyleOptionViewItem::Top:
             case QStyleOptionViewItem::Bottom:
                 if (wrapText)
@@ -893,12 +902,8 @@ QSize QCommonStylePrivate::viewItemSize(const QStyleOptionViewItem *option, int 
                 break;
             }
 
-            if (wrapText) {
-                if (option->features & QStyleOptionViewItem::HasCheckIndicator)
-                    bounds.setWidth(bounds.width() - proxyStyle->pixelMetric(QStyle::PM_IndicatorWidth) - 2 * textMargin);
-                if (option->features & QStyleOptionViewItem::HasDecoration)
-                    bounds.setWidth(bounds.width() - option->decorationSize.width() - 2 * textMargin);
-            }
+            if (wrapText && option->features & QStyleOptionViewItem::HasCheckIndicator)
+                bounds.setWidth(bounds.width() - proxyStyle->pixelMetric(QStyle::PM_IndicatorWidth) - 2 * textMargin);
 
             const int lineWidth = bounds.width();
             const QSizeF size = viewItemTextLayout(textLayout, lineWidth);
@@ -1192,7 +1197,7 @@ void QCommonStylePrivate::tabLayout(const QStyleOptionTab *opt, const QWidget *w
 }
 #endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_ANIMATION
+#if QT_CONFIG(animation)
 /*! \internal */
 QList<const QObject*> QCommonStylePrivate::animationTargets() const
 {

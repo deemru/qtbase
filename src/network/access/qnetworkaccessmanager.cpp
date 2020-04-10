@@ -48,6 +48,10 @@
 #include "qhstspolicy.h"
 #include "qhsts_p.h"
 
+#if QT_CONFIG(settings)
+#include "qhstsstore_p.h"
+#endif // QT_CONFIG(settings)
+
 #include "QtNetwork/qnetworksession.h"
 #include "QtNetwork/private/qsharednetworksession_p.h"
 
@@ -166,7 +170,7 @@ static void ensureInitialized()
 /*!
     \class QNetworkAccessManager
     \brief The QNetworkAccessManager class allows the application to
-    send network requests and receive replies
+    send network requests and receive replies.
     \since 4.4
 
     \ingroup network
@@ -548,7 +552,7 @@ void QNetworkAccessManager::setProxy(const QNetworkProxy &proxy)
     Q_D(QNetworkAccessManager);
     delete d->proxyFactory;
     d->proxy = proxy;
-    d->proxyFactory = 0;
+    d->proxyFactory = nullptr;
 }
 
 /*!
@@ -760,9 +764,14 @@ bool QNetworkAccessManager::isStrictTransportSecurityEnabled() const
 
 void QNetworkAccessManager::enableStrictTransportSecurityStore(bool enabled, const QString &storeDir)
 {
+#if QT_CONFIG(settings)
     Q_D(QNetworkAccessManager);
     d->stsStore.reset(enabled ? new QHstsStore(storeDir) : nullptr);
     d->stsCache.setStore(d->stsStore.data());
+#else
+    Q_UNUSED(enabled) Q_UNUSED(storeDir)
+    qWarning("HSTS permanent store requires the feature 'settings' enabled");
+#endif // QT_CONFIG(settings)
 }
 
 /*!
@@ -776,8 +785,12 @@ void QNetworkAccessManager::enableStrictTransportSecurityStore(bool enabled, con
 
 bool QNetworkAccessManager::isStrictTransportSecurityStoreEnabled() const
 {
+#if QT_CONFIG(settings)
     Q_D(const QNetworkAccessManager);
     return bool(d->stsStore.data());
+#else
+    return false;
+#endif // QT_CONFIG(settings)
 }
 
 /*!
@@ -1804,7 +1817,7 @@ void QNetworkAccessManagerPrivate::destroyThread()
             delete thread;
         else
             QObject::connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
-        thread = 0;
+        thread = nullptr;
     }
 }
 

@@ -48,7 +48,9 @@
 # include <X11/extensions/Xrender.h>
 #endif
 
+#define register        /* C++17 deprecated register */
 #include <X11/Xlib.h>
+#undef register
 
 #ifndef None
 #define None 0L
@@ -60,8 +62,10 @@ QXcbNativeBackingStore::QXcbNativeBackingStore(QWindow *window)
     : QPlatformBackingStore(window)
     , m_translucentBackground(false)
 {
-    if (QXcbWindow *w = static_cast<QXcbWindow *>(window->handle()))
-        m_translucentBackground = w->connection()->hasXRender() && QImage::toPixelFormat(w->imageFormat()).alphaSize() > 0;
+    if (QXcbWindow *w = static_cast<QXcbWindow *>(window->handle())) {
+        m_translucentBackground = w->connection()->hasXRender() &&
+            QImage::toPixelFormat(w->imageFormat()).alphaUsage() == QPixelFormat::UsesAlpha;
+    }
 }
 
 QXcbNativeBackingStore::~QXcbNativeBackingStore()

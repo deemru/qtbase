@@ -45,7 +45,6 @@
 #include <qiodevice.h>
 #include <qimage.h>
 #include <qlist.h>
-#include <qtextcodec.h>
 #include <qvariant.h>
 #include <qvector.h>
 
@@ -328,7 +327,7 @@ void setup_qt(QImage& image, png_structp png_ptr, png_infop info_ptr, QSize scal
                 return;
         }
         png_get_PLTE(png_ptr, info_ptr, &palette, &num_palette);
-        image.setColorCount(num_palette);
+        image.setColorCount((format == QImage::Format_Mono) ? 2 : num_palette);
         int i = 0;
         if (png_get_tRNS(png_ptr, info_ptr, &trans_alpha, &num_trans, &trans_color_p) && trans_alpha) {
             while (i < num_trans) {

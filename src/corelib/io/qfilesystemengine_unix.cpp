@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 Intel Corporation.
+** Copyright (C) 2018 Intel Corporation.
 ** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
 ** Contact: https://www.qt.io/licensing/
@@ -88,36 +88,20 @@ extern "C" NSString *NSTemporaryDirectory();
 
 #if defined(Q_OS_LINUX)
 #  include <sys/ioctl.h>
-#  include <sys/syscall.h>
 #  include <sys/sendfile.h>
 #  include <linux/fs.h>
-#  include <linux/stat.h>
 
 // in case linux/fs.h is too old and doesn't define it:
 #ifndef FICLONE
 #  define FICLONE       _IOW(0x94, 9, int)
 #endif
+#endif
 
-#  if defined(Q_OS_ANDROID)
-// renameat2() and statx() are disabled on Android because quite a few systems
+#if defined(Q_OS_ANDROID)
+// statx() is disabled on Android because quite a few systems
 // come with sandboxes that kill applications that make system calls outside a
 // whitelist and several Android vendors can't be bothered to update the list.
-#    undef SYS_renameat2
-#    undef SYS_statx
-#    undef STATX_BASIC_STATS
-#  else
-#    if !QT_CONFIG(renameat2) && defined(SYS_renameat2)
-static int renameat2(int oldfd, const char *oldpath, int newfd, const char *newpath, unsigned flags)
-{ return syscall(SYS_renameat2, oldfd, oldpath, newfd, newpath, flags); }
-#    endif
-
-#    if !QT_CONFIG(statx) && defined(SYS_statx)
-static int statx(int dirfd, const char *pathname, int flag, unsigned mask, struct statx *statxbuf)
-{ return syscall(SYS_statx, dirfd, pathname, flag, mask, statxbuf); }
-#    elif !QT_CONFIG(statx) && !defined(SYS_statx)
-#      undef STATX_BASIC_STATS
-#    endif
-#  endif // !Q_OS_ANDROID
+#  undef STATX_BASIC_STATS
 #endif
 
 #ifndef STATX_ALL
@@ -331,22 +315,8 @@ mtime(const T &statBuffer, int)
 #ifdef STATX_BASIC_STATS
 static int qt_real_statx(int fd, const char *pathname, int flags, struct statx *statxBuffer)
 {
-#ifdef Q_ATOMIC_INT8_IS_SUPPORTED
-    static QBasicAtomicInteger<qint8> statxTested  = Q_BASIC_ATOMIC_INITIALIZER(0);
-#else
-    static QBasicAtomicInt statxTested = Q_BASIC_ATOMIC_INITIALIZER(0);
-#endif
-
-    if (statxTested.load() == -1)
-        return -ENOSYS;
-
     unsigned mask = STATX_BASIC_STATS | STATX_BTIME;
     int ret = statx(fd, pathname, flags, mask, statxBuffer);
-    if (ret == -1 && errno == ENOSYS) {
-        statxTested.store(-1);
-        return -ENOSYS;
-    }
-    statxTested.store(1);
     return ret == -1 ? -errno : 0;
 }
 
@@ -1113,7 +1083,6 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
     QT_STATBUF statBuffer;
     if (knownData.hasFlags(QFileSystemMetaData::PosixStatFlags) &&
             knownData.isFile()) {
-        statBuffer.st_size = knownData.size();
         statBuffer.st_mode = S_IFREG;
     } else if (knownData.hasFlags(QFileSystemMetaData::PosixStatFlags) &&
                knownData.isDirectory()) {
@@ -1126,29 +1095,23 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
     }
 
 #if defined(Q_OS_LINUX)
-    if (statBuffer.st_size == 0) {
-        // empty file? we're done.
-        return true;
-    }
-
     // first, try FICLONE (only works on regular files and only on certain fs)
     if (::ioctl(dstfd, FICLONE, srcfd) == 0)
         return true;
 
     // Second, try sendfile (it can send to some special types too).
     // sendfile(2) is limited in the kernel to 2G - 4k
-    auto sendfileSize = [](QT_OFF_T size) { return size_t(qMin<qint64>(0x7ffff000, size)); };
+    const size_t SendfileSize = 0x7ffff000;
 
-    ssize_t n = ::sendfile(dstfd, srcfd, NULL, sendfileSize(statBuffer.st_size));
+    ssize_t n = ::sendfile(dstfd, srcfd, NULL, SendfileSize);
     if (n == -1) {
         // if we got an error here, give up and try at an upper layer
         return false;
     }
 
-    statBuffer.st_size -= n;
-    while (statBuffer.st_size) {
-        n = ::sendfile(dstfd, srcfd, NULL, sendfileSize(statBuffer.st_size));
-        if (n == 0) {
+    while (n) {
+        n = ::sendfile(dstfd, srcfd, NULL, SendfileSize);
+        if (n == -1) {
             // uh oh, this is probably a real error (like ENOSPC), but we have
             // no way to notify QFile of partial success, so just erase any work
             // done (hopefully we won't get any errors, because there's nothing
@@ -1158,9 +1121,6 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
             n = lseek(dstfd, 0, SEEK_SET);
             return false;
         }
-        if (n == 0)
-            return true;
-        statBuffer.st_size -= n;
     }
 
     return true;
@@ -1292,14 +1252,12 @@ bool QFileSystemEngine::renameFile(const QFileSystemEntry &source, const QFileSy
     if (Q_UNLIKELY(srcPath.isEmpty() || tgtPath.isEmpty()))
         return emptyFileEntryWarning(), false;
 
-#if defined(RENAME_NOREPLACE) && (QT_CONFIG(renameat2) || defined(SYS_renameat2))
+#if defined(RENAME_NOREPLACE) && QT_CONFIG(renameat2)
     if (renameat2(AT_FDCWD, srcPath, AT_FDCWD, tgtPath, RENAME_NOREPLACE) == 0)
         return true;
 
-    // If we're using syscall(), check for ENOSYS;
-    // if renameat2 came from libc, we don't accept ENOSYS.
     // We can also get EINVAL for some non-local filesystems.
-    if ((QT_CONFIG(renameat2) || errno != ENOSYS) && errno != EINVAL) {
+    if (errno != EINVAL) {
         error = QSystemError(errno, QSystemError::StandardLibraryError);
         return false;
     }

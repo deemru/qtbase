@@ -47,7 +47,7 @@
 #include "QtCore/qdatetime.h"
 
 #include <ctype.h>
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
 # include <stdio.h>
 #endif
 
@@ -645,10 +645,10 @@ void QNetworkRequest::setAttribute(Attribute code, const QVariant &value)
 
 #ifndef QT_NO_SSL
 /*!
-    Returns this network request's SSL configuration. By default, no
-    SSL settings are specified.
+    Returns this network request's SSL configuration. By default this is the same
+    as QSslConfiguration::defaultConfiguration().
 
-    \sa setSslConfiguration()
+    \sa setSslConfiguration(), QSslConfiguration::defaultConfiguration()
 */
 QSslConfiguration QNetworkRequest::sslConfiguration() const
 {
@@ -663,9 +663,6 @@ QSslConfiguration QNetworkRequest::sslConfiguration() const
     the SSL protocol (SSLv2, SSLv3, TLSv1.0 where applicable), the CA
     certificates and the ciphers that the SSL backend is allowed to
     use.
-
-    By default, no SSL configuration is set, which allows the backends
-    to choose freely what configuration is best for them.
 
     \sa sslConfiguration(), QSslConfiguration::defaultConfiguration()
 */
@@ -1162,7 +1159,7 @@ QDateTime QNetworkHeadersPrivate::fromHttpDate(const QByteArray &value)
 
     int pos = value.indexOf(',');
     QDateTime dt;
-#ifndef QT_NO_DATESTRING
+#if QT_CONFIG(datestring)
     if (pos == -1) {
         // no comma -> asctime(3) format
         dt = QDateTime::fromString(QString::fromLatin1(value), Qt::TextDate);
@@ -1189,7 +1186,7 @@ QDateTime QNetworkHeadersPrivate::fromHttpDate(const QByteArray &value)
             dt = c.toDateTime(sansWeekday, QLatin1String("dd-MMM-yy hh:mm:ss 'GMT'"));
         }
     }
-#endif // QT_NO_DATESTRING
+#endif // datestring
 
     if (dt.isValid())
         dt.setTimeSpec(Qt::UTC);

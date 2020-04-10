@@ -873,7 +873,6 @@ static inline bool isInputMessage(UINT m)
     case WM_TOUCH:
     case WM_MOUSEHOVER:
     case WM_MOUSELEAVE:
-    case WM_NCHITTEST:
     case WM_NCMOUSEHOVER:
     case WM_NCMOUSELEAVE:
     case WM_SIZING:
@@ -1430,7 +1429,7 @@ bool QWindowsContext::filterNativeEvent(MSG *msg, LRESULT *result)
 bool QWindowsContext::filterNativeEvent(QWindow *window, MSG *msg, LRESULT *result)
 {
     long filterResult = 0;
-    if (QWindowSystemInterface::handleNativeEvent(window, nativeEventType(), &msg, &filterResult)) {
+    if (QWindowSystemInterface::handleNativeEvent(window, nativeEventType(), msg, &filterResult)) {
         *result = LRESULT(filterResult);
         return true;
     }

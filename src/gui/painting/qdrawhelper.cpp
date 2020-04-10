@@ -618,6 +618,53 @@ static inline void qConvertARGB32PMToARGB64PM_sse2(QRgba64 *buffer, const uint *
         *buffer++ = QRgba64::fromArgb32(s);
     }
 }
+#elif defined(__ARM_NEON__)
+template<bool RGBA, bool maskAlpha>
+static inline void qConvertARGB32PMToRGBA64PM_neon(QRgba64 *buffer, const uint *src, int count)
+{
+    if (count <= 0)
+        return;
+
+    const uint32x4_t amask = vdupq_n_u32(0xff000000);
+#if defined(Q_PROCESSOR_ARM_64)
+    const uint8x16_t rgbaMask  = { 2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15};
+#else
+    const uint8x8_t rgbaMask  = { 2, 1, 0, 3, 6, 5, 4, 7 };
+#endif
+    int i = 0;
+    for (; i < count-3; i += 4) {
+        uint32x4_t vs32 = vld1q_u32(src);
+        src += 4;
+        if (maskAlpha)
+            vs32 = vorrq_u32(vs32, amask);
+        uint8x16_t vs8 = vreinterpretq_u8_u32(vs32);
+        if (!RGBA) {
+#if defined(Q_PROCESSOR_ARM_64)
+            vs8 = vqtbl1q_u8(vs8, rgbaMask);
+#else
+            // no vqtbl1q_u8
+            const uint8x8_t vlo = vtbl1_u8(vget_low_u8(vs8), rgbaMask);
+            const uint8x8_t vhi = vtbl1_u8(vget_high_u8(vs8), rgbaMask);
+            vs8 = vcombine_u8(vlo, vhi);
+#endif
+        }
+        uint8x16x2_t v = vzipq_u8(vs8, vs8);
+
+        vst1q_u16((uint16_t *)buffer, vreinterpretq_u16_u8(v.val[0]));
+        buffer += 2;
+        vst1q_u16((uint16_t *)buffer, vreinterpretq_u16_u8(v.val[1]));
+        buffer += 2;
+    }
+
+    SIMD_EPILOGUE(i, count, 3) {
+        uint s = *src++;
+        if (maskAlpha)
+            s = s | 0xff000000;
+        if (RGBA)
+            s = RGBA2ARGB(s);
+        *buffer++ = QRgba64::fromArgb32(s);
+    }
+}
 #endif
 
 static const QRgba64 *QT_FASTCALL convertRGB32ToRGB64(QRgba64 *buffer, const uint *src, int count,
@@ -625,6 +672,8 @@ static const QRgba64 *QT_FASTCALL convertRGB32ToRGB64(QRgba64 *buffer, const uin
 {
 #ifdef __SSE2__
     qConvertARGB32PMToARGB64PM_sse2<false, true>(buffer, src, count);
+#elif defined(__ARM_NEON__)
+    qConvertARGB32PMToRGBA64PM_neon<false, true>(buffer, src, count);
 #else
     for (int i = 0; i < count; ++i)
         buffer[i] = QRgba64::fromArgb32(0xff000000 | src[i]);
@@ -639,6 +688,10 @@ static const QRgba64 *QT_FASTCALL convertARGB32ToARGB64PM(QRgba64 *buffer, const
     qConvertARGB32PMToARGB64PM_sse2<false, false>(buffer, src, count);
     for (int i = 0; i < count; ++i)
         buffer[i] = buffer[i].premultiplied();
+#elif defined(__ARM_NEON__)
+    qConvertARGB32PMToRGBA64PM_neon<false, false>(buffer, src, count);
+    for (int i = 0; i < count; ++i)
+        buffer[i] = buffer[i].premultiplied();
 #else
     for (int i = 0; i < count; ++i)
         buffer[i] = QRgba64::fromArgb32(src[i]).premultiplied();
@@ -651,6 +704,8 @@ static const QRgba64 *QT_FASTCALL convertARGB32PMToARGB64PM(QRgba64 *buffer, con
 {
 #ifdef __SSE2__
     qConvertARGB32PMToARGB64PM_sse2<false, false>(buffer, src, count);
+#elif defined(__ARM_NEON__)
+    qConvertARGB32PMToRGBA64PM_neon<false, false>(buffer, src, count);
 #else
     for (int i = 0; i < count; ++i)
         buffer[i] = QRgba64::fromArgb32(src[i]);
@@ -665,6 +720,10 @@ static const QRgba64 *QT_FASTCALL convertRGBA8888ToARGB64PM(QRgba64 *buffer, con
     qConvertARGB32PMToARGB64PM_sse2<true, false>(buffer, src, count);
     for (int i = 0; i < count; ++i)
         buffer[i] = buffer[i].premultiplied();
+#elif defined(__ARM_NEON__)
+    qConvertARGB32PMToRGBA64PM_neon<true, false>(buffer, src, count);
+    for (int i = 0; i < count; ++i)
+        buffer[i] = buffer[i].premultiplied();
 #else
     for (int i = 0; i < count; ++i)
         buffer[i] = QRgba64::fromArgb32(RGBA2ARGB(src[i])).premultiplied();
@@ -677,6 +736,8 @@ static const QRgba64 *QT_FASTCALL convertRGBA8888PMToARGB64PM(QRgba64 *buffer, c
 {
 #ifdef __SSE2__
     qConvertARGB32PMToARGB64PM_sse2<true, false>(buffer, src, count);
+#elif defined(__ARM_NEON__)
+    qConvertARGB32PMToRGBA64PM_neon<true, false>(buffer, src, count);
 #else
     for (int i = 0; i < count; ++i)
         buffer[i] = QRgba64::fromArgb32(RGBA2ARGB(src[i]));
@@ -5261,8 +5322,10 @@ void qBlendTexture(int count, const QSpan *spans, void *userData)
     case QImage::Format_RGB16:
         proc = processTextureSpansRGB16[blendType];
         break;
+#if defined(__SSE2__) || defined(__ARM_NEON__) || (Q_PROCESSOR_WORDSIZE == 8)
     case QImage::Format_ARGB32:
     case QImage::Format_RGBA8888:
+#endif
     case QImage::Format_BGR30:
     case QImage::Format_A2BGR30_Premultiplied:
     case QImage::Format_RGB30:
@@ -5740,6 +5803,46 @@ static inline int qRgbAvg(QRgb rgb)
     return (qRed(rgb) * 5 + qGreen(rgb) * 6 + qBlue(rgb) * 5) / 16;
 }
 
+static inline QRgb rgbBlend(QRgb d, QRgb s, uint rgbAlpha)
+{
+#if defined(__SSE2__)
+    __m128i vd = _mm_cvtsi32_si128(d);
+    __m128i vs = _mm_cvtsi32_si128(s);
+    __m128i va = _mm_cvtsi32_si128(rgbAlpha);
+    const __m128i vz = _mm_setzero_si128();
+    vd = _mm_unpacklo_epi8(vd, vz);
+    vs = _mm_unpacklo_epi8(vs, vz);
+    va = _mm_unpacklo_epi8(va, vz);
+    __m128i vb = _mm_xor_si128(_mm_set1_epi16(255), va);
+    vs = _mm_mullo_epi16(vs, va);
+    vd = _mm_mullo_epi16(vd, vb);
+    vd = _mm_add_epi16(vd, vs);
+    vd = _mm_add_epi16(vd, _mm_srli_epi16(vd, 8));
+    vd = _mm_add_epi16(vd, _mm_set1_epi16(0x80));
+    vd = _mm_srli_epi16(vd, 8);
+    vd = _mm_packus_epi16(vd, vd);
+    return _mm_cvtsi128_si32(vd);
+#else
+    const int dr = qRed(d);
+    const int dg = qGreen(d);
+    const int db = qBlue(d);
+
+    const int sr = qRed(s);
+    const int sg = qGreen(s);
+    const int sb = qBlue(s);
+
+    const int mr = qRed(rgbAlpha);
+    const int mg = qGreen(rgbAlpha);
+    const int mb = qBlue(rgbAlpha);
+
+    const int nr = qt_div_255(sr * mr + dr * (255 - mr));
+    const int ng = qt_div_255(sg * mg + dg * (255 - mg));
+    const int nb = qt_div_255(sb * mb + db * (255 - mb));
+
+    return 0xff000000 | (nr << 16) | (ng << 8) | nb;
+#endif
+}
+
 static inline void alphargbblend_generic(uint coverage, QRgba64 *dest, int x, const QRgba64 &srcLinear, const QRgba64 &src, const QColorProfile *colorProfile)
 {
     if (coverage == 0xff000000) {
@@ -5762,20 +5865,20 @@ static inline void alphargbblend_generic(uint coverage, QRgba64 *dest, int x, co
     }
 }
 
-static inline void alphargbblend_argb32(quint32 *dst, uint coverage, QRgba64 srcLinear, quint32 src, const QColorProfile *colorProfile)
+static inline void alphargbblend_argb32(quint32 *dst, uint coverage, const QRgba64 &srcLinear, quint32 src, const QColorProfile *colorProfile)
 {
     if (coverage == 0xff000000) {
         // nothing
     } else if (coverage == 0xffffffff) {
         *dst = src;
-    } else {
-        if (*dst >= 0xff000000) {
-            rgbBlendPixel(dst, coverage, srcLinear, colorProfile);
-        } else {
-            // Give up and do a naive gray alphablend. Needed to deal with ARGB32 and invalid ARGB32_premultiplied, see QTBUG-60571
-            const int a = qRgbAvg(coverage);
-            *dst = INTERPOLATE_PIXEL_255(src, a, *dst, 255 - a);
-        }
+    } else if (*dst < 0xff000000) {
+        // Give up and do a naive gray alphablend. Needed to deal with ARGB32 and invalid ARGB32_premultiplied, see QTBUG-60571
+        const int a = qRgbAvg(coverage);
+        *dst = INTERPOLATE_PIXEL_255(src, a, *dst, 255 - a);
+    } else if (!colorProfile) {
+        *dst = rgbBlend(*dst, src, coverage);
+    } else  {
+        rgbBlendPixel(dst, coverage, srcLinear, colorProfile);
     }
 }
 

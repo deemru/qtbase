@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -26,29 +26,20 @@
 **
 ****************************************************************************/
 
+#include <fstream>
+#include <stdio.h>
 
-#include <QtCore/QtCore>
-#include <QtNetwork/QtNetwork>
-#include <QtXml/QtXml>
-#include <QtSql/QtSql>
-
-#ifndef QT_NO_GUI
-#include <QtGui/QtGui>
-#endif
-
-#ifndef QT_NO_OPENGL
-#include <QtOpenGL/QtOpenGL>
-#endif
-
-#include <QtTest/QtTest>
-
-#if !defined(QT_NO_DBUS) && defined(Q_OS_UNIX)
-#include <QtDBus/QtDBus>
-#endif
-
-#ifndef Q_OS_MAC
-int main(int, char **)
+int main(int argc, char *argv[])
 {
+    if (argc < 2) {
+        puts("Usage: testForwardingHelper <doneFilePath>");
+        return 1;
+    }
+    fputs("out data", stdout);
+    fputs("err data", stderr);
+    fflush(stdout);
+    fflush(stderr);
+    std::ofstream out(argv[1]);
+    out << "That's all folks!";
     return 0;
 }
-#endif

@@ -729,12 +729,14 @@ static int q_SSL_write_prx( SSL * s, const void * buf, int num ) { return q_SSL_
 #define q_SSL_write( s, b, n ) ( msh ? msspi_write( msh, b, n ) : q_SSL_write_prx( s, b, n ) )
 
 static int q_SSL_get_error_prx( SSL * s, int i ) { return q_SSL_get_error( s, i ); }
-static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
+static int q_SSL_get_error_msspi( MSSPI_HANDLE h, int ret )
 {
+    if( ret > 0 )
+        return SSL_ERROR_NONE;
     int err = msspi_state( h );
     if( err & MSSPI_ERROR )
         return SSL_ERROR_SSL;
-    if( err & MSSPI_SENT_SHUTDOWN && err & MSSPI_RECEIVED_SHUTDOWN )
+    if( err & ( MSSPI_SENT_SHUTDOWN | MSSPI_RECEIVED_SHUTDOWN ) )
         return SSL_ERROR_ZERO_RETURN;
     if( err & MSSPI_WRITING )
     {
@@ -749,7 +751,7 @@ static int q_SSL_get_error_msspi( MSSPI_HANDLE h )
     return SSL_ERROR_NONE;
 }
 #undef q_SSL_get_error
-#define q_SSL_get_error( s, i ) ( msh ? q_SSL_get_error_msspi( msh ) : q_SSL_get_error_prx( s, i ) )
+#define q_SSL_get_error( s, i ) ( msh ? q_SSL_get_error_msspi( msh, i ) : q_SSL_get_error_prx( s, i ) )
 #endif
 
 void QSslSocketBackendPrivate::startClientEncryption()

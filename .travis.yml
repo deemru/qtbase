@@ -5,7 +5,7 @@ script:
   - export PATH=.:$PATH
   - git submodule init
   - git submodule update
-  - ./configure -release -opensource -confirm-license -ssl -openssl -no-opengl -D MSSPI_USE_CAPIX -I ssl/msspi/third_party/cprocsp/include
+  - ./configure -release -opensource -confirm-license -openssl -no-opengl -D MSSPI_USE_CAPIX -I ssl/msspi/third_party/cprocsp/include
   - make sub-src-qmake_all
   - cd src
   - make sub-network

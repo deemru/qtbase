@@ -1443,7 +1443,7 @@ void QSslSocketBackendPrivate::storePeerCertificates()
         int lens[64];
         size_t count = 64;
 
-        if( msspi_get_peercerts( msh, bufs, lens, &count ) )
+        if( msspi_get_peerchain( msh, 1, bufs, lens, &count ) )
         {
             configuration.peerCertificateChain.clear();
 

@@ -1,0 +1,17 @@
+language: cpp
+script:
+  - ln -s /usr/bin/gcc-4.9 gcc
+  - ln -s /usr/bin/g++-4.9 g++
+  - export PATH=.:$PATH
+  - git submodule init
+  - git submodule update
+  - ./configure -release -opensource -confirm-license -ssl -openssl -no-opengl -D MSSPI_USE_CAPIX -I ssl/msspi/third_party/cprocsp/include
+  - make sub-src-qmake_all
+  - cd src
+  - make sub-network
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - g++-4.9

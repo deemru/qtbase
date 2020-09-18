@@ -55,6 +55,7 @@
 #include "ui_sslerrors.h"
 
 #include <QtCore>
+#include <QtNetwork/QSslConfiguration>
 
 SslClient::SslClient(QWidget *parent)
     : QWidget(parent)
@@ -87,6 +88,9 @@ void SslClient::updateEnabledState()
 
 void SslClient::secureConnect()
 {
+    QSslConfiguration conf;
+    conf.setSslOption( QSsl::SslOptionEnableMSSPI, true );
+    socket->setSslConfiguration( conf );    socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     socket->connectToHostEncrypted(form->hostNameEdit->text(), form->portBox->value());
     updateEnabledState();
 }

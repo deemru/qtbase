@@ -112,6 +112,12 @@ struct QSslErrorEntry {
 };
 Q_DECLARE_TYPEINFO(QSslErrorEntry, Q_PRIMITIVE_TYPE);
 
+#define MSSPISSL
+
+#ifdef MSSPISSL
+#include "msspi/src/msspi.h"
+#endif
+
 class QSslSocketBackendPrivate : public QSslSocketPrivate
 {
     Q_DECLARE_PUBLIC(QSslSocket)
@@ -161,6 +167,10 @@ public:
                              QSslKey *key, QSslCertificate *cert,
                              QList<QSslCertificate> *caCertificates,
                              const QByteArray &passPhrase);
+#ifdef MSSPISSL
+public:
+    MSSPI_HANDLE msh;
+#endif
 
     static QString msgErrorsDuringHandshake();
 };

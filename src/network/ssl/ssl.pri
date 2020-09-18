@@ -83,6 +83,9 @@ qtConfig(ssl) {
             SOURCES += ssl/qdtls_openssl.cpp
         }
 
+    HEADERS += ssl/msspi/src/msspi.h
+    SOURCES += ssl/msspi/src/msspi.cpp
+
         qtConfig(opensslv11) {
             HEADERS += ssl/qsslsocket_openssl11_symbols_p.h
             SOURCES += ssl/qsslsocket_openssl11.cpp \

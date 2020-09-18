@@ -1,0 +1,3 @@
+[submodule "src/network/ssl/msspi"]
+	path = src/network/ssl/msspi
+	url = https://github.com/deemru/msspi

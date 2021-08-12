@@ -1,0 +1,22 @@
+name: Build
+
+on: [push]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Build
+      run: |
+        export PATH=.:$PATH
+        git submodule update --init --recursive 
+        ./configure -release -opensource -confirm-license -ssl -openssl -no-opengl -D MSSPI_USE_CAPIX -I ssl/msspi/third_party/cprocsp/include
+        make sub-src-qmake_all
+        cd src
+        make sub-network

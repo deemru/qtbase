@@ -779,6 +779,10 @@ void QSslSocketBackendPrivate::startClientEncryption()
             }
 
             msh = msspi_open( this, (msspi_read_cb)QSslSocketMSSPIRead, (msspi_write_cb)QSslSocketMSSPIWrite );
+            if( !msh ) {
+                setErrorAndEmit( QAbstractSocket::SslInternalError, QSslSocket::tr( "Error creating MSSPI_HANDLE" ) );
+                return;
+            }
         }
 
         Q_ASSERT( msh );
